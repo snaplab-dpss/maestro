@@ -108,22 +108,6 @@ void map_set_entry_condition(struct Map *map, map_entry_condition *cond,
     }                                                                          \
   }
 
-#define TRACE_KEY_FIELDS_EXTRA(key, map)                                       \
-  {                                                                            \
-    for (int i = 0; i < map->key_field_count; ++i) {                           \
-      klee_trace_extra_ptr_field_arr(                                 \
-          key, map->key_fields[i].offset, map->key_fields[i].width,            \
-          map->key_fields[i].count, map->key_fields[i].name, TD_BOTH);         \
-    }                                                                          \
-    for (int i = 0; i < map->nested_key_field_count; ++i) {                    \
-      klee_trace_extra_ptr_nested_field_arr(                                   \
-          key, map->key_nests[i].base_offset, map->key_nests[i].offset,        \
-          map->key_nests[i].width, map->key_nests[i].count,                    \
-          map->key_nests[i].name, TD_BOTH);                                    \
-    }                                                                          \
-  }
-  
-
 __attribute__((noinline)) int map_get(struct Map *map, void *key,
                                       int *value_out) {
   klee_trace_ret();
@@ -131,17 +115,12 @@ __attribute__((noinline)) int map_get(struct Map *map, void *key,
   // To avoid symbolic-pointer-dereference,
   // consciously trace "map" as a simple value.
   klee_trace_param_i32((uint32_t)map, "map");
-
-  klee_make_symbolic(key, map->key_size, "the_key");
-  klee_trace_extra_ptr(key, map->key_size, "the_key", map->key_type,
-                              TD_BOTH);
-  TRACE_KEY_FIELDS_EXTRA(key, map);
-  
   klee_trace_param_tagged_ptr(key, map->key_size, "key", map->key_type,
                               TD_BOTH);
-
   klee_trace_param_ptr(value_out, sizeof(int), "value_out");
-  
+
+  klee_trace_extra_ptr(key, map->key_size, "the_key", map->key_type,
+                              TD_IN);
   TRACE_KEY_FIELDS(key, map);
 
   for (int n = 0; n < map->next_unclaimed_entry; ++n) {
