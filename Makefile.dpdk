@@ -345,5 +345,10 @@ new-nf:
 	 cp template/* vig$${name}/.; \
 	 echo "Go to the vig$${name} folder, and check out the comments in each file."
 
+
+# ==============
+# Parallelize NF
+# ==============
+
 parallelize:
 	@../parallelize-nf.sh
