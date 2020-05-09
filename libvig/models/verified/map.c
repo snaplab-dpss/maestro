@@ -118,7 +118,6 @@ __attribute__((noinline)) int map_get(struct Map *map, void *key,
   klee_trace_param_tagged_ptr(key, map->key_size, "key", map->key_type,
                               TD_BOTH);
   klee_trace_param_ptr(value_out, sizeof(int), "value_out");
-
   klee_trace_extra_ptr(key, map->key_size, "the_key", map->key_type,
                               TD_IN);
   TRACE_KEY_FIELDS(key, map);
@@ -166,6 +165,8 @@ __attribute__((noinline)) void map_put(struct Map *map, void *key, int value) {
 
   klee_trace_param_tagged_ptr(key, map->key_size, "key", map->key_type,
                               TD_BOTH);
+  klee_trace_extra_ptr(key, map->key_size, "the_key", map->key_type,
+                              TD_IN);
   klee_trace_param_i32(value, "value");
   TRACE_KEY_FIELDS(key, map);
   if (map->ent_cond) {
