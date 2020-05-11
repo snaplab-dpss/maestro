@@ -36,5 +36,5 @@ ln -sf "$KLEE_DIR/build/bin/load-call-paths" "$BUILD/load-call-paths"
 # Parse call paths
 # ================
 
-CALL_PATHS=$NF_DIR/klee-last/test*
+CALL_PATHS=$NF_DIR/klee-last/test*.call_path
 "$BUILD/load-call-paths" $CALL_PATHS 2> /dev/null
