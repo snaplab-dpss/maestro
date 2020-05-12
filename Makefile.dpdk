@@ -351,4 +351,4 @@ new-nf:
 # ==============
 
 parallelize:
-	@../parallelize-nf.sh
+	@../parallelize/parallelize-nf.sh
