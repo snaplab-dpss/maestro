@@ -97,8 +97,19 @@ void parse_dep(libvig_access_t *access, unsigned dep) {
     }
 
     // VLAN
-    else if (access->layer == 3 && access->proto == 8100) {
+    else if (access->layer == 3 && access->proto == 0x8100) {
 
+    }
+
+    // TCP
+    else if (access->layer == 4 && access->proto == 0x06) {
+        if (dep >= 0 && dep <= 1) {
+            unique_save_dep(access, R3S_PF_TCP_SRC);
+        }
+
+        else if (dep >= 2 && dep <= 3) {
+            unique_save_dep(access, R3S_PF_TCP_DST);
+        }
     }
 }
 
