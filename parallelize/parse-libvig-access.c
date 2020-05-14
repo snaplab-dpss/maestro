@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <string.h>
 #include <assert.h>
 #include <r3s.h>
 
@@ -12,12 +13,37 @@ typedef struct {
     unsigned dep_sz;
 } libvig_access_t;
 
+void warn(const char* description) {
+    printf("[WARNING] %s\n", description);
+}
+
+void invalid_rss_opt(const char* pf) {
+    char pre[21] = "Invalid RSS option: ";
+    
+    unsigned pre_sz = strlen(pre);
+    unsigned pf_sz  = strlen(pf);
+    unsigned msg_sz = pre_sz + pf_sz + 1;
+
+    char *msg = (char*) malloc(sizeof(char) * msg_sz);
+    snprintf(msg, msg_sz, "%s%s", pre, pf);
+    
+    warn(msg);
+    free(msg);
+}
+
+void libvig_access_print(libvig_access_t la) {
+    printf("layer %u\n", la.layer);
+    printf("proto %u\n", la.proto);
+    for (unsigned i = 0; i < la.dep_sz; i++)
+        printf("dep   %s\n", R3S_pf_to_string(la.dep[i]));
+}
+
 bool match_token(char *str, const char* token) {
     return strncmp(str, token, strlen(token)) == 0;
 }
 
 bool is_dep_in_array(R3S_pf_t pf, R3S_pf_t *pfs, unsigned sz) {
-    for (int i = 0; i < sz; i++)
+    for (unsigned i = 0; i < sz; i++)
         if (pfs[i] == pf) return true;
     return false;
 }
@@ -29,24 +55,24 @@ void unique_save_access(
 ) {
     libvig_access_t *curr;
 
-    if (*sz > 0) {
-        for (unsigned i = 0; i < *sz; i++) {
-            curr = &((*accesses)[i]);
-            if (curr->layer  != access.layer)  continue;
-            if (curr->proto  != access.proto)  continue;
-            if (curr->dep_sz != access.dep_sz) continue;
+    for (unsigned i = 0; i < *sz; i++) {
+        curr = &((*accesses)[i]);
 
-            bool eq = true;
-            for (int j = 0; j < curr->dep_sz; j++) {
-                if (!is_dep_in_array(curr->dep[j], access.dep, access.dep_sz)) {
-                    eq = false;
-                    break;
-                }
+        if (curr->layer  != access.layer)  continue;
+        if (curr->proto  != access.proto)  continue;
+        if (curr->dep_sz != access.dep_sz) continue;
+
+        bool eq = true;
+        for (unsigned j = 0; j < access.dep_sz; j++) {
+            if (!is_dep_in_array(access.dep[j], curr->dep, curr->dep_sz)) {
+                eq = false;
+                break;
             }
-            if (!eq) continue;
-
-            return;
         }
+
+        if (!eq) continue;
+
+        return;
     }
 
     *sz += 1;
@@ -78,7 +104,12 @@ void unique_save_dep(libvig_access_t *access, R3S_pf_t pf) {
 void parse_dep(libvig_access_t *access, unsigned dep) {
     // IPv4
     if (access->layer == 3 && access->proto == 0x0800) {
-        if (dep >= 12 && dep <= 15) {
+
+        if (dep == 9) {
+            invalid_rss_opt("IPv4 protocol");
+        }
+
+        else if (dep >= 12 && dep <= 15) {
             unique_save_dep(access, R3S_PF_IPV4_SRC);
         }
 
@@ -86,8 +117,12 @@ void parse_dep(libvig_access_t *access, unsigned dep) {
             unique_save_dep(access, R3S_PF_IPV4_DST);
         }
 
+        else if (dep >= 20) {
+            invalid_rss_opt("IPv4 options");
+        }
+
         else {
-            printf("[WARNING] Unknown packet header field at byte %u\n", dep);
+            printf("[WARNING] Unknown IPv4 field at byte %u\n", dep);
         }
     }
 
@@ -109,6 +144,25 @@ void parse_dep(libvig_access_t *access, unsigned dep) {
 
         else if (dep >= 2 && dep <= 3) {
             unique_save_dep(access, R3S_PF_TCP_DST);
+        }
+
+        else {
+            printf("[WARNING] Unknown TCP field at byte %u\n", dep);
+        }
+    }
+
+    // UDP
+    else if (access->layer == 4 && access->proto == 0x11) {
+        if (dep >= 0 && dep <= 1) {
+            unique_save_dep(access, R3S_PF_UDP_SRC);
+        }
+
+        else if (dep >= 2 && dep <= 3) {
+            unique_save_dep(access, R3S_PF_UDP_DST);
+        }
+
+        else {
+            printf("[WARNING] Unknown UDP field at byte %u\n", dep);
         }
     }
 }
@@ -189,6 +243,7 @@ int main(int argc, char* argv[]) {
 
     printf("Unique accesses (%u):\n", sz);
     for (unsigned i = 0; i < sz; i++) {
+        printf("Access %u:\n", i);
         for (unsigned idep = 0; idep < accesses[i].dep_sz; idep++) {
             printf("* %s\n", R3S_pf_to_string(accesses[i].dep[idep]));
         }
