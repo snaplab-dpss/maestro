@@ -351,9 +351,17 @@ int main(int argc, char* argv[]) {
 
     parse_libvig_access_file(libvig_access_out, &executions, &sz);
 
+    unsigned curr_device;
+    bool curr_device_set = false;
+
     for (unsigned i = 0; i < sz; i++) {
-        printf("\nDevice %u\n", executions[i].device);
-        printf("Unique accesses (%u):\n", executions[i].sz);
+
+        if (!curr_device_set || curr_device != executions[i].device) {
+            printf("\nDevice %u\n", executions[i].device);
+            curr_device = executions[i].device;
+            curr_device_set = true;
+        } else puts("");
+
         for (unsigned j = 0; j < executions[i].sz; j++) {
             for (unsigned idep = 0; idep < executions[i].accesses[j].dep_sz; idep++) {
                 if (executions[i].accesses[j].dep[idep].pf_is_set)
