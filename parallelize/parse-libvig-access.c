@@ -7,9 +7,16 @@
 #include <r3s.h>
 
 typedef struct {
+    unsigned offset;
+    R3S_pf_t pf;
+    bool     pf_is_set;
+    char     error_descr[50];
+} dep_t;
+
+typedef struct {
     unsigned layer;
     unsigned proto;
-    R3S_pf_t *dep;
+    dep_t    *dep;
     unsigned dep_sz;
 } libvig_access_t;
 
@@ -40,17 +47,22 @@ void invalid_rss_opt(const char* pf) {
 void libvig_access_print(libvig_access_t la) {
     printf("layer %u\n", la.layer);
     printf("proto %u\n", la.proto);
-    for (unsigned i = 0; i < la.dep_sz; i++)
-        printf("dep   %s\n", R3S_pf_to_string(la.dep[i]));
+    for (unsigned i = 0; i < la.dep_sz; i++) {
+        if (la.dep[i].pf_is_set)
+            printf("dep   %s\n", R3S_pf_to_string(la.dep[i].pf));
+    }
 }
 
 bool match_token(char *str, const char* token) {
     return strncmp(str, token, strlen(token)) == 0;
 }
 
-bool is_dep_in_array(R3S_pf_t pf, R3S_pf_t *pfs, unsigned sz) {
+bool is_dep_in_array(dep_t dep, dep_t *deps, unsigned sz) {
     for (unsigned i = 0; i < sz; i++)
-        if (pfs[i] == pf) return true;
+        if (
+            (dep.pf_is_set == deps[i].pf_is_set)
+            && (!dep.pf_is_set || (dep.pf == deps[i].pf))
+        ) return true;
     return false;
 }
 
@@ -141,42 +153,54 @@ void unique_save_access(
     curr->dep    = access.dep;
 }
 
-void unique_save_dep(libvig_access_t *access, R3S_pf_t pf) {
+void unique_save_dep(libvig_access_t *access, dep_t dep) {
     assert(access != NULL);
 
-    if (is_dep_in_array(pf, access->dep, access->dep_sz))
+    if (is_dep_in_array(dep, access->dep, access->dep_sz))
         return;
     
     access->dep_sz++;
-    access->dep = (R3S_pf_t*) realloc(
+    access->dep = (dep_t*) realloc(
         access->dep,
-        sizeof(R3S_pf_t) * access->dep_sz
+        sizeof(dep_t) * access->dep_sz
     );
-    access->dep[access->dep_sz - 1] = pf;
+    access->dep[access->dep_sz - 1] = dep;
 }
 
 void parse_dep(libvig_access_t *access, unsigned dep) {
+    dep_t store_dep;
+
+    store_dep.offset = dep;
+    store_dep.pf_is_set = false;
+    store_dep.error_descr[0] = 0;
+
     // IPv4
     if (access->layer == 3 && access->proto == 0x0800) {
 
         if (dep == 9) {
-            invalid_rss_opt("IPv4 protocol");
+            sprintf(store_dep.error_descr, "IPv4 protocol");
         }
 
         else if (dep >= 12 && dep <= 15) {
-            unique_save_dep(access, R3S_PF_IPV4_SRC);
+            store_dep.pf = R3S_PF_IPV4_SRC;
+            store_dep.pf_is_set = true;
         }
 
         else if (dep >= 16 && dep <= 19) {
-            unique_save_dep(access, R3S_PF_IPV4_DST);
+            store_dep.pf = R3S_PF_IPV4_DST;
+            store_dep.pf_is_set = true;
         }
 
         else if (dep >= 20) {
-            invalid_rss_opt("IPv4 options");
+            sprintf(store_dep.error_descr, "IPv4 options");
         }
 
         else {
-            printf("[WARNING] Unknown IPv4 field at byte %u\n", dep);
+            sprintf(
+                store_dep.error_descr,
+                "Unknown IPv4 field at byte %u\n",
+                dep
+            );
         }
     }
 
@@ -193,32 +217,46 @@ void parse_dep(libvig_access_t *access, unsigned dep) {
     // TCP
     else if (access->layer == 4 && access->proto == 0x06) {
         if (dep >= 0 && dep <= 1) {
-            unique_save_dep(access, R3S_PF_TCP_SRC);
+            store_dep.pf = R3S_PF_TCP_SRC;
+            store_dep.pf_is_set = true;
         }
 
         else if (dep >= 2 && dep <= 3) {
-            unique_save_dep(access, R3S_PF_TCP_DST);
+            store_dep.pf = R3S_PF_TCP_DST;
+            store_dep.pf_is_set = true;
         }
 
         else {
-            printf("[WARNING] Unknown TCP field at byte %u\n", dep);
+            sprintf(
+                store_dep.error_descr,
+                "Unknown TCP field at byte %u\n",
+                dep
+            );
         }
     }
 
     // UDP
     else if (access->layer == 4 && access->proto == 0x11) {
         if (dep >= 0 && dep <= 1) {
-            unique_save_dep(access, R3S_PF_UDP_SRC);
+            store_dep.pf = R3S_PF_UDP_SRC;
+            store_dep.pf_is_set = true;
         }
 
         else if (dep >= 2 && dep <= 3) {
-            unique_save_dep(access, R3S_PF_UDP_DST);
+            store_dep.pf = R3S_PF_UDP_DST;
+            store_dep.pf_is_set = true;
         }
 
         else {
-            printf("[WARNING] Unknown UDP field at byte %u\n", dep);
+            sprintf(
+                store_dep.error_descr,
+                "Unknown UDP field at byte %u\n",
+                dep
+            );
         }
     }
+
+    unique_save_dep(access, store_dep);
 }
 
 void parse_libvig_access_file(char* path, execution_t **executions, unsigned *sz) {
@@ -318,7 +356,10 @@ int main(int argc, char* argv[]) {
         printf("Unique accesses (%u):\n", executions[i].sz);
         for (unsigned j = 0; j < executions[i].sz; j++) {
             for (unsigned idep = 0; idep < executions[i].accesses[j].dep_sz; idep++) {
-                printf("  * %s\n", R3S_pf_to_string(executions[i].accesses[j].dep[idep]));
+                if (executions[i].accesses[j].dep[idep].pf_is_set)
+                    printf("    %s\n", R3S_pf_to_string(executions[i].accesses[j].dep[idep].pf));
+                else
+                    printf("  * %s\n", executions[i].accesses[j].dep[idep].error_descr);
             }
         }
     }
