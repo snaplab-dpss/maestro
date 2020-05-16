@@ -24,7 +24,7 @@ fi
 
 mkdir -p "$BUILD"
 
-echo "Building parse-libvig-access"
+echo "[*] Building parse-libvig-access"
 
 Z3_DIR="$VIGOR_DIR/z3"
 R3S_DIR="$VIGOR_DIR/libr3s"
@@ -37,7 +37,7 @@ g++ "$NF_DIR/../parallelize/parse-libvig-access.c" \
     $Z3_LIB_FLAGS \
     $R3S_LIB_FLAGS
 
-echo "Building load-call-paths"
+echo "[*] Building load-call-paths"
 
 cd "$KLEE_DIR"
 ./build.sh > "$BUILD/klee-build-log.txt" 2>&1
@@ -48,11 +48,11 @@ cd "$NF_DIR"
 # Parse call paths
 # ================
 
-echo "Parsing call paths"
+echo "[*] Parsing call paths"
 CALL_PATHS=$NF_DIR/klee-last/test*.call_path
 "$BUILD/load-call-paths" $CALL_PATHS \
     2> "$BUILD/livbig-access-log.txt" \
     > "$BUILD/livbig-access-out.txt"
 
-echo "Parsing libvig report"
+echo "[*] Parsing libvig report"
 "$BUILD/parse-libvig-access" "$BUILD/livbig-access-out.txt"

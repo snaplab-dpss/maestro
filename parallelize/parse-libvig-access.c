@@ -7,6 +7,7 @@
 #include <r3s.h>
 
 typedef struct {
+    unsigned device;
     unsigned layer;
     unsigned proto;
     R3S_pf_t *dep;
@@ -58,6 +59,7 @@ void unique_save_access(
     for (unsigned i = 0; i < *sz; i++) {
         curr = &((*accesses)[i]);
 
+        if (curr->device != access.device) continue;
         if (curr->layer  != access.layer)  continue;
         if (curr->proto  != access.proto)  continue;
         if (curr->dep_sz != access.dep_sz) continue;
@@ -81,6 +83,7 @@ void unique_save_access(
         sizeof(libvig_access_t) * (*sz));
     curr = &((*accesses)[*sz - 1]);
 
+    curr->device = access.device;
     curr->layer  = access.layer;
     curr->proto  = access.proto;
     curr->dep_sz = access.dep_sz;
@@ -193,8 +196,17 @@ void parse_libvig_access_file(char* path, libvig_access_t **accesses, unsigned *
         if (match_token(line, "BEGIN")) {          
             curr.dep_sz = 0;
             curr.dep = NULL;
+
         } else if (match_token(line, "END")) {
-            unique_save_access(curr, accesses, sz);
+            if (curr.dep_sz)
+                unique_save_access(curr, accesses, sz);
+
+        } else if (match_token(line, "device")) {
+            line_ptr = line + strlen("device");
+            while (*line_ptr == ' ') line_ptr++;
+
+            sscanf(line_ptr, "%u", &curr.device);
+
         } else if (match_token(line, "layer")) {
             line_ptr = line + strlen("layer");
             while (*line_ptr == ' ') line_ptr++;
@@ -217,7 +229,7 @@ void parse_libvig_access_file(char* path, libvig_access_t **accesses, unsigned *
             parse_dep(&curr, dep);
 
         } else {
-            printf("[ERROR] Unknown token in line %s\n", line);
+            printf("[ERROR] Unknown token: \"%s\"\n", line);
             exit(1);
         }
     }
@@ -241,11 +253,11 @@ int main(int argc, char* argv[]) {
 
     parse_libvig_access_file(libvig_access_out, &accesses, &sz);
 
-    printf("Unique accesses (%u):\n", sz);
+    printf("Unique accesses (%u)\n", sz);
     for (unsigned i = 0; i < sz; i++) {
-        printf("Access %u:\n", i);
+        printf("\nDevice %u\n", accesses[i].device);
         for (unsigned idep = 0; idep < accesses[i].dep_sz; idep++) {
-            printf("* %s\n", R3S_pf_to_string(accesses[i].dep[idep]));
+            printf("  * %s\n", R3S_pf_to_string(accesses[i].dep[idep]));
         }
     }
 }
