@@ -7,12 +7,17 @@
 #include <r3s.h>
 
 typedef struct {
-    unsigned device;
     unsigned layer;
     unsigned proto;
     R3S_pf_t *dep;
     unsigned dep_sz;
 } libvig_access_t;
+
+typedef struct {
+    libvig_access_t *accesses;
+    unsigned        sz;
+    unsigned        device;
+} execution_t;
 
 void warn(const char* description) {
     printf("[WARNING] %s\n", description);
@@ -49,24 +54,50 @@ bool is_dep_in_array(R3S_pf_t pf, R3S_pf_t *pfs, unsigned sz) {
     return false;
 }
 
-void unique_save_access(
-    libvig_access_t access,
-    libvig_access_t **accesses,
-    unsigned *sz
+bool libvig_access_equals(libvig_access_t l1, libvig_access_t l2) {
+    if (l1.layer  != l2.layer)  return false;
+    if (l1.proto  != l2.proto)  return false;
+    if (l1.dep_sz != l2.dep_sz) return false;
+
+    for (unsigned j = 0; j < l1.dep_sz; j++)
+        if (!is_dep_in_array(l1.dep[j], l2.dep, l2.dep_sz))
+            return false;
+    
+    for (unsigned j = 0; j < l2.dep_sz; j++)
+        if (!is_dep_in_array(l2.dep[j], l1.dep, l1.dep_sz))
+            return false;
+
+    return true;    
+}
+
+bool is_access_in_array(libvig_access_t access, libvig_access_t *accesses, unsigned sz) {
+    for (unsigned i = 0; i < sz; i++)
+        if (libvig_access_equals(access, accesses[i]))
+            return true;
+    return false;
+}
+
+void unique_save_execution(
+    execution_t execution,
+    execution_t **executions,
+    unsigned    *sz
 ) {
-    libvig_access_t *curr;
+    execution_t *curr;
 
     for (unsigned i = 0; i < *sz; i++) {
-        curr = &((*accesses)[i]);
+        curr = &((*executions)[i]);
 
-        if (curr->device != access.device) continue;
-        if (curr->layer  != access.layer)  continue;
-        if (curr->proto  != access.proto)  continue;
-        if (curr->dep_sz != access.dep_sz) continue;
-
+        if (curr->device != execution.device) continue;
+        if (curr->sz     != execution.sz)     continue;
+        
         bool eq = true;
-        for (unsigned j = 0; j < access.dep_sz; j++) {
-            if (!is_dep_in_array(access.dep[j], curr->dep, curr->dep_sz)) {
+        
+        for(unsigned j = 0; j < execution.sz; j++) {
+            if (!is_access_in_array(
+                execution.accesses[j],
+                curr->accesses,
+                curr->sz)
+            ) {
                 eq = false;
                 break;
             }
@@ -78,12 +109,32 @@ void unique_save_access(
     }
 
     *sz += 1;
+    *executions = (execution_t*) realloc(
+        *executions,
+        sizeof(execution_t) * (*sz));
+    curr = &((*executions)[*sz - 1]);
+
+    curr->accesses = execution.accesses;
+    curr->device   = execution.device;
+    curr->sz       = execution.sz;
+}
+
+void unique_save_access(
+    libvig_access_t access,
+    libvig_access_t **accesses,
+    unsigned *sz
+) {
+    libvig_access_t *curr;
+
+    if (is_access_in_array(access, *accesses, *sz))
+        return;
+
+    *sz += 1;
     *accesses = (libvig_access_t*) realloc(
         *accesses,
         sizeof(libvig_access_t) * (*sz));
     curr = &((*accesses)[*sz - 1]);
 
-    curr->device = access.device;
     curr->layer  = access.layer;
     curr->proto  = access.proto;
     curr->dep_sz = access.dep_sz;
@@ -170,7 +221,7 @@ void parse_dep(libvig_access_t *access, unsigned dep) {
     }
 }
 
-void parse_libvig_access_file(char* path, libvig_access_t **accesses, unsigned *sz) {
+void parse_libvig_access_file(char* path, execution_t **executions, unsigned *sz) {
     FILE *fp;
     
     char *line = NULL;
@@ -178,10 +229,11 @@ void parse_libvig_access_file(char* path, libvig_access_t **accesses, unsigned *
     size_t len = 0;
     ssize_t read_len;
 
-    libvig_access_t curr;
+    libvig_access_t curr_access;
+    execution_t curr_execution;
 
     *sz = 0;
-    *accesses = NULL;
+    *executions = NULL;
     
     if ((fp = fopen(path, "r")) == NULL) {
         printf("[ERROR] Unable to open %s\n", path);
@@ -193,31 +245,39 @@ void parse_libvig_access_file(char* path, libvig_access_t **accesses, unsigned *
         if (len == 1) break;
         line[read_len - 1] = 0;
 
-        if (match_token(line, "BEGIN")) {          
-            curr.dep_sz = 0;
-            curr.dep = NULL;
+        if (match_token(line, "BEGIN EXECUTION")) {
+            curr_execution.sz = 0;
+            curr_execution.accesses = NULL;
 
-        } else if (match_token(line, "END")) {
-            if (curr.dep_sz)
-                unique_save_access(curr, accesses, sz);
+        } else if (match_token(line, "END EXECUTION")) {
+            if (curr_execution.sz)
+                unique_save_execution(curr_execution, executions, sz);
+
+        } else if (match_token(line, "BEGIN ACCESS")) {
+            curr_access.dep_sz = 0;
+            curr_access.dep = NULL;
+        
+        } else if (match_token(line, "END ACCESS")) {
+            if (curr_access.dep_sz)
+                unique_save_access(curr_access, &curr_execution.accesses, &curr_execution.sz);
 
         } else if (match_token(line, "device")) {
             line_ptr = line + strlen("device");
             while (*line_ptr == ' ') line_ptr++;
 
-            sscanf(line_ptr, "%u", &curr.device);
+            sscanf(line_ptr, "%u", &curr_execution.device);
 
         } else if (match_token(line, "layer")) {
             line_ptr = line + strlen("layer");
             while (*line_ptr == ' ') line_ptr++;
 
-            sscanf(line_ptr, "%u", &curr.layer);
+            sscanf(line_ptr, "%u", &curr_access.layer);
 
         } else if (match_token(line, "proto")) {
             line_ptr = line + strlen("proto");
             while (*line_ptr == ' ') line_ptr++;
 
-            sscanf(line_ptr, "%u", &curr.proto);
+            sscanf(line_ptr, "%u", &curr_access.proto);
 
         } else if (match_token(line, "dep")) {
             line_ptr = line + strlen("dep");
@@ -226,7 +286,7 @@ void parse_libvig_access_file(char* path, libvig_access_t **accesses, unsigned *
             unsigned dep;
 
             sscanf(line_ptr, "%u", &dep);
-            parse_dep(&curr, dep);
+            parse_dep(&curr_access, dep);
 
         } else {
             printf("[ERROR] Unknown token: \"%s\"\n", line);
@@ -248,16 +308,18 @@ int main(int argc, char* argv[]) {
 
     char* libvig_access_out = argv[1];
 
-    libvig_access_t *accesses;
+    execution_t *executions;
     unsigned sz;
 
-    parse_libvig_access_file(libvig_access_out, &accesses, &sz);
+    parse_libvig_access_file(libvig_access_out, &executions, &sz);
 
-    printf("Unique accesses (%u)\n", sz);
     for (unsigned i = 0; i < sz; i++) {
-        printf("\nDevice %u\n", accesses[i].device);
-        for (unsigned idep = 0; idep < accesses[i].dep_sz; idep++) {
-            printf("  * %s\n", R3S_pf_to_string(accesses[i].dep[idep]));
+        printf("\nDevice %u\n", executions[i].device);
+        printf("Unique accesses (%u):\n", executions[i].sz);
+        for (unsigned j = 0; j < executions[i].sz; j++) {
+            for (unsigned idep = 0; idep < executions[i].accesses[j].dep_sz; idep++) {
+                printf("  * %s\n", R3S_pf_to_string(executions[i].accesses[j].dep[idep]));
+            }
         }
     }
 }
