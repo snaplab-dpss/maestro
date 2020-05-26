@@ -6,25 +6,26 @@
 #include <assert.h>
 #include <r3s.h>
 
-typedef struct {
-    unsigned offset;
-    R3S_pf_t pf;
-    bool     pf_is_set;
-    char     error_descr[50];
-} dep_t;
+#include "./dep.h"
+#include "./libvig_access.h"
+#include "./constraint.h"
 
 typedef struct {
-    unsigned layer;
-    unsigned proto;
-    dep_t    *dep;
-    unsigned dep_sz;
-} libvig_access_t;
+    libvig_accesses_t accesses;
+    constraints_t     constraints;
+} parsed_data_t;
 
-typedef struct {
-    libvig_access_t *accesses;
-    unsigned        sz;
-    unsigned        device;
-} execution_t;
+typedef enum {
+    INIT,
+    ACCESS,
+    CONSTRAINT,
+    SMT
+} parser_state_t;
+
+void parsed_data_init(parsed_data_t *data) {
+    libvig_accesses_init(&(data->accesses));
+    constraints_init(&(data->constraints));
+}
 
 void warn(const char* description) {
     printf("[WARNING] %s\n", description);
@@ -44,127 +45,100 @@ void invalid_rss_opt(const char* pf) {
     free(msg);
 }
 
-void libvig_access_print(libvig_access_t la) {
-    printf("layer %u\n", la.layer);
-    printf("proto %u\n", la.proto);
-    for (unsigned i = 0; i < la.dep_sz; i++) {
-        if (la.dep[i].pf_is_set)
-            printf("dep   %s\n", R3S_pf_to_string(la.dep[i].pf));
+char* consume_token(char *str, const char* token) {
+    char *str_ptr;
+    bool result = strncmp(str, token, strlen(token)) == 0;
+
+    if (!result) return NULL;
+
+    str_ptr = str + strlen(token);
+    while (*str_ptr == ' ') str_ptr++;
+
+    return str_ptr;
+}
+
+void parse_symbol(Z3_context ctx, Z3_symbol symbol)
+{
+    switch (Z3_get_symbol_kind(ctx, symbol)) {
+    case Z3_INT_SYMBOL:
+        printf("INT #%d", Z3_get_symbol_int(ctx, symbol));
+        break;
+    case Z3_STRING_SYMBOL:
+        printf("STRING %s", Z3_get_symbol_string(ctx, symbol));
+        break;
+    default:
+        printf("error\n");
+        exit(1);
     }
 }
 
-bool match_token(char *str, const char* token) {
-    return strncmp(str, token, strlen(token)) == 0;
-}
+typedef struct {
+    Z3_ast   select;
+    unsigned index;
+} pf_ast_t;
 
-bool is_dep_in_array(dep_t dep, dep_t *deps, unsigned sz) {
-    for (unsigned i = 0; i < sz; i++)
-        if (
-            (dep.pf_is_set == deps[i].pf_is_set)
-            && (!dep.pf_is_set || (dep.pf == deps[i].pf))
-        ) return true;
-    return false;
-}
-
-bool libvig_access_equals(libvig_access_t l1, libvig_access_t l2) {
-    if (l1.layer  != l2.layer)  return false;
-    if (l1.proto  != l2.proto)  return false;
-    if (l1.dep_sz != l2.dep_sz) return false;
-
-    for (unsigned j = 0; j < l1.dep_sz; j++)
-        if (!is_dep_in_array(l1.dep[j], l2.dep, l2.dep_sz))
-            return false;
+void traverse_ast_and_retrieve_selects(Z3_context ctx, Z3_ast ast, pf_ast_t **selects, size_t *sz) {
+    switch (Z3_get_ast_kind(ctx, ast)) {
     
-    for (unsigned j = 0; j < l2.dep_sz; j++)
-        if (!is_dep_in_array(l2.dep[j], l1.dep, l1.dep_sz))
-            return false;
+    case Z3_NUMERAL_AST: {
+        Z3_sort sort = Z3_get_sort(ctx, ast);
+        printf("NUMERAL %s : %s\n", Z3_get_numeral_string(ctx, ast), Z3_sort_to_string(ctx, sort));
+        break;
+    }
 
-    return true;    
-}
+    case Z3_APP_AST: {
+        Z3_app app = Z3_to_app(ctx, ast);
+        Z3_func_decl decl = Z3_get_app_decl(ctx, app);
 
-bool is_access_in_array(libvig_access_t access, libvig_access_t *accesses, unsigned sz) {
-    for (unsigned i = 0; i < sz; i++)
-        if (libvig_access_equals(access, accesses[i]))
-            return true;
-    return false;
-}
+        printf("FUNC DECL %s\n", Z3_func_decl_to_string(ctx, decl));
 
-void unique_save_execution(
-    execution_t execution,
-    execution_t **executions,
-    unsigned    *sz
-) {
-    execution_t *curr;
+        Z3_symbol name = Z3_get_decl_name(ctx, decl);
+        unsigned num_fields = Z3_get_app_num_args(ctx, app);
 
-    for (unsigned i = 0; i < *sz; i++) {
-        curr = &((*executions)[i]);
+        if (strcmp(Z3_get_symbol_string(ctx, name), "select") == 0) {
+            printf("\n!***** BAM *****!\n");
+            printf("ast  : %s\n", Z3_ast_to_string(ctx, ast));
+            
+            Z3_ast array_ast = Z3_get_app_arg(ctx, app, 0);
+            Z3_ast index_ast = Z3_get_app_arg(ctx, app, 1);
 
-        if (curr->device != execution.device) continue;
-        if (curr->sz     != execution.sz)     continue;
-        
-        bool eq = true;
-        
-        for(unsigned j = 0; j < execution.sz; j++) {
-            if (!is_access_in_array(
-                execution.accesses[j],
-                curr->accesses,
-                curr->sz)
-            ) {
-                eq = false;
-                break;
+            assert(Z3_get_ast_kind(ctx, array_ast) == Z3_APP_AST);
+
+            Z3_app array_app = Z3_to_app(ctx, array_ast);
+            Z3_func_decl array_decl = Z3_get_app_decl(ctx, array_app);
+            Z3_symbol array_name = Z3_get_decl_name(ctx, array_decl);
+
+            if (strcmp(Z3_get_symbol_string(ctx, array_name), "packet_chunks") == 0) {
+                printf("SYMBOL %s\n",
+                    Z3_get_symbol_string(ctx, array_name)
+                );
+
+                printf("parging argument...\n");
+                assert(Z3_get_ast_kind(ctx, index_ast) == Z3_NUMERAL_AST);
+
+                Z3_sort index_sort = Z3_get_sort(ctx, index_ast);
+                unsigned index;
+
+                // TODO: append to pf_ast_t array
+                Z3_get_numeral_uint(ctx, index_ast, &index);
+
+                printf("index: %u\n", index);
+            }
+
+        } else {
+            for (unsigned i = 0; i < num_fields; i++) {
+                traverse_ast_and_retrieve_selects(ctx, Z3_get_app_arg(ctx, app, i), selects, sz);
             }
         }
 
-        if (!eq) continue;
 
-        return;
+        break;
     }
 
-    *sz += 1;
-    *executions = (execution_t*) realloc(
-        *executions,
-        sizeof(execution_t) * (*sz));
-    curr = &((*executions)[*sz - 1]);
-
-    curr->accesses = execution.accesses;
-    curr->device   = execution.device;
-    curr->sz       = execution.sz;
-}
-
-void unique_save_access(
-    libvig_access_t access,
-    libvig_access_t **accesses,
-    unsigned *sz
-) {
-    libvig_access_t *curr;
-
-    if (is_access_in_array(access, *accesses, *sz))
-        return;
-
-    *sz += 1;
-    *accesses = (libvig_access_t*) realloc(
-        *accesses,
-        sizeof(libvig_access_t) * (*sz));
-    curr = &((*accesses)[*sz - 1]);
-
-    curr->layer  = access.layer;
-    curr->proto  = access.proto;
-    curr->dep_sz = access.dep_sz;
-    curr->dep    = access.dep;
-}
-
-void unique_save_dep(libvig_access_t *access, dep_t dep) {
-    assert(access != NULL);
-
-    if (is_dep_in_array(dep, access->dep, access->dep_sz))
-        return;
-    
-    access->dep_sz++;
-    access->dep = (dep_t*) realloc(
-        access->dep,
-        sizeof(dep_t) * access->dep_sz
-    );
-    access->dep[access->dep_sz - 1] = dep;
+    default:
+        printf("error\n");
+        exit(1);
+    }
 }
 
 void parse_dep(libvig_access_t *access, unsigned dep) {
@@ -256,10 +230,10 @@ void parse_dep(libvig_access_t *access, unsigned dep) {
         }
     }
 
-    unique_save_dep(access, store_dep);
+    deps_append_unique(&(access->deps), store_dep);
 }
 
-void parse_libvig_access_file(char* path, execution_t **executions, unsigned *sz) {
+void parse_libvig_access_file(char* path, parsed_data_t *data) {
     FILE *fp;
     
     char *line = NULL;
@@ -268,11 +242,10 @@ void parse_libvig_access_file(char* path, execution_t **executions, unsigned *sz
     ssize_t read_len;
 
     libvig_access_t curr_access;
-    execution_t curr_execution;
+    smt_t curr_smt;
 
-    *sz = 0;
-    *executions = NULL;
-    
+    parser_state_t state = INIT;
+
     if ((fp = fopen(path, "r")) == NULL) {
         printf("[ERROR] Unable to open %s\n", path);
         exit(1);
@@ -283,57 +256,109 @@ void parse_libvig_access_file(char* path, execution_t **executions, unsigned *sz
         if (len == 1) break;
         line[read_len - 1] = 0;
 
-        if (match_token(line, "BEGIN EXECUTION")) {
-            curr_execution.sz = 0;
-            curr_execution.accesses = NULL;
+        switch (state) {
+            case INIT:
+                if (consume_token(line, "BEGIN ACCESS")) {
+                    deps_init(&(curr_access.deps));
+                    state = ACCESS;
+                } else if (consume_token(line, "BEGIN CONSTRAINT")) {
+                    state = CONSTRAINT;
+                } else {
+                    printf("[ERROR] Unknown token in state INIT: \"%s\"\n", line);
+                    exit(1);
+                }
 
-        } else if (match_token(line, "END EXECUTION")) {
-            if (curr_execution.sz)
-                unique_save_execution(curr_execution, executions, sz);
+                break;
+            
+            case ACCESS:
+                if (consume_token(line, "END ACCESS")) {
+                    if (curr_access.deps.sz)
+                        libvig_accesses_append_unique(curr_access, &(data->accesses));
+                    state = INIT;
+                } else if (line_ptr = consume_token(line, "id")) {
+                    sscanf(line_ptr, "%u", &curr_access.id);
 
-        } else if (match_token(line, "BEGIN ACCESS")) {
-            curr_access.dep_sz = 0;
-            curr_access.dep = NULL;
-        
-        } else if (match_token(line, "END ACCESS")) {
-            if (curr_access.dep_sz)
-                unique_save_access(curr_access, &curr_execution.accesses, &curr_execution.sz);
+                } else if (line_ptr = consume_token(line, "device")) {
+                    sscanf(line_ptr, "%u", &curr_access.device);
 
-        } else if (match_token(line, "device")) {
-            line_ptr = line + strlen("device");
-            while (*line_ptr == ' ') line_ptr++;
+                } else if (line_ptr = consume_token(line, "object")) {
+                    sscanf(line_ptr, "%u", &curr_access.obj);
 
-            sscanf(line_ptr, "%u", &curr_execution.device);
+                } else if (line_ptr = consume_token(line, "layer")) {
+                    sscanf(line_ptr, "%u", &curr_access.layer);
 
-        } else if (match_token(line, "layer")) {
-            line_ptr = line + strlen("layer");
-            while (*line_ptr == ' ') line_ptr++;
+                } else if (line_ptr = consume_token(line, "proto")) {
+                    sscanf(line_ptr, "%u", &curr_access.proto);
 
-            sscanf(line_ptr, "%u", &curr_access.layer);
+                } else if (line_ptr = consume_token(line, "dep")) {
+                    unsigned dep;
 
-        } else if (match_token(line, "proto")) {
-            line_ptr = line + strlen("proto");
-            while (*line_ptr == ' ') line_ptr++;
+                    sscanf(line_ptr, "%u", &dep);
+                    parse_dep(&curr_access, dep);
 
-            sscanf(line_ptr, "%u", &curr_access.proto);
+                } else {
+                    printf("[ERROR] Unknown token in state ACCESS: \"%s\"\n", line);
+                    exit(1);
+                }
 
-        } else if (match_token(line, "dep")) {
-            line_ptr = line + strlen("dep");
-            while (*line_ptr == ' ') line_ptr++;
+                break;
 
-            unsigned dep;
+            case CONSTRAINT:
+                if (consume_token(line, "END CONSTRAINT")) {
+                    constraints_append(&(data->constraints), data->accesses, curr_smt);
+                    free(curr_smt.query);
+                    state = INIT;
 
-            sscanf(line_ptr, "%u", &dep);
-            parse_dep(&curr_access, dep);
+                } else if (consume_token(line, "BEGIN SMT")) {
+                    curr_smt.query = (char*) malloc(sizeof(char));
+                    curr_smt.query[0] = '\0';
+                    curr_smt.query_sz = 1;
+                    state = SMT;
 
-        } else {
-            printf("[ERROR] Unknown token: \"%s\"\n", line);
-            exit(1);
+                } else if (line_ptr = consume_token(line, "first")) {
+                    sscanf(line_ptr, "%u", &curr_smt.first_access_id);
+
+                } else if (line_ptr = consume_token(line, "second")) {
+                    sscanf(line_ptr, "%u", &curr_smt.second_access_id);
+
+                } else {
+                    printf("[ERROR] Unknown token in state CONSTRAINT: \"%s\"\n", line);
+                    exit(1);
+                }
+
+                break;
+            
+            case SMT:
+                if (consume_token(line, "END SMT")) {
+                    state = CONSTRAINT;
+                } else {
+                    curr_smt.query = (char*) realloc(
+                        curr_smt.query,
+                        sizeof(char) * (curr_smt.query_sz + read_len)
+                    );
+
+                    strncpy(curr_smt.query+curr_smt.query_sz-1, line, read_len - 1);
+
+                    curr_smt.query_sz += read_len;
+                    curr_smt.query[curr_smt.query_sz - 2] = '\n';
+                    curr_smt.query[curr_smt.query_sz - 1] = '\0';
+                }
+
+                break;
+            
+            default:
+                printf("[ERROR] Unknown state: (%u)\n", state);
+                exit(1);
         }
     }
 
     free(line);
     fclose(fp);
+
+    if (state != INIT) {
+        printf("[ERROR] Final state not INIT: (%u)\n", state);
+        exit(1);
+    }
 }
 
 int main(int argc, char* argv[]) {
@@ -346,29 +371,23 @@ int main(int argc, char* argv[]) {
 
     char* libvig_access_out = argv[1];
 
-    execution_t *executions;
-    unsigned sz;
+    parsed_data_t data;
+    parsed_data_init(&data);
 
-    parse_libvig_access_file(libvig_access_out, &executions, &sz);
+    parse_libvig_access_file(libvig_access_out, &data);
 
     unsigned curr_device;
     bool curr_device_set = false;
 
-    for (unsigned i = 0; i < sz; i++) {
+    for (unsigned i = 0; i < data.accesses.sz ; i++) {
+        printf("Device %u\n", data.accesses.accesses[i].device);
+        printf("Object %u\n", data.accesses.accesses[i].obj);
 
-        if (!curr_device_set || curr_device != executions[i].device) {
-            printf("\nDevice %u\n", executions[i].device);
-            curr_device = executions[i].device;
-            curr_device_set = true;
-        } else puts("");
-
-        for (unsigned j = 0; j < executions[i].sz; j++) {
-            for (unsigned idep = 0; idep < executions[i].accesses[j].dep_sz; idep++) {
-                if (executions[i].accesses[j].dep[idep].pf_is_set)
-                    printf("    %s\n", R3S_pf_to_string(executions[i].accesses[j].dep[idep].pf));
-                else
-                    printf("  * %s\n", executions[i].accesses[j].dep[idep].error_descr);
-            }
+        for (unsigned idep = 0; idep < data.accesses.accesses[i].deps.sz; idep++) {
+            if (data.accesses.accesses[i].deps.deps[idep].pf_is_set)
+                printf("    %s\n", R3S_pf_to_string(data.accesses.accesses[i].deps.deps[idep].pf));
+            else
+                printf("  * %s\n", data.accesses.accesses[i].deps.deps[idep].error_descr);
         }
     }
 }

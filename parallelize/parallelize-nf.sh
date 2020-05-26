@@ -26,16 +26,7 @@ mkdir -p "$BUILD"
 
 echo "[*] Building parse-libvig-access"
 
-Z3_DIR="$VIGOR_DIR/z3"
-R3S_DIR="$VIGOR_DIR/libr3s"
-
-Z3_LIB_FLAGS="-lz3 -Wl,-rpath,$Z3_DIR/build/lib -L$Z3_DIR/build/lib -I$Z3_DIR/build/include"
-R3S_LIB_FLAGS="-lr3s -Wl,-rpath,$R3S_DIR/build/lib -L$R3S_DIR/build/lib -I$R3S_DIR/include"
-
-g++ "$NF_DIR/../parallelize/parse-libvig-access.c" \
-    -o "$BUILD/parse-libvig-access" \
-    $Z3_LIB_FLAGS \
-    $R3S_LIB_FLAGS
+make -f ../parallelize/Makefile > /dev/null
 
 echo "[*] Building load-call-paths"
 
