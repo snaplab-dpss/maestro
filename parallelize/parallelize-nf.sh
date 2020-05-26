@@ -26,6 +26,7 @@ mkdir -p "$BUILD"
 
 echo "[*] Building parse-libvig-access"
 
+make clean > /dev/null
 make -f ../parallelize/Makefile > /dev/null
 
 echo "[*] Building load-call-paths"

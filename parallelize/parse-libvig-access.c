@@ -6,7 +6,6 @@
 #include <assert.h>
 #include <r3s.h>
 
-#include "./dep.h"
 #include "./libvig_access.h"
 #include "./constraint.h"
 
@@ -141,98 +140,6 @@ void traverse_ast_and_retrieve_selects(Z3_context ctx, Z3_ast ast, pf_ast_t **se
     }
 }
 
-void parse_dep(libvig_access_t *access, unsigned dep) {
-    dep_t store_dep;
-
-    store_dep.offset = dep;
-    store_dep.pf_is_set = false;
-    store_dep.error_descr[0] = 0;
-
-    // IPv4
-    if (access->layer == 3 && access->proto == 0x0800) {
-
-        if (dep == 9) {
-            sprintf(store_dep.error_descr, "IPv4 protocol");
-        }
-
-        else if (dep >= 12 && dep <= 15) {
-            store_dep.pf = R3S_PF_IPV4_SRC;
-            store_dep.pf_is_set = true;
-        }
-
-        else if (dep >= 16 && dep <= 19) {
-            store_dep.pf = R3S_PF_IPV4_DST;
-            store_dep.pf_is_set = true;
-        }
-
-        else if (dep >= 20) {
-            sprintf(store_dep.error_descr, "IPv4 options");
-        }
-
-        else {
-            sprintf(
-                store_dep.error_descr,
-                "Unknown IPv4 field at byte %u\n",
-                dep
-            );
-        }
-    }
-
-    // IPv6
-    else if (access->layer == 3 && access->proto == 0x86DD) {
-
-    }
-
-    // VLAN
-    else if (access->layer == 3 && access->proto == 0x8100) {
-
-    }
-
-    // TCP
-    else if (access->layer == 4 && access->proto == 0x06) {
-        if (dep >= 0 && dep <= 1) {
-            store_dep.pf = R3S_PF_TCP_SRC;
-            store_dep.pf_is_set = true;
-        }
-
-        else if (dep >= 2 && dep <= 3) {
-            store_dep.pf = R3S_PF_TCP_DST;
-            store_dep.pf_is_set = true;
-        }
-
-        else {
-            sprintf(
-                store_dep.error_descr,
-                "Unknown TCP field at byte %u\n",
-                dep
-            );
-        }
-    }
-
-    // UDP
-    else if (access->layer == 4 && access->proto == 0x11) {
-        if (dep >= 0 && dep <= 1) {
-            store_dep.pf = R3S_PF_UDP_SRC;
-            store_dep.pf_is_set = true;
-        }
-
-        else if (dep >= 2 && dep <= 3) {
-            store_dep.pf = R3S_PF_UDP_DST;
-            store_dep.pf_is_set = true;
-        }
-
-        else {
-            sprintf(
-                store_dep.error_descr,
-                "Unknown UDP field at byte %u\n",
-                dep
-            );
-        }
-    }
-
-    deps_append_unique(&(access->deps), store_dep);
-}
-
 void parse_libvig_access_file(char* path, parsed_data_t *data) {
     FILE *fp;
     
@@ -275,26 +182,27 @@ void parse_libvig_access_file(char* path, parsed_data_t *data) {
                     if (curr_access.deps.sz)
                         libvig_accesses_append_unique(curr_access, &(data->accesses));
                     state = INIT;
-                } else if (line_ptr = consume_token(line, "id")) {
+                } else if (((line_ptr = consume_token(line, "id")))) {
                     sscanf(line_ptr, "%u", &curr_access.id);
 
-                } else if (line_ptr = consume_token(line, "device")) {
+                } else if ((line_ptr = consume_token(line, "device"))) {
                     sscanf(line_ptr, "%u", &curr_access.device);
 
-                } else if (line_ptr = consume_token(line, "object")) {
+                } else if ((line_ptr = consume_token(line, "object"))) {
                     sscanf(line_ptr, "%u", &curr_access.obj);
 
-                } else if (line_ptr = consume_token(line, "layer")) {
+                } else if ((line_ptr = consume_token(line, "layer"))) {
                     sscanf(line_ptr, "%u", &curr_access.layer);
 
-                } else if (line_ptr = consume_token(line, "proto")) {
+                } else if ((line_ptr = consume_token(line, "proto"))) {
                     sscanf(line_ptr, "%u", &curr_access.proto);
 
-                } else if (line_ptr = consume_token(line, "dep")) {
-                    unsigned dep;
+                } else if ((line_ptr = consume_token(line, "dep"))) {
+                    unsigned offset;
+                    sscanf(line_ptr, "%u", &offset);
 
-                    sscanf(line_ptr, "%u", &dep);
-                    parse_dep(&curr_access, dep);
+                    dep_t dep = dep_from_offset(offset, curr_access);
+                    deps_append_unique(&(curr_access.deps), dep);
 
                 } else {
                     printf("[ERROR] Unknown token in state ACCESS: \"%s\"\n", line);
@@ -315,10 +223,10 @@ void parse_libvig_access_file(char* path, parsed_data_t *data) {
                     curr_smt.query_sz = 1;
                     state = SMT;
 
-                } else if (line_ptr = consume_token(line, "first")) {
+                } else if ((line_ptr = consume_token(line, "first"))) {
                     sscanf(line_ptr, "%u", &curr_smt.first_access_id);
 
-                } else if (line_ptr = consume_token(line, "second")) {
+                } else if ((line_ptr = consume_token(line, "second"))) {
                     sscanf(line_ptr, "%u", &curr_smt.second_access_id);
 
                 } else {
