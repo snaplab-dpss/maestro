@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
 
 bool libvig_access_eq(libvig_access_t l1, libvig_access_t l2) {
   if (l1.device != l2.device)
@@ -43,12 +44,29 @@ void libvig_accesses_destroy(libvig_accesses_t *accesses) {
   free(accesses->accesses);
 }
 
+libvig_access_t* libvig_access_get_from_id(libvig_accesses_t *accesses, unsigned id) {
+  for (unsigned i = 0; i < accesses->sz; i++)
+    if (accesses->accesses[i].id == id)
+      return &(accesses->accesses[i]);
+  return NULL;
+}
+
 void libvig_accesses_append_unique(libvig_access_t access,
                                    libvig_accesses_t *accesses) {
   libvig_access_t *curr;
 
   if (libvig_access_in_array(access, *accesses))
     return;
+  
+  if ((curr = libvig_access_get_from_id(accesses, access.id)) != NULL) {
+    assert(curr->device == access.device && "ERROR: same ID but different device");
+    assert(curr->obj == access.obj && "ERROR: same ID but different object");
+
+    for (unsigned i = 0; i < access.deps.sz; i++)
+      deps_append_unique(&(curr->deps), access.deps.deps[i]);
+    
+    return;
+  }
 
   accesses->sz += 1;
   accesses->accesses = (libvig_access_t *)realloc(
@@ -60,7 +78,8 @@ void libvig_accesses_append_unique(libvig_access_t access,
 }
 
 bool dep_eq(dep_t d1, dep_t d2) {
-  return (d1.pf_is_set == d2.pf_is_set) && (!d1.pf_is_set || (d1.pf == d2.pf));
+  return (d1.pf_is_set == d2.pf_is_set) && (!d1.pf_is_set || (d1.pf == d2.pf)) &&
+    d1.bytes == d2.bytes;
 }
 
 dep_t dep_from_offset(unsigned offset, libvig_access_t access) {
@@ -76,10 +95,12 @@ dep_t dep_from_offset(unsigned offset, libvig_access_t access) {
     if (offset == 9) {
       sprintf(dep.error_descr, "IPv4 protocol");
     } else if (offset >= 12 && offset <= 15) {
-      dep.pf = R3S_PF_IPV4_SRC;
+      dep.pf        = R3S_PF_IPV4_SRC;
+      dep.bytes     = 15 - offset;
       dep.pf_is_set = true;
     } else if (offset >= 16 && offset <= 19) {
-      dep.pf = R3S_PF_IPV4_DST;
+      dep.pf        = R3S_PF_IPV4_DST;
+      dep.bytes     = 19 - offset;
       dep.pf_is_set = true;
     } else if (offset >= 20) {
       sprintf(dep.error_descr, "IPv4 options");
@@ -101,10 +122,12 @@ dep_t dep_from_offset(unsigned offset, libvig_access_t access) {
   // TCP
   else if (access.layer == 4 && access.proto == 0x06) {
     if (offset <= 1) {
-      dep.pf = R3S_PF_TCP_SRC;
+      dep.pf        = R3S_PF_TCP_SRC;
+      dep.bytes     = offset;
       dep.pf_is_set = true;
     } else if (offset >= 2 && offset <= 3) {
-      dep.pf = R3S_PF_TCP_DST;
+      dep.pf        = R3S_PF_TCP_DST;
+      dep.bytes     = offset - 2;
       dep.pf_is_set = true;
     } else {
       sprintf(dep.error_descr, "Unknown TCP field at byte %u\n", dep.offset);
@@ -114,10 +137,12 @@ dep_t dep_from_offset(unsigned offset, libvig_access_t access) {
   // UDP
   else if (access.layer == 4 && access.proto == 0x11) {
     if (offset <= 1) {
-      dep.pf = R3S_PF_UDP_SRC;
+      dep.pf        = R3S_PF_UDP_SRC;
+      dep.bytes     = offset;
       dep.pf_is_set = true;
     } else if (offset >= 2 && offset <= 3) {
-      dep.pf = R3S_PF_UDP_DST;
+      dep.pf        = R3S_PF_UDP_DST;
+      dep.bytes     = offset - 2;
       dep.pf_is_set = true;
     } else {
       sprintf(dep.error_descr, "Unknown UDP field at byte %u\n", dep.offset);
@@ -129,8 +154,7 @@ dep_t dep_from_offset(unsigned offset, libvig_access_t access) {
 
 bool dep_in_array(deps_t deps, dep_t dep) {
   for (unsigned i = 0; i < deps.sz; i++)
-    if ((dep.pf_is_set == deps.deps[i].pf_is_set) &&
-        (!dep.pf_is_set || (dep.pf == deps.deps[i].pf)))
+    if (dep_eq(dep, deps.deps[i]))
       return true;
   return false;
 }
@@ -152,4 +176,18 @@ void deps_init(deps_t *deps) {
 void deps_destroy(deps_t *deps) {
   if (deps->sz)
     free(deps->deps);
+}
+
+deps_t deps_merge(deps_t deps1, deps_t deps2) {
+  deps_t result;
+
+  deps_init(&result);
+
+  for (unsigned d = 0; d < deps1.sz; d++)
+    deps_append_unique(&result, deps1.deps[d]);
+  
+  for (unsigned d = 0; d < deps2.sz; d++)
+    deps_append_unique(&result, deps2.deps[d]);
+  
+  return result;
 }

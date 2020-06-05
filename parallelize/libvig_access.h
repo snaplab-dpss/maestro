@@ -5,13 +5,14 @@
 
 typedef struct {
   unsigned offset;
+  unsigned bytes;    // big endian
   R3S_pf_t pf;
-  bool pf_is_set;
-  char error_descr[50];
+  bool     pf_is_set;
+  char     error_descr[50];
 } dep_t;
 
 typedef struct {
-  dep_t *deps;
+  dep_t  *deps;
   size_t sz;
 } deps_t;
 
@@ -20,6 +21,7 @@ bool dep_in_array(deps_t deps, dep_t dep);
 void deps_init(deps_t *deps);
 void deps_destroy(deps_t *deps);
 void deps_append_unique(deps_t *deps, dep_t dep);
+deps_t deps_merge(deps_t deps1, deps_t deps2);
 
 typedef struct {
   unsigned id;
@@ -40,6 +42,7 @@ bool libvig_access_in_array(libvig_access_t access, libvig_accesses_t accesses);
 
 void libvig_accesses_init(libvig_accesses_t *accesses);
 void libvig_accesses_destroy(libvig_accesses_t *accesses);
+libvig_access_t* libvig_access_get_from_id(libvig_accesses_t *accesses, unsigned id);
 void libvig_accesses_append_unique(libvig_access_t access,
                                    libvig_accesses_t *accesses);
 

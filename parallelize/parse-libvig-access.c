@@ -1,189 +1,67 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <stdbool.h>
-#include <string.h>
-#include <assert.h>
-#include <sys/types.h>
 
 #include <r3s.h>
 #include <z3.h>
 
 #include "./libvig_access.h"
 #include "./constraint.h"
+#include "./parser.h"
 
-typedef struct {
-  libvig_accesses_t accesses;
-  constraints_t constraints;
-} parsed_data_t;
+Z3_ast mk_cnstrs(R3S_cfg_t cfg, R3S_packet_ast_t p1, R3S_packet_ast_t p2) {
+  R3S_status_t    status;
+  constraints_t  *cnstrs;
+  Z3_ast         *and_args;
+  unsigned        and_i;
 
-typedef enum {
-  INIT,
-  ACCESS,
-  CONSTRAINT,
-  SMT
-} parser_state_t;
+  if (p1.loaded_opt.opt != p2.loaded_opt.opt) return NULL;
 
-void parsed_data_init(parsed_data_t *data) {
-  libvig_accesses_init(&(data->accesses));
-  constraints_init(&(data->constraints));
-}
+  cnstrs = (constraints_t*) R3S_get_user_data(cfg);
+  and_args = (Z3_ast*) malloc(sizeof(Z3_ast) * (cnstrs->cnstrs[0].pfs.sz * 2 + 1));
 
-void warn(const char *description) { printf("[WARNING] %s\n", description); }
+  and_args[0] = cnstrs->cnstrs[0].cnstr;
 
-void invalid_rss_opt(const char *pf) {
-  char pre[21] = "Invalid RSS option: ";
+  and_i = 1;
+  for (unsigned c = 0; c < cnstrs->cnstrs[0].pfs.sz; c++) {
+    Z3_ast pf1_ast, pf2_ast;
+    unsigned pf1_sz, pf2_sz;
+    unsigned high, low;
 
-  unsigned pre_sz = strlen(pre);
-  unsigned pf_sz = strlen(pf);
-  unsigned msg_sz = pre_sz + pf_sz + 1;
+    R3S_packet_extract_pf(cfg, p1, cnstrs->cnstrs[0].pfs.pfs[c].pf.pf, &pf1_ast);
+    R3S_packet_extract_pf(cfg, p2, cnstrs->cnstrs[0].pfs.pfs[c].pf.pf, &pf2_ast);
 
-  char *msg = (char *)malloc(sizeof(char) * msg_sz);
-  snprintf(msg, msg_sz, "%s%s", pre, pf);
+    pf1_sz = Z3_get_bv_sort_size(cfg.ctx, Z3_get_sort(cfg.ctx, pf1_ast));
+    pf2_sz = Z3_get_bv_sort_size(cfg.ctx, Z3_get_sort(cfg.ctx, pf2_ast));
 
-  warn(msg);
-  free(msg);
-}
+    high   = pf1_sz - cnstrs->cnstrs[0].pfs.pfs[c].pf.bytes * 8 - 1;
+    low    = high - 7;
 
-char *consume_token(char *str, const char *token) {
-  char *str_ptr;
-  bool result = strncmp(str, token, strlen(token)) == 0;
+    Z3_ast pf1_ext = Z3_mk_extract(cfg.ctx, high, low, pf1_ast);
+    Z3_ast pf2_ext = Z3_mk_extract(cfg.ctx, high, low, pf2_ast);
 
-  if (!result)
-    return NULL;
+    and_args[and_i++] = Z3_mk_eq(cfg.ctx, pf1_ext, cnstrs->cnstrs[0].pfs.pfs[c].select);
+    and_args[and_i++] = Z3_mk_eq(cfg.ctx, pf2_ext, cnstrs->cnstrs[0].pfs.pfs[c].select);
 
-  str_ptr = str + strlen(token);
-  while (*str_ptr == ' ')
-    str_ptr++;
-
-  return str_ptr;
-}
-
-void parse_libvig_access_file(char *path, parsed_data_t *data, Z3_context ctx) {
-  FILE *fp;
-
-  char *line = NULL;
-  char *line_ptr;
-  size_t len = 0;
-  ssize_t read_len;
-
-  libvig_access_t curr_access;
-  smt_t curr_smt;
-
-  parser_state_t state = INIT;
-
-  if ((fp = fopen(path, "r")) == NULL) {
-    printf("[ERROR] Unable to open %s\n", path);
-    exit(1);
   }
+  printf("Final cnstr:\n%s\n", Z3_ast_to_string(cfg.ctx, Z3_mk_and(cfg.ctx, and_i, and_args)));
+  return Z3_mk_and(cfg.ctx, and_i, and_args);
+}
 
-  line = NULL;
-  while ((read_len = getline(&line, &len, fp)) > 0) {
-    if (len == 1)
-      break;
-    line[read_len - 1] = 0;
-
-    switch (state) {
-    case INIT:
-      if (consume_token(line, "BEGIN ACCESS")) {
-        deps_init(&(curr_access.deps));
-        state = ACCESS;
-      } else if (consume_token(line, "BEGIN CONSTRAINT")) {
-        state = CONSTRAINT;
-      } else {
-        printf("[ERROR] Unknown token in state INIT: \"%s\"\n", line);
-        exit(1);
-      }
-
-      break;
-
-    case ACCESS:
-      if (consume_token(line, "END ACCESS")) {
-        if (curr_access.deps.sz)
-          libvig_accesses_append_unique(curr_access, &(data->accesses));
-        state = INIT;
-      } else if (((line_ptr = consume_token(line, "id")))) {
-        sscanf(line_ptr, "%u", &curr_access.id);
-
-      } else if ((line_ptr = consume_token(line, "device"))) {
-        sscanf(line_ptr, "%u", &curr_access.device);
-
-      } else if ((line_ptr = consume_token(line, "object"))) {
-        sscanf(line_ptr, "%u", &curr_access.obj);
-
-      } else if ((line_ptr = consume_token(line, "layer"))) {
-        sscanf(line_ptr, "%u", &curr_access.layer);
-
-      } else if ((line_ptr = consume_token(line, "proto"))) {
-        sscanf(line_ptr, "%u", &curr_access.proto);
-
-      } else if ((line_ptr = consume_token(line, "dep"))) {
-        unsigned offset;
-        sscanf(line_ptr, "%u", &offset);
-
-        dep_t dep = dep_from_offset(offset, curr_access);
-        deps_append_unique(&(curr_access.deps), dep);
-
-      } else {
-        printf("[ERROR] Unknown token in state ACCESS: \"%s\"\n", line);
-        exit(1);
-      }
-
-      break;
-
-    case CONSTRAINT:
-      if (consume_token(line, "END CONSTRAINT")) {
-        constraints_append(&(data->constraints), data->accesses, curr_smt, ctx);
-        free(curr_smt.query);
-        state = INIT;
-
-      } else if (consume_token(line, "BEGIN SMT")) {
-        curr_smt.query = (char *)malloc(sizeof(char));
-        curr_smt.query[0] = '\0';
-        curr_smt.query_sz = 1;
-        state = SMT;
-
-      } else if ((line_ptr = consume_token(line, "first"))) {
-        sscanf(line_ptr, "%u", &curr_smt.first_access_id);
-
-      } else if ((line_ptr = consume_token(line, "second"))) {
-        sscanf(line_ptr, "%u", &curr_smt.second_access_id);
-
-      } else {
-        printf("[ERROR] Unknown token in state CONSTRAINT: \"%s\"\n", line);
-        exit(1);
-      }
-
-      break;
-
-    case SMT:
-      if (consume_token(line, "END SMT")) {
-        state = CONSTRAINT;
-      } else {
-        curr_smt.query = (char *)realloc(
-            curr_smt.query, sizeof(char) * (curr_smt.query_sz + read_len));
-
-        strncpy(curr_smt.query + curr_smt.query_sz - 1, line, read_len - 1);
-
-        curr_smt.query_sz += read_len;
-        curr_smt.query[curr_smt.query_sz - 2] = '\n';
-        curr_smt.query[curr_smt.query_sz - 1] = '\0';
-      }
-
-      break;
-
-    default:
-      printf("[ERROR] Unknown state: (%u)\n", state);
-      exit(1);
+void validate(R3S_cfg_t cfg)
+{
+  R3S_packet_t p1, p2;
+  R3S_status_t status;
+  
+  for (int i = 0; i < 1; i++)
+  {
+    R3S_packet_rand(cfg, &p1);
+    if ((status = R3S_packet_from_cnstrs(cfg, p1, &mk_cnstrs, &p2)) != R3S_STATUS_SUCCESS) {
+      printf("ERROR: %s\n", R3S_status_to_string(status));
     }
-  }
-
-  free(line);
-  fclose(fp);
-
-  if (state != INIT) {
-    printf("[ERROR] Final state not INIT: (%u)\n", state);
-    exit(1);
+    
+    printf("\n===== iteration %d =====\n", i);
+    printf("Packet 1:\n%s\n", R3S_packet_to_string(p1));
+    printf("Packet 2:\n%s\n", R3S_packet_to_string(p2));
   }
 }
 
@@ -200,7 +78,10 @@ int main(int argc, char *argv[]) {
   parsed_data_t data;
   parsed_data_init(&data);
 
-  R3S_cfg_t cfg;
+  R3S_cfg_t       cfg;
+  R3S_cnstrs_func cnstrs[1];
+  R3S_status_t    status;
+
   R3S_cfg_init(&cfg);
 
   parse_libvig_access_file(libvig_access_out, &data, cfg.ctx);
@@ -211,32 +92,62 @@ int main(int argc, char *argv[]) {
   for (unsigned i = 0; i < data.accesses.sz; i++) {
     printf("Device %u\n", data.accesses.accesses[i].device);
     printf("Object %u\n", data.accesses.accesses[i].obj);
+    printf("ID     %u\n", data.accesses.accesses[i].id);
 
     for (unsigned idep = 0; idep < data.accesses.accesses[i].deps.sz; idep++) {
       if (data.accesses.accesses[i].deps.deps[idep].pf_is_set)
-        printf("    %s\n",
-               R3S_pf_to_string(data.accesses.accesses[i].deps.deps[idep].pf));
+        printf("    %s (byte %u)\n",
+               R3S_pf_to_string(data.accesses.accesses[i].deps.deps[idep].pf),
+               data.accesses.accesses[i].deps.deps[idep].bytes);
       else
         printf("  * %s\n",
                data.accesses.accesses[i].deps.deps[idep].error_descr);
     }
   }
 
+  constraints_process_pfs(&data.constraints, data.accesses);
+
+  R3S_pf_t *pfs = (R3S_pf_t*) malloc(sizeof(R3S_pf_t) * data.constraints.cnstrs[0].pfs.sz);
+  
+
   for (unsigned i = 0; i < data.constraints.sz; i++) {
     printf("\n===========================\n");
     printf("Constraint %u\n", i);
-    printf("ast: %s\n", Z3_ast_to_string(cfg.ctx,
-                                         data.constraints.cnstrs[i].cnstr));
     printf("first access id: %u\n", data.constraints.cnstrs[i].first->id);
     printf("second access id: %u\n", data.constraints.cnstrs[i].second->id);
 
+    printf("ast:\n%s\n", Z3_ast_to_string(cfg.ctx, data.constraints.cnstrs[i].cnstr));
+
     for (unsigned j = 0; j < data.constraints.cnstrs[i].pfs.sz; j++) {
-      printf("pf %u\n", j);
-      printf("ast: %s\n", Z3_ast_to_string(cfg.ctx,
-                                         data.constraints.cnstrs[i].pfs.pfs[j].select));
-      printf("index: %u\n", data.constraints.cnstrs[i].pfs.pfs[j].index);      
+
+      pfs[j] = data.constraints.cnstrs[i].pfs.pfs[j].pf.pf;
+
+      if (data.constraints.cnstrs[i].pfs.pfs[j].processed) {
+        printf("\nast: %s\n", Z3_ast_to_string(cfg.ctx,
+                                          data.constraints.cnstrs[i].pfs.pfs[j].select));
+        printf("pf %s byte %u\n",
+          R3S_pf_to_string(data.constraints.cnstrs[i].pfs.pfs[j].pf.pf),
+          data.constraints.cnstrs[i].pfs.pfs[j].pf.bytes
+        );
+
+      }
     }
   }
+
+  R3S_opt_t *opts;
+  size_t opts_sz;
+
+  R3S_opts_from_pfs(pfs, data.constraints.cnstrs[0].pfs.sz, &opts, &opts_sz);
+  
+  for (unsigned iopt = 0; iopt < opts_sz; iopt++)
+    R3S_cfg_load_opt(&cfg, opts[iopt]);
+  
+  printf("%s\n", R3S_cfg_to_string(cfg));
+
+  R3S_set_user_data(&cfg, (void*) &data.constraints);
+  cnstrs[0] = &mk_cnstrs;
+
+  validate(cfg);
 
   constraints_destroy(&(data.constraints));
   libvig_accesses_destroy(&(data.accesses));

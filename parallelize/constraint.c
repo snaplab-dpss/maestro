@@ -6,8 +6,10 @@
 bool pfast_eq(pfast_t pfast1, pfast_t pfast2) {
   assert(pfast1.processed == pfast2.processed);
 
+  if (pfast1.pf.bytes != pfast2.pf.bytes) return false;
+
   if (pfast1.processed) {
-    return pfast1.pf == pfast2.pf;
+    return pfast1.pf.pf == pfast2.pf.pf;
   } else {
     return pfast1.index == pfast2.index;
   }
@@ -72,16 +74,12 @@ void traverse_ast_and_retrieve_selects(Z3_context ctx, Z3_ast ast,
   if (Z3_get_ast_kind(ctx, ast) != Z3_APP_AST)
     return;
 
-  printf("ast: %s\n", Z3_ast_to_string(ctx, ast));
-
   Z3_app app = Z3_to_app(ctx, ast);
   Z3_func_decl decl = Z3_get_app_decl(ctx, app);
 
   Z3_symbol name = Z3_get_decl_name(ctx, decl);
 
   if (is_select_from_chunk(ctx, app)) {
-    printf("\n! ****** BAM ****** !\n");
-
     Z3_ast index_ast = Z3_get_app_arg(ctx, app, 1);
     assert(Z3_get_ast_kind(ctx, index_ast) == Z3_NUMERAL_AST);
 
@@ -90,7 +88,9 @@ void traverse_ast_and_retrieve_selects(Z3_context ctx, Z3_ast ast,
 
     select.processed = false;
     select.select = ast;
+
     Z3_get_numeral_uint(ctx, index_ast, &(select.index));
+    Z3_inc_ref(ctx, index_ast);
     pfasts_append_unique(selects, select);
   } else {
     unsigned num_fields = Z3_get_app_num_args(ctx, app);
@@ -158,5 +158,41 @@ void constraints_destroy(constraints_t *cnstrs) {
 
   for (unsigned i = 0; i < cnstrs->sz; i++) {
     pfasts_destroy(&(cnstrs->cnstrs[i].pfs));
+  }
+}
+
+void pfasts_sort(pfasts_t *pfasts) {
+  for (unsigned i = 0; i < pfasts->sz - 1; i++) {
+    assert(!pfasts->pfs[i].processed && "ERROR: Trying to sort a processed pfasts");
+
+    if (pfasts->pfs[i].index >= pfasts->pfs[i+1].index)
+      continue;
+    
+    pfast_t tmp;
+    
+    tmp              = pfasts->pfs[i];
+    pfasts->pfs[i]   = pfasts->pfs[i+1];
+    pfasts->pfs[i+1] = tmp;
+  }
+}
+
+void constraints_process_pfs(constraints_t *cnstrs, libvig_accesses_t accesses) {
+  for (unsigned i = 0; i < cnstrs->sz; i++) {
+    pfasts_sort(&(cnstrs->cnstrs[i].pfs));
+    
+    deps_t merge = deps_merge(
+      cnstrs->cnstrs[i].first->deps,
+      cnstrs->cnstrs[i].second->deps
+    );
+
+    // FIXME: this is awfull. Try to find a better way to associate select ast's to packet fields
+
+    unsigned m = 0;
+    for (unsigned j = 0; j < cnstrs->cnstrs[i].pfs.sz; j++) {
+      cnstrs->cnstrs[i].pfs.pfs[j].pf = merge.deps[m++];
+      cnstrs->cnstrs[i].pfs.pfs[j].processed = true;
+    }
+
+    deps_destroy(&merge);
   }
 }
