@@ -13,8 +13,6 @@ typedef struct {
 
 typedef struct {
   Z3_ast     select;
-  Z3_ast     parent;
-  unsigned   parent_arg;
   int        p_count;
 
   union {

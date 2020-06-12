@@ -9,20 +9,18 @@
 #include "./constraint.h"
 #include "./parser.h"
 
-Z3_ast ast_replace(Z3_context ctx, Z3_ast root, unsigned child_idx, Z3_ast target, Z3_ast dst) {
+Z3_ast ast_replace(Z3_context ctx, Z3_ast root, Z3_ast target, Z3_ast dst) {
   if (Z3_get_ast_kind(ctx, root) != Z3_APP_AST)
     return root;
   
   Z3_app app           = Z3_to_app(ctx, root);
   unsigned num_fields  = Z3_get_app_num_args(ctx, app);
-  bool is_parent       = num_fields > child_idx && Z3_is_eq_ast(ctx, Z3_get_app_arg(ctx, app, child_idx), target);
-
   Z3_ast *updated_args = (Z3_ast*) malloc(sizeof(Z3_ast) * num_fields);
 
   for (unsigned i = 0; i < num_fields; i++) {
-    updated_args[i] = (is_parent && i == child_idx)
+    updated_args[i] = Z3_is_eq_ast(ctx, Z3_get_app_arg(ctx, app, i), target)
       ? dst
-      : ast_replace(ctx, Z3_get_app_arg(ctx, app, i), child_idx, target, dst);
+      : ast_replace(ctx, Z3_get_app_arg(ctx, app, i), target, dst);
   }
 
   root = Z3_update_term(ctx, root, num_fields, updated_args);
@@ -45,6 +43,9 @@ Z3_ast mk_cnstrs(R3S_cfg_t cfg, R3S_packet_ast_t p1, R3S_packet_ast_t p2) {
 
   cnstr = cnstrs->cnstrs[0].cnstr;
   and_i = 0;
+
+  printf("constraint before:\n%s\n", Z3_ast_to_string(cfg.ctx, cnstr));
+
   for (unsigned c = 0; c < cnstrs->cnstrs[0].pfs.sz; c++) {
     Z3_ast pf1_ast, pf2_ast;
     unsigned pf1_sz, pf2_sz;
@@ -64,24 +65,24 @@ Z3_ast mk_cnstrs(R3S_cfg_t cfg, R3S_packet_ast_t p1, R3S_packet_ast_t p2) {
 
 
     if (cnstrs->cnstrs[0].pfs.pfs[c].p_count == 0) {
-      printf("\n\nreplacing %s\n", Z3_ast_to_string(cfg.ctx, cnstrs->cnstrs[0].pfs.pfs[c].select));
-      printf("with %s\n", Z3_ast_to_string(cfg.ctx, pf1_ext));
-      printf("on %s\n\n", Z3_ast_to_string(cfg.ctx, cnstr));
-      cnstr = ast_replace(cfg.ctx, cnstr, cnstrs->cnstrs[0].pfs.pfs[c].parent_arg, cnstrs->cnstrs[0].pfs.pfs[c].select, pf1_ext);
+      //printf("\n\nreplacing %s\n", Z3_ast_to_string(cfg.ctx, cnstrs->cnstrs[0].pfs.pfs[c].select));
+      //printf("with %s\n", Z3_ast_to_string(cfg.ctx, pf1_ext));
+      //printf("on %s\n\n", Z3_ast_to_string(cfg.ctx, cnstr));
+      cnstr = ast_replace(cfg.ctx, cnstr, cnstrs->cnstrs[0].pfs.pfs[c].select, pf1_ext);
     } else if (cnstrs->cnstrs[0].pfs.pfs[c].p_count == 1) {
-      printf("\n\nreplacing %s\n", Z3_ast_to_string(cfg.ctx, cnstrs->cnstrs[0].pfs.pfs[c].select));
-      printf("with %s\n", Z3_ast_to_string(cfg.ctx, pf2_ext));
-      printf("on %s\n\n", Z3_ast_to_string(cfg.ctx, cnstr));
-      cnstr = ast_replace(cfg.ctx, cnstr, cnstrs->cnstrs[0].pfs.pfs[c].parent_arg, cnstrs->cnstrs[0].pfs.pfs[c].select, pf2_ext);
+      //printf("\n\nreplacing %s\n", Z3_ast_to_string(cfg.ctx, cnstrs->cnstrs[0].pfs.pfs[c].select));
+      //printf("with %s\n", Z3_ast_to_string(cfg.ctx, pf2_ext));
+      //printf("on %s\n\n", Z3_ast_to_string(cfg.ctx, cnstr));
+      cnstr = ast_replace(cfg.ctx, cnstr, cnstrs->cnstrs[0].pfs.pfs[c].select, pf2_ext);
     } else {
       assert(false && "Packet counter with invalid value");
     }
 
     assert(cnstr != NULL);
-    printf("result %s\n\n", Z3_ast_to_string(cfg.ctx, cnstr));
   }
   
-  printf("Final cnstr:\n%s\n", Z3_ast_to_string(cfg.ctx, cnstr));
+  printf("constraint after:\n%s\n", Z3_ast_to_string(cfg.ctx, cnstr));
+
   return cnstr;
 }
 

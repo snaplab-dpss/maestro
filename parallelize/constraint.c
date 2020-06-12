@@ -72,7 +72,7 @@ bool is_select_from_chunk(Z3_context ctx, Z3_app app) {
   return true;
 }
 
-void traverse_ast_and_retrieve_selects_helper(Z3_context ctx, Z3_ast parent, unsigned parent_arg, Z3_ast ast,
+void traverse_ast_and_retrieve_selects(Z3_context ctx, Z3_ast ast,
                                        pfasts_t *selects) {
   if (Z3_get_ast_kind(ctx, ast) != Z3_APP_AST)
     return;
@@ -89,12 +89,8 @@ void traverse_ast_and_retrieve_selects_helper(Z3_context ctx, Z3_ast parent, uns
     Z3_sort index_sort = Z3_get_sort(ctx, index_ast);
     pfast_t select;
 
-    assert(parent != NULL);
-
     select.processed  = false;
     select.select     = ast;
-    select.parent     = parent;
-    select.parent_arg = parent_arg;
     Z3_get_numeral_uint(ctx, index_ast, &(select.index));
     Z3_inc_ref(ctx, index_ast);
     pfasts_append_unique(ctx, selects, select);
@@ -104,13 +100,9 @@ void traverse_ast_and_retrieve_selects_helper(Z3_context ctx, Z3_ast parent, uns
   
   unsigned num_fields = Z3_get_app_num_args(ctx, app);
   for (unsigned i = 0; i < num_fields; i++) {
-    traverse_ast_and_retrieve_selects_helper(ctx, ast, i, Z3_get_app_arg(ctx, app, i),
+    traverse_ast_and_retrieve_selects(ctx, Z3_get_app_arg(ctx, app, i),
                                       selects);
   }
-}
-
-void traverse_ast_and_retrieve_selects(Z3_context ctx, Z3_ast ast, pfasts_t *selects) {
-  traverse_ast_and_retrieve_selects_helper(ctx, NULL, 0, ast, selects);
 }
 
 void constraints_init(constraints_t *cnstrs) {
