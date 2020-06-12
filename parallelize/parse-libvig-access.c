@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include <r3s.h>
 #include <z3.h>
@@ -8,20 +9,42 @@
 #include "./constraint.h"
 #include "./parser.h"
 
+Z3_ast ast_replace(Z3_context ctx, Z3_ast root, unsigned child_idx, Z3_ast target, Z3_ast dst) {
+  if (Z3_get_ast_kind(ctx, root) != Z3_APP_AST)
+    return root;
+  
+  Z3_app app           = Z3_to_app(ctx, root);
+  unsigned num_fields  = Z3_get_app_num_args(ctx, app);
+  bool is_parent       = num_fields > child_idx && Z3_is_eq_ast(ctx, Z3_get_app_arg(ctx, app, child_idx), target);
+
+  Z3_ast *updated_args = (Z3_ast*) malloc(sizeof(Z3_ast) * num_fields);
+
+  for (unsigned i = 0; i < num_fields; i++) {
+    updated_args[i] = (is_parent && i == child_idx)
+      ? dst
+      : ast_replace(ctx, Z3_get_app_arg(ctx, app, i), child_idx, target, dst);
+  }
+
+  root = Z3_update_term(ctx, root, num_fields, updated_args);
+  free(updated_args);
+  return root;
+}
+
 Z3_ast mk_cnstrs(R3S_cfg_t cfg, R3S_packet_ast_t p1, R3S_packet_ast_t p2) {
   R3S_status_t    status;
   constraints_t  *cnstrs;
   Z3_ast         *and_args;
   unsigned        and_i;
+  Z3_ast          cnstr;
 
+  if (p1.loaded_opt.opt != R3S_OPT_NON_FRAG_IPV4) return NULL;
   if (p1.loaded_opt.opt != p2.loaded_opt.opt) return NULL;
 
   cnstrs = (constraints_t*) R3S_get_user_data(cfg);
   and_args = (Z3_ast*) malloc(sizeof(Z3_ast) * (cnstrs->cnstrs[0].pfs.sz * 2 + 1));
 
-  and_args[0] = cnstrs->cnstrs[0].cnstr;
-
-  and_i = 1;
+  cnstr = cnstrs->cnstrs[0].cnstr;
+  and_i = 0;
   for (unsigned c = 0; c < cnstrs->cnstrs[0].pfs.sz; c++) {
     Z3_ast pf1_ast, pf2_ast;
     unsigned pf1_sz, pf2_sz;
@@ -39,12 +62,27 @@ Z3_ast mk_cnstrs(R3S_cfg_t cfg, R3S_packet_ast_t p1, R3S_packet_ast_t p2) {
     Z3_ast pf1_ext = Z3_mk_extract(cfg.ctx, high, low, pf1_ast);
     Z3_ast pf2_ext = Z3_mk_extract(cfg.ctx, high, low, pf2_ast);
 
-    and_args[and_i++] = Z3_mk_eq(cfg.ctx, pf1_ext, cnstrs->cnstrs[0].pfs.pfs[c].select);
-    and_args[and_i++] = Z3_mk_eq(cfg.ctx, pf2_ext, cnstrs->cnstrs[0].pfs.pfs[c].select);
 
+    if (cnstrs->cnstrs[0].pfs.pfs[c].p_count == 0) {
+      printf("\n\nreplacing %s\n", Z3_ast_to_string(cfg.ctx, cnstrs->cnstrs[0].pfs.pfs[c].select));
+      printf("with %s\n", Z3_ast_to_string(cfg.ctx, pf1_ext));
+      printf("on %s\n\n", Z3_ast_to_string(cfg.ctx, cnstr));
+      cnstr = ast_replace(cfg.ctx, cnstr, cnstrs->cnstrs[0].pfs.pfs[c].parent_arg, cnstrs->cnstrs[0].pfs.pfs[c].select, pf1_ext);
+    } else if (cnstrs->cnstrs[0].pfs.pfs[c].p_count == 1) {
+      printf("\n\nreplacing %s\n", Z3_ast_to_string(cfg.ctx, cnstrs->cnstrs[0].pfs.pfs[c].select));
+      printf("with %s\n", Z3_ast_to_string(cfg.ctx, pf2_ext));
+      printf("on %s\n\n", Z3_ast_to_string(cfg.ctx, cnstr));
+      cnstr = ast_replace(cfg.ctx, cnstr, cnstrs->cnstrs[0].pfs.pfs[c].parent_arg, cnstrs->cnstrs[0].pfs.pfs[c].select, pf2_ext);
+    } else {
+      assert(false && "Packet counter with invalid value");
+    }
+
+    assert(cnstr != NULL);
+    printf("result %s\n\n", Z3_ast_to_string(cfg.ctx, cnstr));
   }
-  printf("Final cnstr:\n%s\n", Z3_ast_to_string(cfg.ctx, Z3_mk_and(cfg.ctx, and_i, and_args)));
-  return Z3_mk_and(cfg.ctx, and_i, and_args);
+  
+  printf("Final cnstr:\n%s\n", Z3_ast_to_string(cfg.ctx, cnstr));
+  return cnstr;
 }
 
 void validate(R3S_cfg_t cfg)
@@ -55,6 +93,7 @@ void validate(R3S_cfg_t cfg)
   for (int i = 0; i < 1; i++)
   {
     R3S_packet_rand(cfg, &p1);
+
     if ((status = R3S_packet_from_cnstrs(cfg, p1, &mk_cnstrs, &p2)) != R3S_STATUS_SUCCESS) {
       printf("ERROR: %s\n", R3S_status_to_string(status));
     }
@@ -108,7 +147,6 @@ int main(int argc, char *argv[]) {
   constraints_process_pfs(&data.constraints, data.accesses);
 
   R3S_pf_t *pfs = (R3S_pf_t*) malloc(sizeof(R3S_pf_t) * data.constraints.cnstrs[0].pfs.sz);
-  
 
   for (unsigned i = 0; i < data.constraints.sz; i++) {
     printf("\n===========================\n");
@@ -119,11 +157,10 @@ int main(int argc, char *argv[]) {
     printf("ast:\n%s\n", Z3_ast_to_string(cfg.ctx, data.constraints.cnstrs[i].cnstr));
 
     for (unsigned j = 0; j < data.constraints.cnstrs[i].pfs.sz; j++) {
-
       pfs[j] = data.constraints.cnstrs[i].pfs.pfs[j].pf.pf;
 
       if (data.constraints.cnstrs[i].pfs.pfs[j].processed) {
-        printf("\nast: %s\n", Z3_ast_to_string(cfg.ctx,
+        printf("\nselect: %s\n", Z3_ast_to_string(cfg.ctx,
                                           data.constraints.cnstrs[i].pfs.pfs[j].select));
         printf("pf %s byte %u\n",
           R3S_pf_to_string(data.constraints.cnstrs[i].pfs.pfs[j].pf.pf),
@@ -136,6 +173,8 @@ int main(int argc, char *argv[]) {
 
   R3S_opt_t *opts;
   size_t opts_sz;
+
+  assert(data.constraints.cnstrs[0].pfs.sz);
 
   R3S_opts_from_pfs(pfs, data.constraints.cnstrs[0].pfs.sz, &opts, &opts_sz);
   

@@ -13,6 +13,9 @@ typedef struct {
 
 typedef struct {
   Z3_ast     select;
+  Z3_ast     parent;
+  unsigned   parent_arg;
+  int        p_count;
 
   union {
     unsigned index;
@@ -23,7 +26,7 @@ typedef struct {
   bool processed;
 } pfast_t;
 
-bool pfast_eq(pfast_t pfast1, pfast_t pfast2);
+bool pfast_eq(Z3_context ctx, pfast_t pfast1, pfast_t pfast2);
 
 typedef struct {
   pfast_t *pfs;
@@ -32,7 +35,7 @@ typedef struct {
 
 void pfasts_init(pfasts_t *pfasts);
 void pfasts_destroy(pfasts_t *pfasts);
-void pfasts_append_unique(pfasts_t *pfasts, pfast_t pfast);
+void pfasts_append_unique(Z3_context ctx, pfasts_t *pfasts, pfast_t pfast);
 void pfasts_sort(pfasts_t *pfasts);
 
 typedef struct {
