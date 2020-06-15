@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdbool.h>
 #include "./libvig_access.h"
 #include <z3.h>
 #include <r3s.h>
