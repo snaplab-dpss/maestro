@@ -1,4 +1,6 @@
 #include "./libvig_access.h"
+
+/*
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -191,3 +193,4 @@ deps_t deps_merge(deps_t deps1, deps_t deps2) {
   
   return result;
 }
+*/

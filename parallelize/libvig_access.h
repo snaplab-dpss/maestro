@@ -1,8 +1,32 @@
 #pragma once
 
 #include <r3s.h>
-#include <stdbool.h>
+//#include <stdbool.h>
 
+class Dependency {
+  
+  private:
+
+  unsigned offset;
+  unsigned bytes;
+  R3S_pf_t pf;
+  bool     pf_is_set;
+  char     error_descr[50];
+};
+
+class Access {
+
+  private:
+
+  unsigned   id;
+  unsigned   device;
+  unsigned   obj;
+  unsigned   layer;
+  unsigned   proto;
+  Dependency dep;
+};
+
+/*
 typedef struct {
   unsigned offset;
   unsigned bytes;    // big endian
@@ -47,3 +71,4 @@ void libvig_accesses_append_unique(libvig_access_t access,
                                    libvig_accesses_t *accesses);
 
 dep_t dep_from_offset(unsigned offset, libvig_access_t access);
+*/

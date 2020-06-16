@@ -1,10 +1,27 @@
+#include <iostream>
+#include <fstream>
+#include <string>
+
 #include "./parser.h"
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/types.h>
 
+void Parser::parse(std::string filepath) {
+
+  // TODO: deal with errors
+  std::fstream file;
+
+  file.open(filepath.c_str(), std::ios::in); //open a file to perform read operation using file object
+
+  if (file.is_open()){   //checking whether the file is open
+    std::string tp;
+    while(getline(file, tp)){ //read data from file object and put it into string.
+        std::cout << tp << "\n"; //print the data of the string
+    }
+    file.close(); //close the file object.
+  }
+}
+
+/*
 void parsed_data_init(parsed_data_t *data) {
   libvig_accesses_init(&(data->accesses));
   constraints_init(&(data->constraints));
@@ -167,3 +184,4 @@ void parse_libvig_access_file(char *path, parsed_data_t *data, Z3_context ctx) {
     exit(1);
   }
 }
+*/

@@ -29,6 +29,7 @@ Z3_ast ast_replace(Z3_context ctx, Z3_ast root, Z3_ast target, Z3_ast dst) {
   return root;
 }
 
+/*
 Z3_ast mk_cnstrs(R3S_cfg_t cfg, R3S_packet_ast_t p1, R3S_packet_ast_t p2) {
   R3S_status_t status;
   constraints_t *cnstrs;
@@ -110,6 +111,7 @@ void validate(R3S_cfg_t cfg) {
     printf("Packet 2:\n%s\n", R3S_packet_to_string(p2));
   }
 }
+*/
 
 int main(int argc, char *argv[]) {
 
@@ -121,15 +123,19 @@ int main(int argc, char *argv[]) {
 
   char *libvig_access_out = argv[1];
 
+  /*
   parsed_data_t data;
   parsed_data_init(&data);
+  */
 
   R3S_cfg_t cfg;
   R3S_cnstrs_func cnstrs[1];
   R3S_status_t status;
 
   R3S_cfg_init(&cfg);
+  Parser parser(cfg.ctx);
 
+  /*
   parse_libvig_access_file(libvig_access_out, &data, cfg.ctx);
 
   unsigned curr_device;
@@ -198,4 +204,5 @@ int main(int argc, char *argv[]) {
 
   constraints_destroy(&(data.constraints));
   libvig_accesses_destroy(&(data.accesses));
+  */
 }

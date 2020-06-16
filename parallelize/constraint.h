@@ -1,10 +1,50 @@
 #pragma once
 
-#include <stdbool.h>
 #include "./libvig_access.h"
 #include <z3.h>
 #include <r3s.h>
 
+// #include <stdbool.h>
+
+#include <string>
+#include <vector>
+
+class Statement {
+
+  private:
+
+  unsigned    first_access_id;
+  unsigned    second_access_id;
+  std::string query;
+  unsigned    query_sz;
+};
+
+class PacketFieldAST {
+
+  private:
+
+  Z3_ast   select;
+  int      p_count;
+  unsigned index;
+  bool     processed;
+
+  public:
+
+  void process();
+};
+
+class Constraint {
+
+  private:
+
+  Access first;
+  Access second;
+  Z3_ast cnstr;
+  std::vector<PacketFieldAST> pfs;
+
+};
+
+/*
 typedef struct {
   unsigned first_access_id;
   unsigned second_access_id;
@@ -54,3 +94,4 @@ void constraints_append(constraints_t *cnstrs, libvig_accesses_t accesses,
                         smt_t smt, Z3_context ctx);
 void constraints_destroy(constraints_t *cnstrs);
 void constraints_process_pfs(constraints_t *cnstrs, libvig_accesses_t accesses);
+*/
