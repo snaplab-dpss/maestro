@@ -12,8 +12,7 @@ namespace Tokens {
 
 const std::string ACCESS_START = "BEGIN ACCESS";
 const std::string ACCESS_END = "END ACCESS";
-const std::string CONSTRAINT_START = "BEGIN CONSTRAINT";
-const std::string CONSTRAINT_END = "END CONSTRAINT";
+
 const std::string ID = "id";
 const std::string DEVICE = "device";
 const std::string OBJECT = "object";
@@ -21,28 +20,39 @@ const std::string LAYER = "layer";
 const std::string PROTOCOL = "proto";
 const std::string DEPENDENCY = "dep";
 
+const std::string CONSTRAINT_START = "BEGIN CONSTRAINT";
+const std::string CONSTRAINT_END = "END CONSTRAINT";
+
+const std::string FIRST = "first";
+const std::string SECOND = "second";
+
+const std::string STATEMENT_START = "BEGIN SMT";
+const std::string STATEMENT_END = "END SMT";
+
 }
 
 class Parser {
   
 private:
   Z3_context &ctx;
-  std::vector<LibvigAccess> accesses;
-  std::vector<Constraint> constraints;
+  std::vector<LibvigAccess>  accesses;
+  std::vector<RawConstraint> raw_constraints;
 
 private:
   LibvigAccess& get_or_push_unique_access(const LibvigAccess& access);
+  void push_unique_raw_constraint(const RawConstraint& raw_constraint);
 
   std::istringstream consume_token(std::string& line, const std::string& token);
   void parse_access(std::vector<std::string>& state_content);
+  void parse_constraint(std::vector<std::string>& state_content);
 
 public:
   Parser (Z3_context &_ctx) : ctx(_ctx) { }
   
-  const std::vector<LibvigAccess>& get_accesses()  const { return accesses; }
+  const std::vector<LibvigAccess>& get_accesses() const { return accesses; }
 
-  const std::vector<ConstraintsGenerator::Constraint>&
-    get_constraints() const { return constraints; }
+  const std::vector<RawConstraint>&
+    get_raw_constraints() const { return raw_constraints; }
 
   void parse(std::string filepath);
 };

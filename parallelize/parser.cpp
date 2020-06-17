@@ -3,6 +3,7 @@
 #include <fstream>
 #include <string>
 #include <algorithm>
+#include <numeric>
 
 #include "parser.h"
 
@@ -25,6 +26,13 @@ LibvigAccess& Parser::get_or_push_unique_access(const LibvigAccess &access) {
   }
 
   return *it;
+}
+
+void Parser::push_unique_raw_constraint(const RawConstraint& raw_constraint) {
+  auto it = std::find(raw_constraints.begin(), raw_constraints.end(), raw_constraint);
+
+  if (it == raw_constraints.end())
+    raw_constraints.push_back(raw_constraint);
 }
 
 std::istringstream Parser::consume_token(std::string& line, const std::string& token) {
@@ -69,10 +77,6 @@ void Parser::parse_access(std::vector<std::string>& state_content) {
   
   LibvigAccess& access = get_or_push_unique_access(LibvigAccess(id, device, object));
 
-  std::cout << "[ID]  " << access.get_id() << std::endl;
-  std::cout << "[DEV] " << access.get_device() << std::endl;
-  std::cout << "[OBJ] " << access.get_object() << std::endl;
-
   unsigned int layer;
   unsigned int protocol;
 
@@ -93,6 +97,41 @@ void Parser::parse_access(std::vector<std::string>& state_content) {
     PacketDependency dependency(layer, protocol, offset);
     access.add_dependency(dependency);
   }
+}
+
+void Parser::parse_constraint(std::vector<std::string>& state_content) {
+  if (state_content.size() < 5)  {
+    std::cerr << "[ERROR] Missing parameters of constraint component" << std::endl;
+    exit(1);
+  }
+
+  unsigned int first;
+  unsigned int second;
+  std::string  expression;
+
+  std::istringstream iss;
+
+  iss = consume_token(state_content[0], Tokens::FIRST);
+  iss >> std::ws >> first;
+
+  iss = consume_token(state_content[1], Tokens::SECOND);
+  iss >> std::ws >> second;
+
+  if (state_content[2] != Tokens::STATEMENT_START) {
+    std::cerr << "[ERROR] Missing start statement on constraint component" << std::endl;
+    exit(1);
+  }
+
+  state_content.erase(state_content.begin(), state_content.begin() + 3);
+
+  expression = std::accumulate(
+    state_content.begin() + 3,
+    state_content.end() - 1,
+    std::string("")
+  );
+
+  RawConstraint raw_constraint(first, second, expression);
+  push_unique_raw_constraint(raw_constraint);  
 }
 
 void Parser::parse(std::string filepath) {
@@ -116,27 +155,24 @@ void Parser::parse(std::string filepath) {
       parse_access(state_content);
       state_content.clear();
       state = State::Init;
-      continue;
     }
 
     else if (line == Tokens::CONSTRAINT_END) {
-      // TODO: parse_constraint(state, state_content);
+      parse_constraint(state_content);
       state_content.clear();
       state = State::Init;
-      continue;
     }
 
     else if (line == Tokens::ACCESS_START) {
       state = State::Access;
-      continue;
     }
 
     else if (line == Tokens::CONSTRAINT_START) {
       state = State::Constraint;
-      continue;
     }
 
-    state_content.push_back(line);
+    else
+      state_content.push_back(line);
   }
 
   file.close();

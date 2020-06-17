@@ -6,10 +6,10 @@ namespace ParallelSynthesizer {
 namespace ConstraintsGenerator {
 
 bool operator==(const PacketDependency& lhs, const PacketDependency& rhs) {
-  return lhs.get_bytes() == rhs.get_bytes()
-    && lhs.get_layer() == rhs.get_layer()
-    && lhs.get_offset() == rhs.get_offset()
-    && lhs.get_protocol() == rhs.get_protocol();
+  return lhs.bytes == rhs.bytes
+    && lhs.layer == rhs.layer
+    && lhs.offset == rhs.offset
+    && lhs.protocol == rhs.protocol;
 }
 
 void LibvigAccess::add_dependency(const PacketDependency& dependency) {

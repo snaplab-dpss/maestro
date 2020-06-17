@@ -168,6 +168,7 @@ public:
   friend bool operator==(const LibvigAccess& lhs, const LibvigAccess& rhs);
 };
 
+
 }
 }
 

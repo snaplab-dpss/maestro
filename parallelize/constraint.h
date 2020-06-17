@@ -11,14 +11,29 @@
 namespace ParallelSynthesizer {
 namespace ConstraintsGenerator {
 
-class Statement {
+class RawConstraint {
 
-  private:
+private:
 
-  unsigned    first_access_id;
-  unsigned    second_access_id;
-  std::string query;
+  unsigned int first_access_id;
+  unsigned int second_access_id;
+  std::string expression;
+
+public:
+
+  RawConstraint(
+    const unsigned int& _first,
+    const unsigned int& _second,
+    const std::string& _expression
+  ) : first_access_id(_first), second_access_id(_second), expression(_expression) {}
+  
+  const unsigned int& get_first_access_id()  const { return first_access_id;  }
+  const unsigned int& get_second_access_id() const { return second_access_id; }
+  const std::string&  get_expression()       const { return expression;       }
+
+  friend bool operator==(const RawConstraint& lhs, const RawConstraint& rhs);
 };
+
 
 class PacketFieldAST {
 
@@ -34,13 +49,13 @@ class PacketFieldAST {
   void process();
 };
 
-class Constraint {
+class Constraint : public RawConstraint {
 
   private:
 
   LibvigAccess first;
   LibvigAccess second;
-  Z3_ast cnstr;
+  Z3_ast expression_ast;
   std::vector<PacketFieldAST> pfs;
 
 };

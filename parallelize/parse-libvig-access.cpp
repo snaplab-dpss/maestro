@@ -153,6 +153,14 @@ int main(int argc, char *argv[]) {
     std::cout << std::endl;
   }
 
+  for (auto& raw_constraint : parser.get_raw_constraints()) {
+    std::cout << "==========================\n";
+    std::cout << "first:      " << raw_constraint.get_first_access_id() << '\n';
+    std::cout << "second:     " << raw_constraint.get_second_access_id() << '\n';
+    std::cout << "expression: " << raw_constraint.get_expression() << '\n';
+    std::cout << std::endl;
+  }
+
   /*
   parse_libvig_access_file(libvig_access_out, &data, cfg.ctx);
 

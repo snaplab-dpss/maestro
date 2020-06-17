@@ -1,4 +1,16 @@
-#include "./constraint.h"
+#include "constraint.h"
+
+namespace ParallelSynthesizer {
+namespace ConstraintsGenerator {
+
+bool operator==(const RawConstraint& lhs, const RawConstraint& rhs) {
+  return lhs.first_access_id == rhs.first_access_id
+    && lhs.second_access_id == rhs.second_access_id
+    && lhs.expression == rhs.expression;
+}
+
+}
+}
 
 /*
 #include <stdlib.h>
