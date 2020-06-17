@@ -40,8 +40,8 @@ std::istringstream Parser::consume_token(std::string& line, const std::string& t
   
   if (found == std::string::npos) {
     std::cerr << "[ERORR] Token not found." << '\n';
-    std::cerr << "        Input: " << line << '\n';
-    std::cerr << "        Missing token: " << token << std::endl;
+    std::cerr << "        Input:   " << line << '\n';
+    std::cerr << "        Missing: " << token << std::endl;
 
     exit(1);
   }
