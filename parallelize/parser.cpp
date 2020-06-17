@@ -9,6 +9,13 @@
 namespace ParallelSynthesizer {
 namespace ConstraintsGenerator {
 
+enum State {
+  Init,
+  Access,
+  Constraint,
+  Statement
+};
+
 LibvigAccess& Parser::get_or_push_unique_access(const LibvigAccess &access) {
   auto it = std::find(accesses.begin(), accesses.end(), access);
 
@@ -34,81 +41,57 @@ std::istringstream Parser::consume_token(std::string& line, const std::string& t
   return std::istringstream(line.substr(found + token.length()));
 }
 
-void Parser::parse_state(State& state, std::vector<std::string>& state_content) {
-  switch (state) {
-    case State::Init: {
-      std::cerr << "[ERROR] Should not be called with state INIT" << std::endl;
-      exit(1);
-      break;
-    }
+void Parser::parse_access(std::vector<std::string>& state_content) {
+  if (state_content.size() < 3)  {
+    std::cerr << "[ERROR] Missing parameters of access component" << std::endl;
+    exit(1);
+  }
 
-    case State::Access: {
-      if (state_content.size() < 3)  {
-        std::cerr << "[ERROR] Missing parameters of access component" << std::endl;
-        exit(1);
-      }
+  unsigned int id;
+  unsigned int device;
+  unsigned int object;
 
-      unsigned int id;
-      unsigned int device;
-      unsigned int object;
+  std::istringstream iss;
+  
+  iss = consume_token(state_content[0], Tokens::ID);
+  iss >> std::ws >> id;
 
-      std::istringstream iss;
-      
-      iss = consume_token(state_content[0], Tokens::ID);
-      iss >> std::ws >> id;
+  iss = consume_token(state_content[1], Tokens::DEVICE);
+  iss >> std::ws >> device;
 
-      iss = consume_token(state_content[1], Tokens::DEVICE);
-      iss >> std::ws >> device;
+  iss = consume_token(state_content[2], Tokens::OBJECT);
+  iss >> std::ws >> object;
 
-      iss = consume_token(state_content[2], Tokens::OBJECT);
-      iss >> std::ws >> object;
+  state_content.erase(state_content.begin(), state_content.begin() + 3);
 
-      state_content.erase(state_content.begin(), state_content.begin() + 3);
+  if (state_content.size() == 0)
+    return;
+  
+  LibvigAccess& access = get_or_push_unique_access(LibvigAccess(id, device, object));
 
-      if (state_content.size() == 0)
-        return;
-      
-      LibvigAccess& access = get_or_push_unique_access(LibvigAccess(id, device, object));
+  std::cout << "[ID]  " << access.get_id() << std::endl;
+  std::cout << "[DEV] " << access.get_device() << std::endl;
+  std::cout << "[OBJ] " << access.get_object() << std::endl;
 
-      std::cout << "[ID]  " << access.get_id() << std::endl;
-      std::cout << "[DEV] " << access.get_device() << std::endl;
-      std::cout << "[OBJ] " << access.get_object() << std::endl;
+  unsigned int layer;
+  unsigned int protocol;
 
-      unsigned int layer;
-      unsigned int protocol;
+  iss = consume_token(state_content[0], Tokens::LAYER);
+  iss >> std::ws >> layer;
 
-      iss = consume_token(state_content[0], Tokens::LAYER);
-      iss >> std::ws >> layer;
+  iss = consume_token(state_content[1], Tokens::PROTOCOL);
+  iss >> std::ws >> protocol;
 
-      iss = consume_token(state_content[1], Tokens::PROTOCOL);
-      iss >> std::ws >> protocol;
+  state_content.erase(state_content.begin(), state_content.begin() + 2);
 
-      state_content.erase(state_content.begin(), state_content.begin() + 2);
+  for (auto &content : state_content) {
+    unsigned int offset;
 
-      for (auto &content : state_content) {
-        unsigned int offset;
-
-        iss = consume_token(content, Tokens::DEPENDENCY);
-        iss >> std::ws >> offset;
-      
-        PacketDependency dependency(layer, protocol, offset);
-        access.add_dependency(dependency);
-      }
-
-     break;
-    }
-
-    case State::Constraint: {
-      break;
-    }
-
-    case State::Statement: {
-      break;
-    }
-
-    default:
-      std::cerr << "Unknown Parser::State" << std::endl;
-      exit(1);
+    iss = consume_token(content, Tokens::DEPENDENCY);
+    iss >> std::ws >> offset;
+  
+    PacketDependency dependency(layer, protocol, offset);
+    access.add_dependency(dependency);
   }
 }
 
@@ -129,8 +112,15 @@ void Parser::parse(std::string filepath) {
 
   while (getline(file, line)) {
 
-    if (line == Tokens::ACCESS_END || line == Tokens::CONSTRAINT_END) {
-      parse_state(state, state_content);
+    if (line == Tokens::ACCESS_END) {
+      parse_access(state_content);
+      state_content.clear();
+      state = State::Init;
+      continue;
+    }
+
+    else if (line == Tokens::CONSTRAINT_END) {
+      // TODO: parse_constraint(state, state_content);
       state_content.clear();
       state = State::Init;
       continue;

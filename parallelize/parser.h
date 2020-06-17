@@ -30,18 +30,11 @@ private:
   std::vector<LibvigAccess> accesses;
   std::vector<Constraint> constraints;
 
-  enum State {
-    Init,
-    Access,
-    Constraint,
-    Statement
-  };
-
 private:
   LibvigAccess& get_or_push_unique_access(const LibvigAccess& access);
 
   std::istringstream consume_token(std::string& line, const std::string& token);
-  void parse_state(State& state, std::vector<std::string>& state_content);
+  void parse_access(std::vector<std::string>& state_content);
 
 public:
   Parser (Z3_context &_ctx) : ctx(_ctx) { }
