@@ -1,11 +1,33 @@
-#include "./libvig_access.h"
+#include "libvig_access.h"
 
-bool ParallelSynthesizer::ConstraintsGenerator::operator==(const PacketDependency& lhs, const PacketDependency& rhs) {
+#include <algorithm>
+
+namespace ParallelSynthesizer {
+namespace ConstraintsGenerator {
+
+bool operator==(const PacketDependency& lhs, const PacketDependency& rhs) {
   return lhs.get_bytes() == rhs.get_bytes()
     && lhs.get_layer() == rhs.get_layer()
     && lhs.get_offset() == rhs.get_offset()
     && lhs.get_protocol() == rhs.get_protocol();
 }
+
+void LibvigAccess::add_dependency(const PacketDependency& dependency) {
+  auto it = std::find(packet_dependencies.begin(), packet_dependencies.end(), dependency);
+  
+  if (it == packet_dependencies.end())
+    packet_dependencies.emplace_back(dependency);
+}
+
+bool operator==(const LibvigAccess& lhs, const LibvigAccess& rhs) {
+  return lhs.get_id() == rhs.get_id()
+    && lhs.get_device() == rhs.get_device()
+    && lhs.get_object() == rhs.get_object();
+}
+
+}
+}
+
 
 /*
 #include <string.h>

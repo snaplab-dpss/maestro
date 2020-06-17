@@ -1,7 +1,7 @@
 #pragma once
 
-#include "./libvig_access.h"
-#include "./constraint.h"
+#include "libvig_access.h"
+#include "constraint.h"
 
 #include <z3.h>
 #include <vector>
@@ -38,11 +38,19 @@ private:
   };
 
 private:
-  std::istringstream consume_token(std::string &line, const std::string &token);
-  void parse_state(State &state, std::vector<std::string> &state_content);
+  LibvigAccess& get_or_push_unique_access(const LibvigAccess& access);
+
+  std::istringstream consume_token(std::string& line, const std::string& token);
+  void parse_state(State& state, std::vector<std::string>& state_content);
 
 public:
   Parser (Z3_context &_ctx) : ctx(_ctx) { }
+  
+  const std::vector<LibvigAccess>& get_accesses()  const { return accesses; }
+
+  const std::vector<ConstraintsGenerator::Constraint>&
+    get_constraints() const { return constraints; }
+
   void parse(std::string filepath);
 };
 

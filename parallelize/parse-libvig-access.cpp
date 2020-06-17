@@ -1,13 +1,12 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <assert.h>
+#include <iostream>
+
+#include "libvig_access.h"
+#include "constraint.h"
+#include "parser.h"
 
 #include <r3s.h>
 #include <z3.h>
 
-#include "./libvig_access.h"
-#include "./constraint.h"
-#include "./parser.h"
 
 /*
 Z3_ast ast_replace(Z3_context ctx, Z3_ast root, Z3_ast target, Z3_ast dst) {
@@ -137,6 +136,22 @@ int main(int argc, char *argv[]) {
   ParallelSynthesizer::ConstraintsGenerator::Parser parser(cfg.ctx);
 
   parser.parse(libvig_access_out);
+
+  for (auto& access : parser.get_accesses()) {
+    std::cout << "==========================\n";
+    std::cout << "id:     " << access.get_id() << '\n';
+    std::cout << "device: " << access.get_device() << '\n';
+    std::cout << "object: " << access.get_object() << '\n';
+
+    for (auto& dep : access.get_dependencies()) {
+      std::cout << '\n';
+      std::cout << "layer:    " << dep.get_layer() << '\n';
+      std::cout << "protocol: " << dep.get_protocol() << '\n';
+      std::cout << "offset:   " << dep.get_offset() << '\n';
+    }
+
+    std::cout << std::endl;
+  }
 
   /*
   parse_libvig_access_file(libvig_access_out, &data, cfg.ctx);

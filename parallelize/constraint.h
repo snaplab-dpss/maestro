@@ -1,6 +1,6 @@
 #pragma once
 
-#include "./libvig_access.h"
+#include "libvig_access.h"
 
 #include <z3.h>
 #include <r3s.h>

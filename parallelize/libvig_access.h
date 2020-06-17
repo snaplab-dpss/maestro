@@ -4,14 +4,13 @@
 
 #include <memory>
 #include <vector>
-#include <algorithm>
 
 namespace ParallelSynthesizer {
 namespace ConstraintsGenerator {
 
 class PacketDependency {
   
-  private:
+private:
 
   unsigned int layer;
   unsigned int protocol;
@@ -20,23 +19,22 @@ class PacketDependency {
 
   std::unique_ptr<R3S_pf_t> pf;
 
-  private:
+private:
 
-  void set_pf(const R3S_pf_t &_pf) {
+  void set_pf(const R3S_pf_t& _pf) {
     pf = std::unique_ptr<R3S_pf_t> (new R3S_pf_t(_pf));
   }
 
-  public:
+public:
 
   PacketDependency(const PacketDependency &pd)
-    : PacketDependency(pd.get_layer(), pd.get_protocol(), pd.get_offset(), pd.get_bytes()) { }
+    : PacketDependency(pd.get_layer(), pd.get_protocol(), pd.get_offset()) { }
 
   PacketDependency(
-    const unsigned int &_layer,
-    const unsigned int &_protocol,
-    const unsigned int &_offset,
-    const unsigned int &_bytes
-  ) : layer(_layer), protocol(_protocol), offset(_offset), bytes(_bytes) {
+    const unsigned int& _layer,
+    const unsigned int& _protocol,
+    const unsigned int& _offset
+  ) : layer(_layer), protocol(_protocol), offset(_offset) {
     
     // IPv4
     if (layer == 3 && protocol == 0x0800) {
@@ -123,11 +121,11 @@ class PacketDependency {
 
 class LibvigAccess {
 
-  private:
+private:
 
   unsigned int id;
   unsigned int device;
-  unsigned int obj;
+  unsigned int object;
 
   /*
    * There should never be repeating elements inside this vector.
@@ -139,20 +137,35 @@ class LibvigAccess {
    */
   std::vector<PacketDependency> packet_dependencies;
 
-  public:
+public:
 
   LibvigAccess(
-    const unsigned int &_id,
-    const unsigned int &_device,
-    const unsigned int &_obj
-  ) : id(_id), device(_device), obj(_obj) {}
+    const unsigned int& _id,
+    const unsigned int& _device,
+    const unsigned int& _object
+  ) : id(_id), device(_device), object(_object) {}
 
-  void add_dependency(const PacketDependency &dependency) {
-    auto it = std::find(packet_dependencies.begin(), packet_dependencies.end(), dependency);
-    
-    if (it == packet_dependencies.end())
-      packet_dependencies.push_back(dependency);
+  LibvigAccess(const LibvigAccess& access)
+    : LibvigAccess(
+      access.get_id(),
+      access.get_device(),
+      access.get_object()
+  ) {
+    for (const auto& dependency : access.get_dependencies())
+      packet_dependencies.emplace_back(dependency);  
   }
+
+  const unsigned int& get_id()     const { return id;     }
+  const unsigned int& get_device() const { return device; }
+  const unsigned int& get_object() const { return object; }
+
+  const std::vector<PacketDependency>& get_dependencies() const {
+    return packet_dependencies;
+  }
+
+  void add_dependency(const PacketDependency& dependency);
+
+  friend bool operator==(const LibvigAccess& lhs, const LibvigAccess& rhs);
 };
 
 }

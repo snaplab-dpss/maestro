@@ -2,13 +2,25 @@
 #include <sstream>
 #include <fstream>
 #include <string>
+#include <algorithm>
 
-#include "./parser.h"
+#include "parser.h"
 
 namespace ParallelSynthesizer {
 namespace ConstraintsGenerator {
 
-std::istringstream Parser::consume_token(std::string &line, const std::string &token) {
+LibvigAccess& Parser::get_or_push_unique_access(const LibvigAccess &access) {
+  auto it = std::find(accesses.begin(), accesses.end(), access);
+
+  if (it == accesses.end()) {
+    accesses.emplace_back(access);
+    return accesses.back();
+  }
+
+  return *it;
+}
+
+std::istringstream Parser::consume_token(std::string& line, const std::string& token) {
   auto found = line.find(token);
   
   if (found == std::string::npos) {
@@ -22,7 +34,7 @@ std::istringstream Parser::consume_token(std::string &line, const std::string &t
   return std::istringstream(line.substr(found + token.length()));
 }
 
-void Parser::parse_state(State &state, std::vector<std::string> &state_content) {
+void Parser::parse_state(State& state, std::vector<std::string>& state_content) {
   switch (state) {
     case State::Init: {
       std::cerr << "[ERROR] Should not be called with state INIT" << std::endl;
@@ -51,28 +63,47 @@ void Parser::parse_state(State &state, std::vector<std::string> &state_content) 
       iss = consume_token(state_content[2], Tokens::OBJECT);
       iss >> std::ws >> object;
 
-      accesses.emplace_back(id, device, object);
+      state_content.erase(state_content.begin(), state_content.begin() + 3);
 
-      std::cout << "[ID]  " << id << std::endl;
-      std::cout << "[DEV] " << device << std::endl;
-      std::cout << "[OBJ] " << object << std::endl;
+      if (state_content.size() == 0)
+        return;
+      
+      LibvigAccess& access = get_or_push_unique_access(LibvigAccess(id, device, object));
 
-      /*
-      if (current == std::string::npos) {
-        std::cerr << "[ERROR] Missing ID parameter of access component" << std::endl;
-        exit(1);
+      std::cout << "[ID]  " << access.get_id() << std::endl;
+      std::cout << "[DEV] " << access.get_device() << std::endl;
+      std::cout << "[OBJ] " << access.get_object() << std::endl;
+
+      unsigned int layer;
+      unsigned int protocol;
+
+      iss = consume_token(state_content[0], Tokens::LAYER);
+      iss >> std::ws >> layer;
+
+      iss = consume_token(state_content[1], Tokens::PROTOCOL);
+      iss >> std::ws >> protocol;
+
+      state_content.erase(state_content.begin(), state_content.begin() + 2);
+
+      for (auto &content : state_content) {
+        unsigned int offset;
+
+        iss = consume_token(content, Tokens::DEPENDENCY);
+        iss >> std::ws >> offset;
+      
+        PacketDependency dependency(layer, protocol, offset);
+        access.add_dependency(dependency);
       }
-      */
 
      break;
     }
 
     case State::Constraint: {
-
+      break;
     }
 
     case State::Statement: {
-
+      break;
     }
 
     default:
