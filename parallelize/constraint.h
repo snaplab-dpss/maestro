@@ -1,13 +1,15 @@
 #pragma once
 
 #include "./libvig_access.h"
+
 #include <z3.h>
 #include <r3s.h>
 
-// #include <stdbool.h>
-
 #include <string>
 #include <vector>
+
+namespace ParallelSynthesizer {
+namespace ConstraintsGenerator {
 
 class Statement {
 
@@ -16,14 +18,13 @@ class Statement {
   unsigned    first_access_id;
   unsigned    second_access_id;
   std::string query;
-  unsigned    query_sz;
 };
 
 class PacketFieldAST {
 
   private:
 
-  Z3_ast   select;
+  //Z3_ast   select;
   int      p_count;
   unsigned index;
   bool     processed;
@@ -37,12 +38,15 @@ class Constraint {
 
   private:
 
-  Access first;
-  Access second;
+  LibvigAccess first;
+  LibvigAccess second;
   Z3_ast cnstr;
   std::vector<PacketFieldAST> pfs;
 
 };
+
+}
+}
 
 /*
 typedef struct {

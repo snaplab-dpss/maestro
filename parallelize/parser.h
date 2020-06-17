@@ -3,14 +3,31 @@
 #include "./libvig_access.h"
 #include "./constraint.h"
 
+#include <z3.h>
 #include <vector>
+
+namespace ParallelSynthesizer {
+namespace ConstraintsGenerator {
+namespace Tokens {
+
+const std::string ACCESS_START = "BEGIN ACCESS";
+const std::string ACCESS_END = "END ACCESS";
+const std::string CONSTRAINT_START = "BEGIN CONSTRAINT";
+const std::string CONSTRAINT_END = "END CONSTRAINT";
+const std::string ID = "id";
+const std::string DEVICE = "device";
+const std::string OBJECT = "object";
+const std::string LAYER = "layer";
+const std::string PROTOCOL = "proto";
+const std::string DEPENDENCY = "dep";
+
+}
 
 class Parser {
   
-  private:
-  
+private:
   Z3_context &ctx;
-  std::vector<Access> accesses;
+  std::vector<LibvigAccess> accesses;
   std::vector<Constraint> constraints;
 
   enum State {
@@ -20,13 +37,17 @@ class Parser {
     Statement
   };
 
-  public:
+private:
+  std::istringstream consume_token(std::string &line, const std::string &token);
+  void parse_state(State &state, std::vector<std::string> &state_content);
 
+public:
   Parser (Z3_context &_ctx) : ctx(_ctx) { }
-
   void parse(std::string filepath);
-
 };
+
+}
+}
 
 /*
 typedef struct {

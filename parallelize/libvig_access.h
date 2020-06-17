@@ -1,30 +1,162 @@
 #pragma once
 
 #include <r3s.h>
-//#include <stdbool.h>
 
-class Dependency {
+#include <memory>
+#include <vector>
+#include <algorithm>
+
+namespace ParallelSynthesizer {
+namespace ConstraintsGenerator {
+
+class PacketDependency {
   
   private:
 
-  unsigned offset;
-  unsigned bytes;
-  R3S_pf_t pf;
-  bool     pf_is_set;
-  char     error_descr[50];
-};
+  unsigned int layer;
+  unsigned int protocol;
+  unsigned int offset;
+  unsigned int bytes;
 
-class Access {
+  std::unique_ptr<R3S_pf_t> pf;
 
   private:
 
-  unsigned   id;
-  unsigned   device;
-  unsigned   obj;
-  unsigned   layer;
-  unsigned   proto;
-  Dependency dep;
+  void set_pf(const R3S_pf_t &_pf) {
+    pf = std::unique_ptr<R3S_pf_t> (new R3S_pf_t(_pf));
+  }
+
+  public:
+
+  PacketDependency(const PacketDependency &pd)
+    : PacketDependency(pd.get_layer(), pd.get_protocol(), pd.get_offset(), pd.get_bytes()) { }
+
+  PacketDependency(
+    const unsigned int &_layer,
+    const unsigned int &_protocol,
+    const unsigned int &_offset,
+    const unsigned int &_bytes
+  ) : layer(_layer), protocol(_protocol), offset(_offset), bytes(_bytes) {
+    
+    // IPv4
+    if (layer == 3 && protocol == 0x0800) {
+
+      if (offset == 9) {
+        //sprintf(dep.error_descr, "IPv4 protocolcol");
+      }
+      
+      else if (offset >= 12 && offset <= 15) {
+        set_pf(R3S_PF_IPV4_SRC);
+        bytes = 15 - offset;
+      }
+      
+      else if (offset >= 16 && offset <= 19) {
+        set_pf(R3S_PF_IPV4_DST);
+        bytes = 19 - offset;
+      }
+      
+      else if (offset >= 20) {
+        // sprintf(dep.error_descr, "IPv4 options");
+      }
+      
+      else {
+        // sprintf(dep.error_descr, "Unknown IPv4 field at byte %u\n", dep.offset);
+      }
+    }
+
+    // IPv6
+    else if (layer == 3 && protocol == 0x86DD) {
+
+    }
+
+    // VLAN
+    else if (layer == 3 && protocol == 0x8100) {
+
+    }
+
+    // TCP
+    else if (layer == 4 && protocol == 0x06) {
+      if (offset <= 1) {
+        set_pf(R3S_PF_TCP_SRC);
+        bytes = offset;
+      }
+      
+      else if (offset >= 2 && offset <= 3) {
+        set_pf(R3S_PF_TCP_DST);
+        bytes = offset - 2;
+      }
+      
+      else {
+        // sprintf(dep.error_descr, "Unknown TCP field at byte %u\n", dep.offset);
+      }
+    }
+
+    // UDP
+    else if (layer == 4 && protocol == 0x11) {
+      if (offset <= 1) {
+        set_pf(R3S_PF_UDP_SRC);
+        bytes = offset;
+      }
+      
+      else if (offset >= 2 && offset <= 3) {
+        set_pf(R3S_PF_UDP_DST);
+        bytes = offset - 2;
+      }
+      
+      else {
+        // sprintf(dep.error_descr, "Unknown UDP field at byte %u\n", dep.offset);
+      }
+    }
+  }
+
+  const unsigned int& get_layer()    const { return layer;     }
+  const unsigned int& get_protocol() const { return protocol;  }
+  const unsigned int& get_offset()   const { return offset;    }
+  const unsigned int& get_bytes()    const { return bytes;     }
+
+  friend bool operator==(const PacketDependency& lhs, const PacketDependency& rhs);
+
+  // TODO
+  void process_pf();
+
 };
+
+class LibvigAccess {
+
+  private:
+
+  unsigned int id;
+  unsigned int device;
+  unsigned int obj;
+
+  /*
+   * There should never be repeating elements inside this vector.
+   * 
+   * I considered using an unordered_set, but it involved more work
+   * than I expected. So, in order to contain my over-engineering
+   * tendencies, and because this will not have many elements, I
+   * decided to just use a vector.
+   */
+  std::vector<PacketDependency> packet_dependencies;
+
+  public:
+
+  LibvigAccess(
+    const unsigned int &_id,
+    const unsigned int &_device,
+    const unsigned int &_obj
+  ) : id(_id), device(_device), obj(_obj) {}
+
+  void add_dependency(const PacketDependency &dependency) {
+    auto it = std::find(packet_dependencies.begin(), packet_dependencies.end(), dependency);
+    
+    if (it == packet_dependencies.end())
+      packet_dependencies.push_back(dependency);
+  }
+};
+
+}
+}
 
 /*
 typedef struct {
@@ -52,7 +184,7 @@ typedef struct {
   unsigned device;
   unsigned obj;
   unsigned layer;
-  unsigned proto;
+  unsigned protocol;
   deps_t deps;
 } libvig_access_t;
 

@@ -1,5 +1,12 @@
 #include "./libvig_access.h"
 
+bool ParallelSynthesizer::ConstraintsGenerator::operator==(const PacketDependency& lhs, const PacketDependency& rhs) {
+  return lhs.get_bytes() == rhs.get_bytes()
+    && lhs.get_layer() == rhs.get_layer()
+    && lhs.get_offset() == rhs.get_offset()
+    && lhs.get_protocol() == rhs.get_protocol();
+}
+
 /*
 #include <string.h>
 #include <stdlib.h>

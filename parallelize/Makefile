@@ -1,4 +1,4 @@
-CC=clang -stdlib=libc++
+CC=clang -std=c++11 -stdlib=libstdc++ -lstdc++
 
 Z3_LIB_FLAGS=-lz3 -Wl,-rpath,$(Z3_DIR)/build/lib -L$(Z3_DIR)/build/lib -I$(Z3_DIR)/build/include
 R3S_LIB_FLAGS=-lr3s -Wl,-rpath,$(R3S_DIR)/build/lib -L$(R3S_DIR)/build/lib -I$(R3S_DIR)/include
@@ -9,11 +9,11 @@ BUILD=$(NF_DIR)/build/parallelization
 KLEE_DIR=$(VIGOR_DIR)/klee
 
 all: $(BUILD)/libvig_access.o $(BUILD)/constraint.o $(BUILD)/parser.o
-	$(CC) $(SRC)/parse-libvig-access.cpp  \
-		-o $(BUILD)/parse-libvig-access \
-		$(BUILD)/libvig_access.o        \
-		$(BUILD)/constraint.o           \
-		$(BUILD)/parser.o        \
+	$(CC) $(SRC)/parse-libvig-access.cpp  	\
+		-o $(BUILD)/parse-libvig-access 	\
+		$(BUILD)/libvig_access.o        	\
+		$(BUILD)/constraint.o           	\
+		$(BUILD)/parser.o        			\
 		$(Z3_LIB_FLAGS) $(R3S_LIB_FLAGS)
 
 $(BUILD)/libvig_access.o: $(SRC)/libvig_access.cpp

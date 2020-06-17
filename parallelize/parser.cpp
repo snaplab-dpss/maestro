@@ -1,24 +1,127 @@
 #include <iostream>
+#include <sstream>
 #include <fstream>
 #include <string>
 
 #include "./parser.h"
 
+namespace ParallelSynthesizer {
+namespace ConstraintsGenerator {
+
+std::istringstream Parser::consume_token(std::string &line, const std::string &token) {
+  auto found = line.find(token);
+  
+  if (found == std::string::npos) {
+    std::cerr << "[ERORR] Token not found." << '\n';
+    std::cerr << "        Input: " << line << '\n';
+    std::cerr << "        Missing token: " << token << std::endl;
+
+    exit(1);
+  }
+
+  return std::istringstream(line.substr(found + token.length()));
+}
+
+void Parser::parse_state(State &state, std::vector<std::string> &state_content) {
+  switch (state) {
+    case State::Init: {
+      std::cerr << "[ERROR] Should not be called with state INIT" << std::endl;
+      exit(1);
+      break;
+    }
+
+    case State::Access: {
+      if (state_content.size() < 3)  {
+        std::cerr << "[ERROR] Missing parameters of access component" << std::endl;
+        exit(1);
+      }
+
+      unsigned int id;
+      unsigned int device;
+      unsigned int object;
+
+      std::istringstream iss;
+      
+      iss = consume_token(state_content[0], Tokens::ID);
+      iss >> std::ws >> id;
+
+      iss = consume_token(state_content[1], Tokens::DEVICE);
+      iss >> std::ws >> device;
+
+      iss = consume_token(state_content[2], Tokens::OBJECT);
+      iss >> std::ws >> object;
+
+      accesses.emplace_back(id, device, object);
+
+      std::cout << "[ID]  " << id << std::endl;
+      std::cout << "[DEV] " << device << std::endl;
+      std::cout << "[OBJ] " << object << std::endl;
+
+      /*
+      if (current == std::string::npos) {
+        std::cerr << "[ERROR] Missing ID parameter of access component" << std::endl;
+        exit(1);
+      }
+      */
+
+     break;
+    }
+
+    case State::Constraint: {
+
+    }
+
+    case State::Statement: {
+
+    }
+
+    default:
+      std::cerr << "Unknown Parser::State" << std::endl;
+      exit(1);
+  }
+}
 
 void Parser::parse(std::string filepath) {
-
   // TODO: deal with errors
   std::fstream file;
 
-  file.open(filepath.c_str(), std::ios::in); //open a file to perform read operation using file object
+  file.open(filepath.c_str(), std::ios::in);
 
-  if (file.is_open()){   //checking whether the file is open
-    std::string tp;
-    while(getline(file, tp)){ //read data from file object and put it into string.
-        std::cout << tp << "\n"; //print the data of the string
-    }
-    file.close(); //close the file object.
+  if (!file.is_open()) {
+    std::cerr << "Error trying to open file." << std::endl;
+    exit(1);
   }
+
+  std::string line;
+  State state(State::Init);
+  std::vector<std::string> state_content;
+
+  while (getline(file, line)) {
+
+    if (line == Tokens::ACCESS_END || line == Tokens::CONSTRAINT_END) {
+      parse_state(state, state_content);
+      state_content.clear();
+      state = State::Init;
+      continue;
+    }
+
+    else if (line == Tokens::ACCESS_START) {
+      state = State::Access;
+      continue;
+    }
+
+    else if (line == Tokens::CONSTRAINT_START) {
+      state = State::Constraint;
+      continue;
+    }
+
+    state_content.push_back(line);
+  }
+
+  file.close();
+}
+
+}
 }
 
 /*

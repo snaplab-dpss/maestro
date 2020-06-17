@@ -9,6 +9,7 @@
 #include "./constraint.h"
 #include "./parser.h"
 
+/*
 Z3_ast ast_replace(Z3_context ctx, Z3_ast root, Z3_ast target, Z3_ast dst) {
   if (Z3_get_ast_kind(ctx, root) != Z3_APP_AST)
     return root;
@@ -28,7 +29,7 @@ Z3_ast ast_replace(Z3_context ctx, Z3_ast root, Z3_ast target, Z3_ast dst) {
   free(updated_args);
   return root;
 }
-
+*/
 /*
 Z3_ast mk_cnstrs(R3S_cfg_t cfg, R3S_packet_ast_t p1, R3S_packet_ast_t p2) {
   R3S_status_t status;
@@ -133,7 +134,9 @@ int main(int argc, char *argv[]) {
   R3S_status_t status;
 
   R3S_cfg_init(&cfg);
-  Parser parser(cfg.ctx);
+  ParallelSynthesizer::ConstraintsGenerator::Parser parser(cfg.ctx);
+
+  parser.parse(libvig_access_out);
 
   /*
   parse_libvig_access_file(libvig_access_out, &data, cfg.ctx);
