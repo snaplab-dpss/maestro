@@ -1,7 +1,6 @@
 #pragma once
 
 namespace ParallelSynthesizer {
-namespace ConstraintsGenerator {
 namespace Tokens {
 
 const std::string ACCESS_START = "BEGIN ACCESS";
@@ -23,6 +22,5 @@ const std::string SECOND = "second";
 const std::string STATEMENT_START = "BEGIN SMT";
 const std::string STATEMENT_END = "END SMT";
 
-}
 }
 }

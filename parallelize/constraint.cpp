@@ -1,7 +1,6 @@
 #include "constraint.h"
 
 namespace ParallelSynthesizer {
-namespace ConstraintsGenerator {
 
 bool operator==(const RawConstraint& lhs, const RawConstraint& rhs) {
   return lhs.first_access_id == rhs.first_access_id
@@ -9,7 +8,6 @@ bool operator==(const RawConstraint& lhs, const RawConstraint& rhs) {
     && lhs.expression == rhs.expression;
 }
 
-}
 }
 
 /*

@@ -8,7 +8,6 @@
 #include "parser.h"
 
 namespace ParallelSynthesizer {
-namespace ConstraintsGenerator {
 
 enum State {
   Init,
@@ -125,10 +124,13 @@ void Parser::parse_constraint(std::vector<std::string>& state_content) {
   state_content.erase(state_content.begin(), state_content.begin() + 3);
 
   expression = std::accumulate(
-    state_content.begin() + 3,
+    state_content.begin(),
     state_content.end() - 1,
     std::string("")
   );
+  
+  std::cout << "Expression:" << std::endl;
+  std::cout << expression << std::endl;
 
   RawConstraint raw_constraint(first, second, expression);
   push_unique_raw_constraint(raw_constraint);  
@@ -178,7 +180,6 @@ void Parser::parse(std::string filepath) {
   file.close();
 }
 
-}
 }
 
 /*

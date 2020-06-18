@@ -9,7 +9,6 @@
 #include <vector>
 
 namespace ParallelSynthesizer {
-namespace ConstraintsGenerator {
 
 class RawConstraint {
 
@@ -27,9 +26,9 @@ public:
     const std::string& _expression
   ) : first_access_id(_first), second_access_id(_second), expression(_expression) {}
   
-  const unsigned int& get_first_access_id()  const { return first_access_id;  }
+  const unsigned int& get_first_access_id() const { return first_access_id;  }
   const unsigned int& get_second_access_id() const { return second_access_id; }
-  const std::string&  get_expression()       const { return expression;       }
+  const std::string&  get_expression() const { return expression;       }
 
   friend bool operator==(const RawConstraint& lhs, const RawConstraint& rhs);
 };
@@ -37,30 +36,44 @@ public:
 
 class PacketFieldAST {
 
-  private:
+private:
 
-  //Z3_ast   select;
+  Z3_ast   select;
   int      p_count;
   unsigned index;
   bool     processed;
 
-  public:
+public:
 
   void process();
 };
 
-class Constraint : public RawConstraint {
+class Constraint {
 
-  private:
+private:
 
   LibvigAccess first;
   LibvigAccess second;
-  Z3_ast expression_ast;
+  Z3_ast expression;
   std::vector<PacketFieldAST> pfs;
+
+public:
+
+  Constraint(
+    const LibvigAccess &_first,
+    const LibvigAccess &_second,
+    Z3_context& ctx,
+    const RawConstraint& raw_constraint
+  ) : first(_first), second(_second) {    
+    expression = Z3_parse_smtlib2_string(
+        ctx,
+        raw_constraint.get_expression().c_str(),
+        0, 0, 0, 0, 0, 0
+    );
+}
 
 };
 
-}
 }
 
 /*

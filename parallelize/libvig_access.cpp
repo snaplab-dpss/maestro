@@ -1,9 +1,9 @@
+#include <algorithm>
+#include <iostream>
+
 #include "libvig_access.h"
 
-#include <algorithm>
-
 namespace ParallelSynthesizer {
-namespace ConstraintsGenerator {
 
 bool operator==(const PacketDependency& lhs, const PacketDependency& rhs) {
   return lhs.bytes == rhs.bytes
@@ -20,12 +20,18 @@ void LibvigAccess::add_dependency(const PacketDependency& dependency) {
 }
 
 bool operator==(const LibvigAccess& lhs, const LibvigAccess& rhs) {
-  return lhs.get_id() == rhs.get_id()
-    && lhs.get_device() == rhs.get_device()
-    && lhs.get_object() == rhs.get_object();
+  return lhs.get_id() == rhs.get_id();
 }
 
+LibvigAccess& LibvigAccess::find(std::vector<LibvigAccess>& accesses, const unsigned int& id) {
+    for (auto& a : accesses)
+        if (a.get_id() == id) return a;
+    // throw exception
+    
+        std::cerr << "[ERROR] LibvigAccess not found in array (id " << id << ")" << std::endl;
+        exit(1);
 }
+
 }
 
 

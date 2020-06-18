@@ -6,7 +6,6 @@
 #include <vector>
 
 namespace ParallelSynthesizer {
-namespace ConstraintsGenerator {
 
 class PacketDependency {
   
@@ -111,6 +110,15 @@ public:
   const unsigned int& get_protocol() const { return protocol;  }
   const unsigned int& get_offset()   const { return offset;    }
   const unsigned int& get_bytes()    const { return bytes;     }
+  
+  bool has_valid_packet_field() const { return pf ? true : false; }
+  
+  const R3S_pf_t& get_packet_field() const { 
+    if (pf) return *pf;
+    
+    std::cerr << "[ERROR] Invalid call to packet field getter" << std::endl;
+    exit(1);
+  }
 
   friend bool operator==(const PacketDependency& lhs, const PacketDependency& rhs);
 
@@ -166,10 +174,10 @@ public:
   void add_dependency(const PacketDependency& dependency);
 
   friend bool operator==(const LibvigAccess& lhs, const LibvigAccess& rhs);
+  
+  static LibvigAccess& find(std::vector<LibvigAccess>& accesses, const unsigned int& id);
 };
 
-
-}
 }
 
 /*

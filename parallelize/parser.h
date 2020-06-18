@@ -8,12 +8,10 @@
 #include <vector>
 
 namespace ParallelSynthesizer {
-namespace ConstraintsGenerator {
 
 class Parser {
   
 private:
-  Z3_context &ctx;
   std::vector<LibvigAccess>  accesses;
   std::vector<RawConstraint> raw_constraints;
 
@@ -26,8 +24,6 @@ private:
   void parse_constraint(std::vector<std::string>& state_content);
 
 public:
-  Parser (Z3_context &_ctx) : ctx(_ctx) { }
-  
   const std::vector<LibvigAccess>& get_accesses() const { return accesses; }
 
   const std::vector<RawConstraint>&
@@ -36,5 +32,4 @@ public:
   void parse(std::string filepath);
 };
 
-}
 }

@@ -2,6 +2,7 @@
 
 #include "libvig_access.h"
 #include "constraint.h"
+#include "constraints_manager.h"
 #include "parser.h"
 
 #include <r3s.h>
@@ -123,17 +124,10 @@ int main(int argc, char *argv[]) {
 
   char *libvig_access_out = argv[1];
 
-  /*
-  parsed_data_t data;
-  parsed_data_init(&data);
-  */
-
-  R3S_cfg_t cfg;
   R3S_cnstrs_func cnstrs[1];
   R3S_status_t status;
 
-  R3S_cfg_init(&cfg);
-  ParallelSynthesizer::ConstraintsGenerator::Parser parser(cfg.ctx);
+  ParallelSynthesizer::Parser parser;
 
   parser.parse(libvig_access_out);
 
@@ -148,6 +142,9 @@ int main(int argc, char *argv[]) {
       std::cout << "layer:    " << dep.get_layer() << '\n';
       std::cout << "protocol: " << dep.get_protocol() << '\n';
       std::cout << "offset:   " << dep.get_offset() << '\n';
+      
+      if (dep.has_valid_packet_field())
+        std::cout << "pf:    " << R3S_pf_to_string(dep.get_packet_field()) << '\n';
     }
 
     std::cout << std::endl;
@@ -160,6 +157,8 @@ int main(int argc, char *argv[]) {
     std::cout << "expression: " << raw_constraint.get_expression() << '\n';
     std::cout << std::endl;
   }
+  
+  ParallelSynthesizer::ConstraintsManager manager(parser.get_accesses(), parser.get_raw_constraints());
 
   /*
   parse_libvig_access_file(libvig_access_out, &data, cfg.ctx);
