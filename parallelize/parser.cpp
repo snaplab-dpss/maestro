@@ -131,9 +131,6 @@ void Parser::parse_constraint(std::vector<std::string> &state_content) {
   expression = std::accumulate(state_content.begin(), state_content.end() - 1,
                                std::string(""));
 
-  std::cout << "Expression:" << std::endl;
-  std::cout << expression << std::endl;
-
   RawConstraint raw_constraint(first, second, expression);
   push_unique_raw_constraint(raw_constraint);
 }

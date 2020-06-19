@@ -65,13 +65,10 @@ class Constraint {
 private:
 
     Z3_context ctx;
-
     LibvigAccess first;
     LibvigAccess second;
-
     Z3_ast expression;
- 
-    std::vector< std::pair<PacketFieldExpression, R3S_pf_t> > packet_fields;
+    std::vector< std::pair<PacketFieldExpression, PacketDependencyProcessed> > packet_fields;
 
 public:
 
@@ -91,6 +88,13 @@ public:
     fill_packet_fields(expression, packet_fields_expressions);
     zip_packet_fields_expression_and_values(packet_fields_expressions);
 }
+
+  const LibvigAccess& get_first_access() const { return first; }
+  const LibvigAccess& get_second_access() const { return second; }
+  const Z3_ast& get_expression() const { return expression; }
+  const std::vector< std::pair<PacketFieldExpression, PacketDependencyProcessed> >& get_packet_fields() const { return packet_fields; }
+
+  Z3_ast& get_expression() { return expression; }
 
 private:
 

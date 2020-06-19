@@ -2,7 +2,7 @@
 
 #include "libvig_access.h"
 #include "constraint.h"
-#include "constraints_manager.h"
+#include "rss_config_builder.h"
 #include "parser.h"
 
 #include <r3s.h>
@@ -137,11 +137,6 @@ int main(int argc, char *argv[]) {
     std::cout << "object: " << access.get_object() << '\n';
 
     for (auto &dep : access.get_dependencies()) {
-      std::cout << '\n';
-      std::cout << "layer:    " << dep.get_layer() << '\n';
-      std::cout << "protocol: " << dep.get_protocol() << '\n';
-      std::cout << "offset:   " << dep.get_offset() << '\n';
-
       if (dep.has_valid_packet_field())
         std::cout << "pf:    " << R3S_pf_to_string(dep.get_packet_field())
                   << '\n';
@@ -159,77 +154,8 @@ int main(int argc, char *argv[]) {
     std::cout << std::endl;
   }
 
-  ParallelSynthesizer::ConstraintsManager manager(parser.get_accesses(),
+  ParallelSynthesizer::RSSConfigBuilder rss_cfg_builder(parser.get_accesses(),
                                                   parser.get_raw_constraints());
 
-  /*
-  parse_libvig_access_file(libvig_access_out, &data, cfg.ctx);
-
-  unsigned curr_device;
-  bool curr_device_set = false;
-
-  for (unsigned i = 0; i < data.accesses.sz; i++) {
-    printf("Device %u\n", data.accesses.accesses[i].device);
-    printf("Object %u\n", data.accesses.accesses[i].obj);
-    printf("ID     %u\n", data.accesses.accesses[i].id);
-
-    for (unsigned idep = 0; idep < data.accesses.accesses[i].deps.sz; idep++) {
-      if (data.accesses.accesses[i].deps.deps[idep].pf_is_set)
-        printf("    %s (byte %u)\n",
-               R3S_pf_to_string(data.accesses.accesses[i].deps.deps[idep].pf),
-               data.accesses.accesses[i].deps.deps[idep].bytes);
-      else
-        printf("  * %s\n",
-               data.accesses.accesses[i].deps.deps[idep].error_descr);
-    }
-  }
-
-  constraints_process_pfs(&data.constraints, data.accesses);
-
-  R3S_pf_t *pfs =
-      (R3S_pf_t *)malloc(sizeof(R3S_pf_t) * data.constraints.cnstrs[0].pfs.sz);
-
-  for (unsigned i = 0; i < data.constraints.sz; i++) {
-    printf("\n===========================\n");
-    printf("Constraint %u\n", i);
-    printf("first access id: %u\n", data.constraints.cnstrs[i].first->id);
-    printf("second access id: %u\n", data.constraints.cnstrs[i].second->id);
-
-    printf("ast:\n%s\n",
-           Z3_ast_to_string(cfg.ctx, data.constraints.cnstrs[i].cnstr));
-
-    for (unsigned j = 0; j < data.constraints.cnstrs[i].pfs.sz; j++) {
-      pfs[j] = data.constraints.cnstrs[i].pfs.pfs[j].pf.pf;
-
-      if (data.constraints.cnstrs[i].pfs.pfs[j].processed) {
-        printf("\nselect: %s\n",
-               Z3_ast_to_string(cfg.ctx,
-                                data.constraints.cnstrs[i].pfs.pfs[j].select));
-        printf("pf %s byte %u\n",
-               R3S_pf_to_string(data.constraints.cnstrs[i].pfs.pfs[j].pf.pf),
-               data.constraints.cnstrs[i].pfs.pfs[j].pf.bytes);
-      }
-    }
-  }
-
-  R3S_opt_t *opts;
-  size_t opts_sz;
-
-  assert(data.constraints.cnstrs[0].pfs.sz);
-
-  R3S_opts_from_pfs(pfs, data.constraints.cnstrs[0].pfs.sz, &opts, &opts_sz);
-
-  for (unsigned iopt = 0; iopt < opts_sz; iopt++)
-    R3S_cfg_load_opt(&cfg, opts[iopt]);
-
-  printf("%s\n", R3S_cfg_to_string(cfg));
-
-  R3S_set_user_data(&cfg, (void *)&data.constraints);
-  cnstrs[0] = &mk_cnstrs;
-
-  validate(cfg);
-
-  constraints_destroy(&(data.constraints));
-  libvig_accesses_destroy(&(data.accesses));
-  */
+  rss_cfg_builder.build();
 }

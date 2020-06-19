@@ -8,20 +8,20 @@ SRC=$(NF_DIR)/../parallelize
 BUILD=$(NF_DIR)/build/parallelization
 KLEE_DIR=$(VIGOR_DIR)/klee
 
-all: $(BUILD)/libvig_access.o  $(BUILD)/constraints_manager.o $(BUILD)/constraint.o $(BUILD)/parser.o
+all: $(BUILD)/libvig_access.o $(BUILD)/rss_config_builder.o $(BUILD)/constraint.o $(BUILD)/parser.o
 	$(CC) $(SRC)/parse-libvig-access.cpp  	\
 		-o $(BUILD)/parse-libvig-access 	\
 		$(BUILD)/libvig_access.o        	\
 		$(BUILD)/constraint.o           	\
 		$(BUILD)/parser.o        			\
-		$(BUILD)/constraints_manager.o \
+		$(BUILD)/rss_config_builder.o 		\
 		$(Z3_LIB_FLAGS) $(R3S_LIB_FLAGS)
 
 $(BUILD)/libvig_access.o: $(SRC)/libvig_access.cpp
 	$(CC) -c $(SRC)/libvig_access.cpp -o $(BUILD)/libvig_access.o $(Z3_LIB_FLAGS) $(R3S_LIB_FLAGS)
 
-$(BUILD)/constraints_manager.o: $(SRC)/constraints_manager.cpp
-	$(CC) -c $(SRC)/constraints_manager.cpp -o $(BUILD)/constraints_manager.o $(Z3_LIB_FLAGS) $(R3S_LIB_FLAGS)
+$(BUILD)/rss_config_builder.o: $(SRC)/rss_config_builder.cpp
+	$(CC) -c $(SRC)/rss_config_builder.cpp -o $(BUILD)/rss_config_builder.o $(Z3_LIB_FLAGS) $(R3S_LIB_FLAGS)
 	
 $(BUILD)/constraint.o: $(SRC)/constraint.cpp
 	$(CC) -c $(SRC)/constraint.cpp -o $(BUILD)/constraint.o $(Z3_LIB_FLAGS) $(R3S_LIB_FLAGS)

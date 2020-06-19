@@ -95,7 +95,7 @@ void Constraint::zip_packet_fields_expression_and_values(
           pfes_sorted_copy[i].get_index() < pfes_sorted_copy[i + 1].get_index();
 
     packet_fields.emplace_back(pfes_sorted_copy[i],
-                               zipped_dependencies[m].get_packet_field());
+                               zipped_dependencies[m]);
 
     if (inc) {
       m++;
