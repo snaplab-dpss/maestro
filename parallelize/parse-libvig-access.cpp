@@ -8,7 +8,6 @@
 #include <r3s.h>
 #include <z3.h>
 
-
 /*
 Z3_ast ast_replace(Z3_context ctx, Z3_ast root, Z3_ast target, Z3_ast dst) {
   if (Z3_get_ast_kind(ctx, root) != Z3_APP_AST)
@@ -131,34 +130,37 @@ int main(int argc, char *argv[]) {
 
   parser.parse(libvig_access_out);
 
-  for (auto& access : parser.get_accesses()) {
+  for (auto &access : parser.get_accesses()) {
     std::cout << "==========================\n";
     std::cout << "id:     " << access.get_id() << '\n';
     std::cout << "device: " << access.get_device() << '\n';
     std::cout << "object: " << access.get_object() << '\n';
 
-    for (auto& dep : access.get_dependencies()) {
+    for (auto &dep : access.get_dependencies()) {
       std::cout << '\n';
       std::cout << "layer:    " << dep.get_layer() << '\n';
       std::cout << "protocol: " << dep.get_protocol() << '\n';
       std::cout << "offset:   " << dep.get_offset() << '\n';
-      
+
       if (dep.has_valid_packet_field())
-        std::cout << "pf:    " << R3S_pf_to_string(dep.get_packet_field()) << '\n';
+        std::cout << "pf:    " << R3S_pf_to_string(dep.get_packet_field())
+                  << '\n';
     }
 
     std::cout << std::endl;
   }
 
-  for (auto& raw_constraint : parser.get_raw_constraints()) {
+  for (auto &raw_constraint : parser.get_raw_constraints()) {
     std::cout << "==========================\n";
     std::cout << "first:      " << raw_constraint.get_first_access_id() << '\n';
-    std::cout << "second:     " << raw_constraint.get_second_access_id() << '\n';
+    std::cout << "second:     " << raw_constraint.get_second_access_id()
+              << '\n';
     std::cout << "expression: " << raw_constraint.get_expression() << '\n';
     std::cout << std::endl;
   }
-  
-  ParallelSynthesizer::ConstraintsManager manager(parser.get_accesses(), parser.get_raw_constraints());
+
+  ParallelSynthesizer::ConstraintsManager manager(parser.get_accesses(),
+                                                  parser.get_raw_constraints());
 
   /*
   parse_libvig_access_file(libvig_access_out, &data, cfg.ctx);
@@ -219,7 +221,7 @@ int main(int argc, char *argv[]) {
 
   for (unsigned iopt = 0; iopt < opts_sz; iopt++)
     R3S_cfg_load_opt(&cfg, opts[iopt]);
-  
+
   printf("%s\n", R3S_cfg_to_string(cfg));
 
   R3S_set_user_data(&cfg, (void *)&data.constraints);

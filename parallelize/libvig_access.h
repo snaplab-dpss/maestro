@@ -1,9 +1,10 @@
 #pragma once
 
-#include <r3s.h>
-
+#include <iostream>
 #include <memory>
 #include <vector>
+
+#include <r3s.h>
 
 namespace ParallelSynthesizer {
 
@@ -11,119 +12,67 @@ class PacketDependency {
   
 private:
 
-  unsigned int layer;
-  unsigned int protocol;
-  unsigned int offset;
-  unsigned int bytes;
-
-  std::unique_ptr<R3S_pf_t> pf;
-
-private:
-
-  void set_pf(const R3S_pf_t& _pf) {
-    pf = std::unique_ptr<R3S_pf_t> (new R3S_pf_t(_pf));
-  }
+    unsigned int layer;
+    unsigned int protocol;
+    unsigned int offset;
 
 public:
 
-  PacketDependency(const PacketDependency &pd)
-    : PacketDependency(pd.get_layer(), pd.get_protocol(), pd.get_offset()) { }
-
-  PacketDependency(
-    const unsigned int& _layer,
-    const unsigned int& _protocol,
-    const unsigned int& _offset
-  ) : layer(_layer), protocol(_protocol), offset(_offset) {
+    PacketDependency(
+        const unsigned int& _layer,
+        const unsigned int& _protocol,
+        const unsigned int& _offset
+    ) : layer(_layer), protocol(_protocol), offset(_offset) {}
     
-    // IPv4
-    if (layer == 3 && protocol == 0x0800) {
+    PacketDependency(const PacketDependency &pd)
+        : PacketDependency(pd.get_layer(), pd.get_protocol(), pd.get_offset()) { }
 
-      if (offset == 9) {
-        //sprintf(dep.error_descr, "IPv4 protocolcol");
-      }
-      
-      else if (offset >= 12 && offset <= 15) {
-        set_pf(R3S_PF_IPV4_SRC);
-        bytes = 15 - offset;
-      }
-      
-      else if (offset >= 16 && offset <= 19) {
-        set_pf(R3S_PF_IPV4_DST);
-        bytes = 19 - offset;
-      }
-      
-      else if (offset >= 20) {
-        // sprintf(dep.error_descr, "IPv4 options");
-      }
-      
-      else {
-        // sprintf(dep.error_descr, "Unknown IPv4 field at byte %u\n", dep.offset);
-      }
-    }
+    const unsigned int& get_layer()    const { return layer;     }
+    const unsigned int& get_protocol() const { return protocol;  }
+    const unsigned int& get_offset()   const { return offset;    }
 
-    // IPv6
-    else if (layer == 3 && protocol == 0x86DD) {
+    virtual bool has_valid_packet_field() const { return false; }
 
-    }
-
-    // VLAN
-    else if (layer == 3 && protocol == 0x8100) {
-
-    }
-
-    // TCP
-    else if (layer == 4 && protocol == 0x06) {
-      if (offset <= 1) {
-        set_pf(R3S_PF_TCP_SRC);
-        bytes = offset;
-      }
-      
-      else if (offset >= 2 && offset <= 3) {
-        set_pf(R3S_PF_TCP_DST);
-        bytes = offset - 2;
-      }
-      
-      else {
-        // sprintf(dep.error_descr, "Unknown TCP field at byte %u\n", dep.offset);
-      }
-    }
-
-    // UDP
-    else if (layer == 4 && protocol == 0x11) {
-      if (offset <= 1) {
-        set_pf(R3S_PF_UDP_SRC);
-        bytes = offset;
-      }
-      
-      else if (offset >= 2 && offset <= 3) {
-        set_pf(R3S_PF_UDP_DST);
-        bytes = offset - 2;
-      }
-      
-      else {
-        // sprintf(dep.error_descr, "Unknown UDP field at byte %u\n", dep.offset);
-      }
-    }
-  }
-
-  const unsigned int& get_layer()    const { return layer;     }
-  const unsigned int& get_protocol() const { return protocol;  }
-  const unsigned int& get_offset()   const { return offset;    }
-  const unsigned int& get_bytes()    const { return bytes;     }
-  
-  bool has_valid_packet_field() const { return pf ? true : false; }
-  
-  const R3S_pf_t& get_packet_field() const { 
-    if (pf) return *pf;
+    friend bool operator==(const PacketDependency& lhs, const PacketDependency& rhs);
+    friend bool operator<(const PacketDependency& lhs, const PacketDependency& rhs);
     
-    std::cerr << "[ERROR] Invalid call to packet field getter" << std::endl;
-    exit(1);
-  }
+    // TODO
+    void process_pf();
 
-  friend bool operator==(const PacketDependency& lhs, const PacketDependency& rhs);
+};
 
-  // TODO
-  void process_pf();
+class PacketDependencyProcessed : public PacketDependency {
+
+private:
+    R3S_pf_t packet_field;
+    unsigned int bytes;
+    
+    PacketDependencyProcessed(
+        const PacketDependency& _pd,
+        const R3S_pf_t& _packet_field,
+        const unsigned  int& _bytes
+    ) : PacketDependency(_pd) {
+        packet_field = _packet_field;
+        bytes = _bytes;
+    }
+
+public:
+    
+    PacketDependencyProcessed(
+        const PacketDependencyProcessed& _pdp
+    ) : PacketDependency(_pdp.get_layer(), _pdp.get_protocol(), _pdp.get_offset()) {
+        packet_field = _pdp.get_packet_field();
+        bytes = _pdp.get_bytes();
+    }
+    
+    bool has_valid_packet_field() const override { return true; }
+    
+    const R3S_pf_t& get_packet_field() const { return packet_field; }
+    const unsigned int& get_bytes() const { return bytes; }
+    
+    friend bool operator==(const PacketDependencyProcessed& lhs, const PacketDependencyProcessed& rhs);
+    
+    static std::unique_ptr<PacketDependencyProcessed> try_process(const PacketDependency& pd);
 
 };
 
@@ -143,7 +92,8 @@ private:
    * tendencies, and because this will not have many elements, I
    * decided to just use a vector.
    */
-  std::vector<PacketDependency> packet_dependencies;
+  std::vector<PacketDependencyProcessed> packet_dependencies;
+  std::vector<PacketDependency> packet_dependencies_not_processed;
 
 public:
 
@@ -167,8 +117,12 @@ public:
   const unsigned int& get_device() const { return device; }
   const unsigned int& get_object() const { return object; }
 
-  const std::vector<PacketDependency>& get_dependencies() const {
+  const std::vector<PacketDependencyProcessed>& get_dependencies() const {
     return packet_dependencies;
+  }
+  
+  const std::vector<PacketDependency>& get_dependencies_not_processed() const {
+    return packet_dependencies_not_processed;
   }
 
   void add_dependency(const PacketDependency& dependency);
@@ -176,6 +130,7 @@ public:
   friend bool operator==(const LibvigAccess& lhs, const LibvigAccess& rhs);
   
   static LibvigAccess& find(std::vector<LibvigAccess>& accesses, const unsigned int& id);
+  static std::vector<PacketDependencyProcessed> zip_accesses_dependencies(const LibvigAccess& access1, const LibvigAccess& access2);
 };
 
 }

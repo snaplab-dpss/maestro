@@ -1,12 +1,13 @@
 #pragma once
 
+#include <iostream>
+#include <vector>
+#include <string>
+
 #include "libvig_access.h"
 
 #include <z3.h>
 #include <r3s.h>
-
-#include <string>
-#include <vector>
 
 namespace ParallelSynthesizer {
 
@@ -34,43 +35,67 @@ public:
 };
 
 
-class PacketFieldAST {
+class PacketFieldExpression {
 
 private:
 
-  Z3_ast   select;
-  int      p_count;
-  unsigned index;
-  bool     processed;
+    Z3_context ctx;
+    Z3_ast expression;
+    unsigned int index;
 
 public:
 
-  void process();
+    PacketFieldExpression(const Z3_context& _ctx, const Z3_ast& _expression, const unsigned int& _index)
+        : ctx(_ctx), expression(_expression), index(_index) {}
+    
+    PacketFieldExpression(const PacketFieldExpression& pfe)
+        : ctx(pfe.get_context()), expression(pfe.get_expression()), index(pfe.get_index()) {}
+    
+    const Z3_context& get_context() const { return ctx; }
+    const Z3_ast& get_expression() const { return expression; }
+    const unsigned int& get_index() const { return index; }
+
+    friend bool operator<(const PacketFieldExpression& lhs, const PacketFieldExpression& rhs);
+    
+    static void add_unique_packet_field_expression(std::vector<PacketFieldExpression>& pfes, const PacketFieldExpression& pfe);
 };
 
 class Constraint {
 
 private:
 
-  LibvigAccess first;
-  LibvigAccess second;
-  Z3_ast expression;
-  std::vector<PacketFieldAST> pfs;
+    Z3_context ctx;
+
+    LibvigAccess first;
+    LibvigAccess second;
+
+    Z3_ast expression;
+ 
+    std::vector< std::pair<PacketFieldExpression, R3S_pf_t> > packet_fields;
 
 public:
 
   Constraint(
-    const LibvigAccess &_first,
-    const LibvigAccess &_second,
-    Z3_context& ctx,
+    const LibvigAccess& _first,
+    const LibvigAccess& _second,
+    const Z3_context& _ctx,
     const RawConstraint& raw_constraint
-  ) : first(_first), second(_second) {    
+  ) : ctx(_ctx), first(_first), second(_second) {    
     expression = Z3_parse_smtlib2_string(
         ctx,
         raw_constraint.get_expression().c_str(),
         0, 0, 0, 0, 0, 0
     );
+    
+    std::vector<PacketFieldExpression> packet_fields_expressions;
+    fill_packet_fields(expression, packet_fields_expressions);
+    zip_packet_fields_expression_and_values(packet_fields_expressions);
 }
+
+private:
+
+    void fill_packet_fields(Z3_ast& expression, std::vector<PacketFieldExpression>& pfes);
+    void zip_packet_fields_expression_and_values(const std::vector<PacketFieldExpression>& pfes);
 
 };
 

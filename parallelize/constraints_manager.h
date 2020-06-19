@@ -1,11 +1,13 @@
 #pragma once
 
+#include <vector>
+
 #include "libvig_access.h"
 #include "constraint.h"
 
 #include <z3.h>
 #include <r3s.h>
-#include <vector>
+
 
 namespace ParallelSynthesizer {
 
@@ -27,8 +29,8 @@ public:
             LibvigAccess& second = LibvigAccess::find(accesses, raw_constraint.get_second_access_id());
             
             if (first.get_object() != second.get_object()) {
-                std::cerr << "[ERROR] Constraint between objects doesn't make any sense" << std::endl;
-                exit(1);
+                std::cerr << "[WARNING] Constraint between different objects doesn't make any sense" << std::endl;
+                continue;
             }
             
             constraints.emplace_back(first, second, cfg.ctx, raw_constraint);

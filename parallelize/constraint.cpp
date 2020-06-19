@@ -1,13 +1,107 @@
 #include "constraint.h"
 
+#include <algorithm>
+
 namespace ParallelSynthesizer {
 
-bool operator==(const RawConstraint& lhs, const RawConstraint& rhs) {
-  return lhs.first_access_id == rhs.first_access_id
-    && lhs.second_access_id == rhs.second_access_id
-    && lhs.expression == rhs.expression;
+bool operator==(const RawConstraint &lhs, const RawConstraint &rhs) {
+  return lhs.first_access_id == rhs.first_access_id &&
+         lhs.second_access_id == rhs.second_access_id &&
+         lhs.expression == rhs.expression;
 }
 
+void PacketFieldExpression::add_unique_packet_field_expression(
+    std::vector<PacketFieldExpression> &pfes,
+    const PacketFieldExpression &pfe) {
+  for (auto &stored_pfe : pfes) {
+    if (Z3_is_eq_ast(pfe.get_context(), pfe.get_expression(),
+                     stored_pfe.get_expression()))
+      return;
+  }
+
+  pfes.push_back(pfe);
+}
+
+bool operator<(const PacketFieldExpression& lhs, const PacketFieldExpression& rhs) {
+  return lhs.get_index() < rhs.get_index();
+}
+
+bool is_select_from_chunk(Z3_context &ctx, Z3_app &app) {
+  Z3_func_decl app_decl = Z3_get_app_decl(ctx, app);
+  Z3_symbol symbol_app_name = Z3_get_decl_name(ctx, app_decl);
+  std::string app_name = Z3_get_symbol_string(ctx, symbol_app_name);
+
+  if (app_name != "select")
+    return false;
+
+  Z3_ast array_ast = Z3_get_app_arg(ctx, app, 0);
+
+  // TODO: assert(Z3_get_ast_kind(ctx, array_ast) == Z3_APP_AST);
+
+  Z3_app array_app = Z3_to_app(ctx, array_ast);
+  Z3_func_decl array_decl = Z3_get_app_decl(ctx, array_app);
+  Z3_symbol symbol_array_name = Z3_get_decl_name(ctx, array_decl);
+  std::string array_name = Z3_get_symbol_string(ctx, symbol_array_name);
+
+  if (array_name.find("packet_chunks") == std::string::npos)
+    return false;
+
+  return true;
+}
+
+void Constraint::fill_packet_fields(Z3_ast &expr,
+                                    std::vector<PacketFieldExpression> &pfes) {
+  if (Z3_get_ast_kind(ctx, expr) != Z3_APP_AST)
+    return;
+
+  Z3_app app = Z3_to_app(ctx, expr);
+
+  if (is_select_from_chunk(ctx, app)) {
+    Z3_ast index_ast = Z3_get_app_arg(ctx, app, 1);
+    // TODO: assert(Z3_get_ast_kind(ctx, index_ast) == Z3_NUMERAL_AST);
+
+    unsigned int index;
+    Z3_get_numeral_uint(ctx, index_ast, &index);
+
+    PacketFieldExpression::add_unique_packet_field_expression(
+        pfes, PacketFieldExpression(ctx, expr, index));
+
+    return;
+  }
+
+  unsigned int num_fields = Z3_get_app_num_args(ctx, app);
+  for (unsigned int i = 0; i < num_fields; i++) {
+    Z3_ast app_arg = Z3_get_app_arg(ctx, app, i);
+    fill_packet_fields(app_arg, pfes);
+  }
+}
+
+void Constraint::zip_packet_fields_expression_and_values(
+    const std::vector<PacketFieldExpression> &pfes) {
+
+  auto zipped_dependencies =
+      LibvigAccess::zip_accesses_dependencies(first, second);
+
+  auto pfes_sorted_copy = pfes;
+  std::sort(pfes_sorted_copy.begin(), pfes_sorted_copy.end());
+
+  unsigned m = 0;
+  bool inc = false;
+
+  auto zipped_dependencies_size = zipped_dependencies.size();
+
+  for (auto i = 0; i < zipped_dependencies_size; i++) {
+    inc = i < zipped_dependencies_size - 1 &&
+          pfes_sorted_copy[i].get_index() < pfes_sorted_copy[i + 1].get_index();
+
+    packet_fields.emplace_back(pfes_sorted_copy[i],
+                               zipped_dependencies[m].get_packet_field());
+
+    if (inc) {
+      m++;
+    }
+  }
+}
 }
 
 /*
@@ -78,7 +172,8 @@ bool is_select_from_chunk(Z3_context ctx, Z3_app app) {
   Z3_func_decl array_decl = Z3_get_app_decl(ctx, array_app);
   Z3_symbol array_name = Z3_get_decl_name(ctx, array_decl);
 
-  if (strncmp(Z3_get_symbol_string(ctx, array_name), "packet_chunks", strlen("packet_chunks")) != 0)
+  if (strncmp(Z3_get_symbol_string(ctx, array_name), "packet_chunks",
+strlen("packet_chunks")) != 0)
     return false;
 
   return true;
@@ -109,7 +204,7 @@ void traverse_ast_and_retrieve_selects(Z3_context ctx, Z3_ast ast,
 
     return;
   }
-  
+
   unsigned num_fields = Z3_get_app_num_args(ctx, app);
   for (unsigned i = 0; i < num_fields; i++) {
     traverse_ast_and_retrieve_selects(ctx, Z3_get_app_arg(ctx, app, i),
@@ -187,13 +282,14 @@ void pfasts_sort(pfasts_t *pfasts) {
     change = false;
 
     for (unsigned i = 0; i < pfasts->sz - 1; i++) {
-      assert(!pfasts->pfs[i].processed && "ERROR: Trying to sort a processed pfasts");
+      assert(!pfasts->pfs[i].processed && "ERROR: Trying to sort a processed
+pfasts");
 
       if (pfasts->pfs[i].index >= pfasts->pfs[i+1].index)
         continue;
-      
+
       pfast_t tmp;
-      
+
       tmp              = pfasts->pfs[i];
       pfasts->pfs[i]   = pfasts->pfs[i+1];
       pfasts->pfs[i+1] = tmp;
@@ -203,7 +299,8 @@ void pfasts_sort(pfasts_t *pfasts) {
   }
 }
 
-void constraints_process_pfs(constraints_t *cnstrs, libvig_accesses_t accesses) {
+void constraints_process_pfs(constraints_t *cnstrs, libvig_accesses_t accesses)
+{
   for (int i = 0; i < cnstrs->sz; i++) {
     pfasts_sort(&(cnstrs->cnstrs[i].pfs));
 
@@ -212,15 +309,17 @@ void constraints_process_pfs(constraints_t *cnstrs, libvig_accesses_t accesses) 
       cnstrs->cnstrs[i].second->deps
     );
 
-    // FIXME: this is awfull. Try to find a better way to associate select ast's to packet fields
+    // FIXME: this is awfull. Try to find a better way to associate select ast's
+to packet fields
 
     unsigned m = 0;
     bool inc = false;
     int p_count = 0;
     for (unsigned j = 0; j < cnstrs->cnstrs[i].pfs.sz; j++) {
       inc = j < cnstrs->cnstrs[i].pfs.sz - 1 &&
-        (cnstrs->cnstrs[i].pfs.pfs[j].index != cnstrs->cnstrs[i].pfs.pfs[j+1].index);
-      
+        (cnstrs->cnstrs[i].pfs.pfs[j].index !=
+cnstrs->cnstrs[i].pfs.pfs[j+1].index);
+
       assert(m < merge.sz);
       cnstrs->cnstrs[i].pfs.pfs[j].pf        = merge.deps[m];
       cnstrs->cnstrs[i].pfs.pfs[j].processed = true;
