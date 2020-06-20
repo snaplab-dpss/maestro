@@ -1,3 +1,4 @@
+#include "logger.h"
 #include "rss_config_builder.h"
 
 #include <iostream>
@@ -20,13 +21,13 @@ void RSSConfigBuilder::load_rss_config_options() {
     for (const auto& option : rss_config.options)
         R3S_cfg_load_opt(&cfg, option);
     
-    std::cout << "\nR3S configuration:" << std::endl;
-    std::cout << R3S_cfg_to_string(cfg) << std::endl;
+    Logger::debug() << "\nR3S configuration:" << "\n";
+    Logger::debug() << R3S_cfg_to_string(cfg) << "\n";
 }
 
 void RSSConfigBuilder::find_compatible_rss_config_options() {
     if (unique_packet_fields_dependencies.size() == 0) {
-        std::cout << "[WARNING] No dependencies on packet fields. Nothing we can do :(" << std::endl;
+        Logger::warn() << "[WARNING] No dependencies on packet fields. Nothing we can do :(" << "\n";
         return;
     }
 
@@ -69,9 +70,15 @@ void RSSConfigBuilder::build() {
       exit(1);
     }
 
-    std::cout << "[Generated packets]" << "\n";
-    std::cout << R3S_packet_to_string(p1) << "\n";
-    std::cout << R3S_packet_to_string(p2) << std::endl;
+    Logger::log() << "\n";
+    Logger::log() << "[Generated packets]";
+    Logger::log() << "\n";
+
+    Logger::log() << "\n";
+    Logger::log() << R3S_packet_to_string(p1);
+    Logger::log() << "\n";
+    Logger::log() << R3S_packet_to_string(p2);
+    Logger::log() << "\n";
 
 }
 
@@ -103,31 +110,30 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(R3S::R3S_cfg_t cfg, R3S::R
     for (auto& constraint : constraints) {
         R3S::Z3_ast& constraint_expression = constraint.get_expression();
 
-        std::cout << "\n";
-        std::cout << "=================================================" << "\n";
+        Logger::debug() << "\n";
+        Logger::debug() << "=================================================" << "\n";
 
-        std::cout << "\n";
-        std::cout << "[Packet options]" << "\n";
-        std::cout << "p1 option: " << R3S_opt_to_string(p1.loaded_opt.opt) << "\n";
-        std::cout << "p2 option: " << R3S_opt_to_string(p2.loaded_opt.opt) << "\n";
+        Logger::debug() << "\n";
+        Logger::debug() << "[Packet options]" << "\n";
+        Logger::debug() << "p1 option: " << R3S_opt_to_string(p1.loaded_opt.opt) << "\n";
+        Logger::debug() << "p2 option: " << R3S_opt_to_string(p2.loaded_opt.opt) << "\n";
 
-        std::cout << "\n";
-        std::cout << "[Access]" << "\n";
-        std::cout << "first:  "
-                  << constraint.get_first_access().get_id() << " (id) "
-                  << constraint.get_first_access().get_device() << " (device) "
-                  << constraint.get_first_access().get_object() << " (object) "
-                  << "\n";
-        std::cout << "second: "
-                  << constraint.get_second_access().get_id() << " (id) "
-                  << constraint.get_second_access().get_device() << " (device) "
-                  << constraint.get_second_access().get_object() << " (object) "
-                  << "\n";
+        Logger::debug() << "\n";
+        Logger::debug() << "[Access]" << "\n";
+        Logger::debug() << "first:  ";
+        Logger::debug() << constraint.get_first_access().get_id() << " (id) ";
+        Logger::debug() << constraint.get_first_access().get_device() << " (device) ";
+        Logger::debug() << constraint.get_first_access().get_object() << " (object) " << "\n";
+        Logger::debug() << "second: ";
+        Logger::debug() << constraint.get_second_access().get_id() << " (id) ";
+        Logger::debug() << constraint.get_second_access().get_device() << " (device) ";
+        Logger::debug() << constraint.get_second_access().get_object() << " (object) " << "\n";
 
 
-        std::cout << "\n";
-        std::cout << "[Constraint before]" << "\n";
-        std::cout << Z3_ast_to_string(cfg.ctx, constraint_expression) << "\n";
+        Logger::debug() << "";
+
+        Logger::debug() << "[Constraint before]";
+        Logger::debug() << Z3_ast_to_string(cfg.ctx, constraint_expression);
 
         for (const auto& packet_field_expr_value : constraint.get_packet_fields()) {
             PacketFieldExpression packet_dependency_expr = packet_field_expr_value.first;
@@ -150,41 +156,20 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(R3S::R3S_cfg_t cfg, R3S::R
             unsigned int low = high - 7;
 
             R3S::Z3_ast packet_field_byte_ast = Z3_mk_extract(cfg.ctx, high, low, packet_field_ast);
-            
-            std::cout << "\n";
-            std::cout << "\n"
-                      << "*** REPLACE ***"
-                      << "\n"
-                      << "\n"
-                      << "src: "
-                      << Z3_ast_to_string(cfg.ctx, packet_dependency_expr.get_expression())
-                      << "\n"
-                      << "dst: "
-                      << Z3_ast_to_string(cfg.ctx, packet_field_byte_ast)
-                      << "\n"
-                      << "packet_chunk_id: "
-                      << packet_dependency_expr.get_packet_chunks_id()
-                      << "\n"
-                      << "bytes: "
-                      << packet_dependency_value.get_bytes()
-                      << "\n";
 
             constraint_expression = ast_replace(cfg.ctx, constraint_expression, packet_dependency_expr.get_expression(), packet_field_byte_ast);
-
-            std::cout << "result: "
-                      << Z3_ast_to_string(cfg.ctx, constraint_expression)
-                      << "\n";
         }
 
         generated_constraints.push_back(constraint_expression);
 
-        std::cout << "\n";
-        std::cout << "[Constraint after]" << "\n";
-        std::cout << Z3_ast_to_string(cfg.ctx, constraint_expression) << "\n";
+        Logger::debug() << "\n";
+        Logger::debug() << "[Constraint after]" << "\n";
+        Logger::debug() << Z3_ast_to_string(cfg.ctx, constraint_expression) << "\n";
 
-        std::cout << "\n";
-        std::cout << "[Simplified]" << "\n";
-        std::cout << Z3_ast_to_string(cfg.ctx, Z3_simplify(cfg.ctx, constraint_expression)) << std::endl;
+        Logger::debug() << "\n";
+        Logger::debug() << "[Simplified]" << "\n";
+        Logger::debug() << Z3_ast_to_string(cfg.ctx, Z3_simplify(cfg.ctx, constraint_expression)) << "\n";
+        Logger::debug() << "\n";
     }
 
     R3S::Z3_ast final_constraint = Z3_mk_and(cfg.ctx, generated_constraints.size(), &generated_constraints[0]);

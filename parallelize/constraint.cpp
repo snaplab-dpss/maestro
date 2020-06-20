@@ -1,3 +1,4 @@
+#include "logger.h"
 #include "constraint.h"
 
 #include <algorithm>
@@ -106,8 +107,10 @@ void Constraint::zip_packet_fields_expression_and_values(
   auto zipped_dependencies_size = zipped_dependencies.size();
 
   if (zipped_dependencies_size != pfes_sorted_copy.size()) {
-    std::cout << "zipped_dependencies.size() => " << zipped_dependencies_size << std::endl;
-    std::cout << "pfes_sorted_copy.size() => " << pfes_sorted_copy.size() << std::endl;
+    Logger::error() << "zipped dependencies size different than the number of available packet fields "
+                    << "(" << zipped_dependencies_size
+                    << " != " << pfes_sorted_copy.size()
+                    << ")" << "\n";
     exit(1);
   }
 

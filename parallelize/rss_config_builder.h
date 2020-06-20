@@ -18,9 +18,11 @@ private:
     R3S::R3S_cfg_t cfg;
     std::vector<Constraint> constraints;
 
-    RSSConfig rss_config;
+    std::vector<unsigned int> unique_devices;
     std::vector<R3S::R3S_pf_t> unique_packet_fields_dependencies;
     std::vector<R3S::R3S_cnstrs_func> solver_constraints_generators;
+
+    RSSConfig rss_config;
 
 private:
     void find_compatible_rss_config_options();
@@ -39,6 +41,12 @@ public:
         for (const auto& raw_constraint : raw_constraints) {
             LibvigAccess& first = LibvigAccess::find(accesses, raw_constraint.get_first_access_id());
             LibvigAccess& second = LibvigAccess::find(accesses, raw_constraint.get_second_access_id());
+
+            if (std::find(unique_devices.begin(), unique_devices.end(), first.get_device()) == unique_devices.end())
+                unique_devices.push_back(first.get_device());
+            
+            if (std::find(unique_devices.begin(), unique_devices.end(), second.get_device()) == unique_devices.end())
+                unique_devices.push_back(second.get_device());
             
             if (first.get_object() != second.get_object()) {
                 std::cerr << "[WARNING] Constraint between different objects doesn't make any sense" << std::endl;
@@ -51,10 +59,22 @@ public:
             constraints.emplace_back(first, second, cfg.ctx, raw_constraint);
         }
 
-        std::cout << "\nUnique packet field dependencies:" << std::endl;
+        Logger::log() << "\n";
+        Logger::log() << "Packet field dependencies:";
+        Logger::log() << "\n";
         for (auto& pf : unique_packet_fields_dependencies) {
-            std::cout << "  " << R3S_pf_to_string(pf) << std::endl;
+            Logger::log() << "  " << R3S_pf_to_string(pf);
+            Logger::log() << "\n";
         }
+
+        Logger::log() << "\n";
+        Logger::log() << "Devices:";
+        Logger::log() << "\n";
+        for (auto& device : unique_devices) {
+            Logger::log() << "  " << device;
+            Logger::log() << "\n";
+        }
+        Logger::log() << "\n";
     }
 
     const R3S::R3S_cfg_t& get_cfg() const { return cfg; }
