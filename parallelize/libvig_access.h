@@ -5,7 +5,9 @@
 #include <vector>
 #include <algorithm>
 
+namespace R3S{
 #include <r3s.h>
+}
 
 namespace ParallelSynthesizer {
 
@@ -45,12 +47,12 @@ public:
 class PacketDependencyProcessed : public PacketDependency {
 
 private:
-    R3S_pf_t packet_field;
+    R3S::R3S_pf_t packet_field;
     unsigned int bytes;
     
     PacketDependencyProcessed(
         const PacketDependency& _pd,
-        const R3S_pf_t& _packet_field,
+        const R3S::R3S_pf_t& _packet_field,
         const unsigned  int& _bytes
     ) : PacketDependency(_pd) {
         packet_field = _packet_field;
@@ -68,7 +70,7 @@ public:
     
     bool has_valid_packet_field() const override { return true; }
     
-    const R3S_pf_t& get_packet_field() const { return packet_field; }
+    const R3S::R3S_pf_t& get_packet_field() const { return packet_field; }
     const unsigned int& get_bytes() const { return bytes; }
     
     friend bool operator==(const PacketDependencyProcessed& lhs, const PacketDependencyProcessed& rhs);
@@ -126,8 +128,8 @@ public:
     return packet_dependencies_not_processed;
   }
 
-  std::vector<R3S_pf_t> get_unique_packet_fields() const {
-    std::vector<R3S_pf_t> packet_fields;
+  std::vector<R3S::R3S_pf_t> get_unique_packet_fields() const {
+    std::vector<R3S::R3S_pf_t> packet_fields;
 
     for (const auto& dependency : packet_dependencies) {
       auto packet_field = dependency.get_packet_field();

@@ -1,13 +1,14 @@
 #pragma once
 
+#include "libvig_access.h"
+
 #include <iostream>
 #include <vector>
 #include <string>
 
-#include "libvig_access.h"
-
-#include <z3.h>
+namespace R3S {
 #include <r3s.h>
+}
 
 namespace ParallelSynthesizer {
 
@@ -39,35 +40,39 @@ class PacketFieldExpression {
 
 private:
 
-    Z3_context ctx;
-    Z3_ast expression;
+    R3S::Z3_context ctx;
+    R3S::Z3_ast expression;
     unsigned int index;
+    unsigned int packet_chunks_id;
 
 public:
 
-    PacketFieldExpression(const Z3_context& _ctx, const Z3_ast& _expression, const unsigned int& _index)
-        : ctx(_ctx), expression(_expression), index(_index) {}
+    PacketFieldExpression(const R3S::Z3_context& _ctx, const R3S::Z3_ast& _expression, const unsigned int& _index, const unsigned int& _packet_chunks_id)
+        : ctx(_ctx), expression(_expression), index(_index), packet_chunks_id(_packet_chunks_id) {}
     
     PacketFieldExpression(const PacketFieldExpression& pfe)
-        : ctx(pfe.get_context()), expression(pfe.get_expression()), index(pfe.get_index()) {}
+        : ctx(pfe.get_context()), expression(pfe.get_expression()), index(pfe.get_index()), packet_chunks_id(pfe.get_packet_chunks_id()) {}
     
-    const Z3_context& get_context() const { return ctx; }
-    const Z3_ast& get_expression() const { return expression; }
+    const R3S::Z3_context& get_context() const { return ctx; }
+    const R3S::Z3_ast& get_expression() const { return expression; }
     const unsigned int& get_index() const { return index; }
+    const unsigned int& get_packet_chunks_id() const { return packet_chunks_id; }
 
     friend bool operator<(const PacketFieldExpression& lhs, const PacketFieldExpression& rhs);
     
     static void add_unique_packet_field_expression(std::vector<PacketFieldExpression>& pfes, const PacketFieldExpression& pfe);
+    static const std::string PACKET_CHUNKS_NAME_PATTERN;
 };
 
 class Constraint {
 
 private:
 
-    Z3_context ctx;
+    R3S::Z3_context ctx;
     LibvigAccess first;
     LibvigAccess second;
-    Z3_ast expression;
+    R3S::Z3_ast expression;
+    std::pair<int, int> packet_chunks_ids_pair;
     std::vector< std::pair<PacketFieldExpression, PacketDependencyProcessed> > packet_fields;
 
 public:
@@ -75,14 +80,16 @@ public:
   Constraint(
     const LibvigAccess& _first,
     const LibvigAccess& _second,
-    const Z3_context& _ctx,
+    const R3S::Z3_context& _ctx,
     const RawConstraint& raw_constraint
   ) : ctx(_ctx), first(_first), second(_second) {    
-    expression = Z3_parse_smtlib2_string(
+    expression = R3S::Z3_parse_smtlib2_string(
         ctx,
         raw_constraint.get_expression().c_str(),
         0, 0, 0, 0, 0, 0
     );
+
+    packet_chunks_ids_pair = std::pair<int, int>(-1, -1);
     
     std::vector<PacketFieldExpression> packet_fields_expressions;
     fill_packet_fields(expression, packet_fields_expressions);
@@ -91,68 +98,17 @@ public:
 
   const LibvigAccess& get_first_access() const { return first; }
   const LibvigAccess& get_second_access() const { return second; }
-  const Z3_ast& get_expression() const { return expression; }
+  const R3S::Z3_ast& get_expression() const { return expression; }
+  const std::pair<int, int>& get_packet_chunks_ids_pair() const { return packet_chunks_ids_pair; }
   const std::vector< std::pair<PacketFieldExpression, PacketDependencyProcessed> >& get_packet_fields() const { return packet_fields; }
 
-  Z3_ast& get_expression() { return expression; }
+  R3S::Z3_ast& get_expression() { return expression; }
 
 private:
 
-    void fill_packet_fields(Z3_ast& expression, std::vector<PacketFieldExpression>& pfes);
+    void fill_packet_fields(R3S::Z3_ast& expression, std::vector<PacketFieldExpression>& pfes);
     void zip_packet_fields_expression_and_values(const std::vector<PacketFieldExpression>& pfes);
 
 };
 
 }
-
-/*
-typedef struct {
-  unsigned first_access_id;
-  unsigned second_access_id;
-  char *query;
-  unsigned query_sz;
-} smt_t;
-
-typedef struct {
-  Z3_ast     select;
-  int        p_count;
-
-  union {
-    unsigned index;
-    dep_t    pf;
-  };
-
-  // if true, union in a processed pf (R3S_pf_t); else, index
-  bool processed;
-} pfast_t;
-
-bool pfast_eq(Z3_context ctx, pfast_t pfast1, pfast_t pfast2);
-
-typedef struct {
-  pfast_t *pfs;
-  size_t   sz;
-} pfasts_t;
-
-void pfasts_init(pfasts_t *pfasts);
-void pfasts_destroy(pfasts_t *pfasts);
-void pfasts_append_unique(Z3_context ctx, pfasts_t *pfasts, pfast_t pfast);
-void pfasts_sort(pfasts_t *pfasts);
-
-typedef struct {
-  libvig_access_t *first;
-  libvig_access_t *second;
-  Z3_ast          cnstr;
-  pfasts_t        pfs;
-} constraint_t;
-
-typedef struct {
-  constraint_t *cnstrs;
-  size_t       sz;
-} constraints_t;
-
-void constraints_init(constraints_t *cnstrs);
-void constraints_append(constraints_t *cnstrs, libvig_accesses_t accesses,
-                        smt_t smt, Z3_context ctx);
-void constraints_destroy(constraints_t *cnstrs);
-void constraints_process_pfs(constraints_t *cnstrs, libvig_accesses_t accesses);
-*/

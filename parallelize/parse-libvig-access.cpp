@@ -1,12 +1,13 @@
-#include <iostream>
-
 #include "libvig_access.h"
 #include "constraint.h"
 #include "rss_config_builder.h"
 #include "parser.h"
 
+#include <iostream>
+
+namespace R3S {
 #include <r3s.h>
-#include <z3.h>
+}
 
 /*
 Z3_ast ast_replace(Z3_context ctx, Z3_ast root, Z3_ast target, Z3_ast dst) {
@@ -123,8 +124,8 @@ int main(int argc, char *argv[]) {
 
   char *libvig_access_out = argv[1];
 
-  R3S_cnstrs_func cnstrs[1];
-  R3S_status_t status;
+  R3S::R3S_cnstrs_func cnstrs[1];
+  R3S::R3S_status_t status;
 
   ParallelSynthesizer::Parser parser;
 

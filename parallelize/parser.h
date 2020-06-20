@@ -1,13 +1,10 @@
 #pragma once
 
-#include <vector>
-
 #include "libvig_access.h"
 #include "constraint.h"
 #include "tokens.h"
 
-#include <z3.h>
-
+#include <vector>
 
 namespace ParallelSynthesizer {
 
