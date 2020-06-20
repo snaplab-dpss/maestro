@@ -69,6 +69,10 @@ void RSSConfigBuilder::build() {
       exit(1);
     }
 
+    std::cout << "[Generated packets]" << "\n";
+    std::cout << R3S_packet_to_string(p1) << "\n";
+    std::cout << R3S_packet_to_string(p2) << std::endl;
+
 }
 
 Z3_ast RSSConfigBuilder::ast_replace(Z3_context ctx, Z3_ast root, Z3_ast target, Z3_ast dst) {
@@ -94,93 +98,77 @@ Z3_ast RSSConfigBuilder::ast_replace(Z3_context ctx, Z3_ast root, Z3_ast target,
 
 Z3_ast RSSConfigBuilder::make_solver_constraints(R3S_cfg_t cfg, R3S_packet_ast_t p1, R3S_packet_ast_t p2) {
     std::vector<Constraint> constraints = *((std::vector<Constraint>*) R3S_get_user_data(cfg));
-    R3S_status_t status;
+    std::vector<Z3_ast> generated_constraints;
 
     for (auto& constraint : constraints) {
-        std::cout << "first id:  " << constraint.get_first_access().get_id() << std::endl;
-        std::cout << "second id: " << constraint.get_second_access().get_id() << '\n' << std::endl;
-    }
+        Z3_ast& constraint_expression = constraint.get_expression();
 
-    std::vector<Z3_ast> and_args;
+        std::cout << "\n";
+        std::cout << "=================================================" << "\n";
 
-    for (auto& constraint : constraints) {
+        std::cout << "\n";
+        std::cout << "[Packet options]" << "\n";
+        std::cout << "p1 option: " << R3S_opt_to_string(p1.loaded_opt.opt) << "\n";
+        std::cout << "p2 option: " << R3S_opt_to_string(p2.loaded_opt.opt) << "\n";
+
+        std::cout << "\n";
+        std::cout << "[Access]" << "\n";
+        std::cout << "first:  "
+                  << constraint.get_first_access().get_id() << " (id) "
+                  << constraint.get_first_access().get_device() << " (device) "
+                  << constraint.get_first_access().get_object() << " (object) "
+                  << "\n";
+        std::cout << "second: "
+                  << constraint.get_second_access().get_id() << " (id) "
+                  << constraint.get_second_access().get_device() << " (device) "
+                  << constraint.get_second_access().get_object() << " (object) "
+                  << "\n";
+
+
+        int last_index = -1;
+
+        std::cout << "\n";
+        std::cout << "[Constraint before]" << "\n";
+        std::cout << Z3_ast_to_string(cfg.ctx, constraint_expression) << "\n";
+
         for (const auto& packet_field_expr_value : constraint.get_packet_fields()) {
-            PacketDependencyProcessed packet_dependency = packet_field_expr_value.second;
+            PacketFieldExpression packet_dependency_expr = packet_field_expr_value.first;
+            PacketDependencyProcessed packet_dependency_value = packet_field_expr_value.second;
 
-            Z3_ast p1_packet_field_ast;
-            Z3_ast p2_packet_field_ast;
+            R3S_packet_ast_t target_packet = (packet_dependency_expr.get_index() > last_index) ? p1 : p2;
+            
+            Z3_ast packet_field_ast;
+            R3S_status_t status;
 
-            status = R3S_packet_extract_pf(cfg, p1, packet_dependency.get_packet_field(), &p1_packet_field_ast);
+            status = R3S_packet_extract_pf(cfg, target_packet, packet_dependency_value.get_packet_field(), &packet_field_ast);
             if (status != R3S_STATUS_SUCCESS) continue;
 
-            status = R3S_packet_extract_pf(cfg, p2, packet_dependency.get_packet_field(), &p2_packet_field_ast);
-            if (status != R3S_STATUS_SUCCESS) continue;
+            unsigned int packet_field_ast_size = Z3_get_bv_sort_size(cfg.ctx, Z3_get_sort(cfg.ctx, packet_field_ast));
 
-            unsigned int pf1_sz = Z3_get_bv_sort_size(cfg.ctx, Z3_get_sort(cfg.ctx, p1_packet_field_ast));
-            unsigned int pf2_sz = Z3_get_bv_sort_size(cfg.ctx, Z3_get_sort(cfg.ctx, p2_packet_field_ast));
-
-            unsigned int high = pf1_sz - packet_dependency.get_bytes() * 8 - 1;
+            unsigned int high = packet_field_ast_size - packet_dependency_value.get_bytes() * 8 - 1;
             unsigned int low = high - 7;
-        }
-    }
 
-    return NULL;
-    
-    /*
-    and_args =
-        (Z3_ast *)malloc(sizeof(Z3_ast) * (cnstrs->cnstrs[0].pfs.sz * 2 + 1));
+            Z3_ast packet_field_byte_ast = Z3_mk_extract(cfg.ctx, high, low, packet_field_ast);
+            
+            constraint_expression = ast_replace(cfg.ctx, constraint_expression, packet_dependency_expr.get_expression(), packet_field_byte_ast);
 
-    cnstr = cnstrs->cnstrs[0].cnstr;
-    and_i = 0;
-
-    printf("constraint before:\n%s\n", Z3_ast_to_string(cfg.ctx, cnstr));
-
-    for (unsigned c = 0; c < cnstrs->cnstrs[0].pfs.sz; c++) {
-        Z3_ast pf1_ast, pf2_ast;
-        unsigned pf1_sz, pf2_sz;
-        unsigned high, low;
-
-        R3S_packet_extract_pf(cfg, p1, cnstrs->cnstrs[0].pfs.pfs[c].pf.pf,
-                            &pf1_ast);
-        R3S_packet_extract_pf(cfg, p2, cnstrs->cnstrs[0].pfs.pfs[c].pf.pf,
-                            &pf2_ast);
-
-        pf1_sz = Z3_get_bv_sort_size(cfg.ctx, Z3_get_sort(cfg.ctx, pf1_ast));
-        pf2_sz = Z3_get_bv_sort_size(cfg.ctx, Z3_get_sort(cfg.ctx, pf2_ast));
-
-        high = pf1_sz - cnstrs->cnstrs[0].pfs.pfs[c].pf.bytes * 8 - 1;
-        low = high - 7;
-
-        //low = cnstrs->cnstrs[0].pfs.pfs[c].pf.bytes * 8;
-        //high = low + 7;
-
-        if (cnstrs->cnstrs[0].pfs.pfs[c].p_count == 0) {
-        Z3_ast pf1_ext = Z3_mk_extract(cfg.ctx, high, low, pf1_ast);
-
-        cnstr = ast_replace(cfg.ctx, cnstr, cnstrs->cnstrs[0].pfs.pfs[c].select,
-                            pf1_ext);
-        } else if (cnstrs->cnstrs[0].pfs.pfs[c].p_count == 1) {
-        Z3_ast pf2_ext = Z3_mk_extract(cfg.ctx, high, low, pf2_ast);
-
-        cnstr = ast_replace(cfg.ctx, cnstr, cnstrs->cnstrs[0].pfs.pfs[c].select,
-                            pf2_ext);
-        } else {
-        assert(false && "Packet counter with invalid value");
+            last_index = packet_dependency_expr.get_index();
         }
 
-        assert(cnstr != NULL);
+        generated_constraints.push_back(constraint_expression);
+
+        std::cout << "\n";
+        std::cout << "[Constraint after]" << "\n";
+        std::cout << Z3_ast_to_string(cfg.ctx, constraint_expression) << "\n";
+
+        std::cout << "\n";
+        std::cout << "[Simplified]" << "\n";
+        std::cout << Z3_ast_to_string(cfg.ctx, Z3_simplify(cfg.ctx, constraint_expression)) << std::endl;
     }
 
-    printf("p1 option %s\n", R3S_opt_to_string(p1.loaded_opt.opt));
-    printf("p2 option %s\n", R3S_opt_to_string(p2.loaded_opt.opt));
-    printf("constraints after:\n%s\n", Z3_ast_to_string(cfg.ctx, cnstr));
-
-    cnstr = Z3_simplify(cfg.ctx, cnstr);
-
-    printf("simplified:\n%s\n", Z3_ast_to_string(cfg.ctx, cnstr));
-
-    return cnstr;
-    */
+    Z3_ast final_constraint = Z3_mk_and(cfg.ctx, generated_constraints.size(), &generated_constraints[0]);
+    //return final_constraint;
+    return generated_constraints[0];
 }
 
 }
