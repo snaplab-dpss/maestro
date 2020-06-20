@@ -74,7 +74,6 @@ public:
             Logger::log() << "  " << device;
             Logger::log() << "\n";
         }
-        Logger::log() << "\n";
     }
 
     const R3S::R3S_cfg_t& get_cfg() const { return cfg; }
