@@ -18,7 +18,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  ParallelSynthesizer::Logger::MINIMUM_LOG_LEVEL = ParallelSynthesizer::Logger::Level::LOG;
+  ParallelSynthesizer::Logger::MINIMUM_LOG_LEVEL = ParallelSynthesizer::Logger::Level::DEBUG;
 
   char *libvig_access_out = argv[1];
 

@@ -1,3 +1,4 @@
+#include "logger.h"
 #include "libvig_access.h"
 
 #include <algorithm>
@@ -110,7 +111,11 @@ void LibvigAccess::add_dependency(const PacketDependency &dependency) {
 }
 
 bool operator==(const LibvigAccess &lhs, const LibvigAccess &rhs) {
-  return lhs.get_id() == rhs.get_id();
+  return lhs.get_device() == rhs.get_device() &&
+         lhs.get_object() == rhs.get_object() &&
+         lhs.get_dependencies() == rhs.get_dependencies() &&
+         lhs.get_dependencies_not_processed() == rhs.get_dependencies_not_processed();
+    
 }
 
 LibvigAccess &LibvigAccess::find(std::vector<LibvigAccess> &accesses,
@@ -120,8 +125,8 @@ LibvigAccess &LibvigAccess::find(std::vector<LibvigAccess> &accesses,
       return a;
   // throw exception
 
-  std::cerr << "[ERROR] LibvigAccess not found in array (id " << id << ")"
-            << std::endl;
+  Logger::error() << "LibvigAccess not found (id " << id << ")"
+            << "\n";
   exit(1);
 }
 

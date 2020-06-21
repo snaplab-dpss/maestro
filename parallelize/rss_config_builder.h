@@ -37,26 +37,35 @@ public:
         std::vector<RawConstraint> raw_constraints
     ) {
         R3S_cfg_init(&cfg);
+
+        std::vector< std::pair<LibvigAccess, LibvigAccess> > unique_access_pairs;
         
         for (const auto& raw_constraint : raw_constraints) {
             LibvigAccess& first = LibvigAccess::find(accesses, raw_constraint.get_first_access_id());
             LibvigAccess& second = LibvigAccess::find(accesses, raw_constraint.get_second_access_id());
+
+            if (first.get_object() != second.get_object()) {
+                Logger::warn() << "Constraint between different objects doesn't make any sense" << "\n";
+                continue;
+            }
+
+            std::pair<LibvigAccess, LibvigAccess> access(first, second);
+
+            if (std::find(unique_access_pairs.begin(), unique_access_pairs.end(), access) != unique_access_pairs.end()) {
+                continue;
+            }
 
             if (std::find(unique_devices.begin(), unique_devices.end(), first.get_device()) == unique_devices.end())
                 unique_devices.push_back(first.get_device());
             
             if (std::find(unique_devices.begin(), unique_devices.end(), second.get_device()) == unique_devices.end())
                 unique_devices.push_back(second.get_device());
-            
-            if (first.get_object() != second.get_object()) {
-                std::cerr << "[WARNING] Constraint between different objects doesn't make any sense" << std::endl;
-                continue;
-            }
 
             merge_unique_packet_field_dependencies(first.get_unique_packet_fields());
             merge_unique_packet_field_dependencies(second.get_unique_packet_fields());
             
             constraints.emplace_back(first, second, cfg.ctx, raw_constraint);
+            unique_access_pairs.push_back(access);
         }
 
         Logger::log() << "\n";
