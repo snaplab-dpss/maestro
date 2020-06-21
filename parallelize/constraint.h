@@ -82,7 +82,9 @@ public:
     const LibvigAccess& _second,
     const R3S::Z3_context& _ctx,
     const RawConstraint& raw_constraint
-  ) : ctx(_ctx), first(_first), second(_second) {    
+  ) : ctx(_ctx), first(_first), second(_second) {
+    void check_incompatible_dependencies();
+
     expression = R3S::Z3_parse_smtlib2_string(
         ctx,
         raw_constraint.get_expression().c_str(),
@@ -108,6 +110,7 @@ private:
 
     void fill_packet_fields(R3S::Z3_ast& expression, std::vector<PacketFieldExpression>& pfes);
     void zip_packet_fields_expression_and_values(const std::vector<PacketFieldExpression>& pfes);
+    void check_incompatible_dependencies();
 
 };
 

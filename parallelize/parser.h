@@ -29,6 +29,7 @@ public:
     get_raw_constraints() const { return raw_constraints; }
 
   void parse(std::string filepath);
+  void report();
 };
 
 }

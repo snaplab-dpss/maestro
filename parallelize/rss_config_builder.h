@@ -19,6 +19,7 @@ private:
     std::vector<Constraint> constraints;
 
     std::vector<unsigned int> unique_devices;
+    std::vector< std::pair<LibvigAccess, LibvigAccess> > unique_access_pairs;
     std::vector<R3S::R3S_pf_t> unique_packet_fields_dependencies;
     std::vector<R3S::R3S_cnstrs_func> solver_constraints_generators;
 
@@ -30,6 +31,7 @@ private:
     void load_solver_constraints_generators();
 
     void merge_unique_packet_field_dependencies(const std::vector<R3S::R3S_pf_t>& packet_fields);
+    bool is_access_pair_already_stored(const std::pair<LibvigAccess, LibvigAccess>& pair);
 
 public:
     RSSConfigBuilder(
@@ -38,11 +40,10 @@ public:
     ) {
         R3S_cfg_init(&cfg);
 
-        std::vector< std::pair<LibvigAccess, LibvigAccess> > unique_access_pairs;
         
         for (const auto& raw_constraint : raw_constraints) {
-            LibvigAccess& first = LibvigAccess::find(accesses, raw_constraint.get_first_access_id());
-            LibvigAccess& second = LibvigAccess::find(accesses, raw_constraint.get_second_access_id());
+            LibvigAccess& first = LibvigAccess::find_by_id(accesses, raw_constraint.get_first_access_id());
+            LibvigAccess& second = LibvigAccess::find_by_id(accesses, raw_constraint.get_second_access_id());
 
             if (first.get_object() != second.get_object()) {
                 Logger::warn() << "Constraint between different objects doesn't make any sense" << "\n";
@@ -51,9 +52,8 @@ public:
 
             std::pair<LibvigAccess, LibvigAccess> access(first, second);
 
-            if (std::find(unique_access_pairs.begin(), unique_access_pairs.end(), access) != unique_access_pairs.end()) {
+            if (is_access_pair_already_stored(access))
                 continue;
-            }
 
             if (std::find(unique_devices.begin(), unique_devices.end(), first.get_device()) == unique_devices.end())
                 unique_devices.push_back(first.get_device());

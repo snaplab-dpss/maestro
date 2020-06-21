@@ -17,6 +17,17 @@ void RSSConfigBuilder::merge_unique_packet_field_dependencies(const std::vector<
     }
 }
 
+bool RSSConfigBuilder::is_access_pair_already_stored(const std::pair<LibvigAccess, LibvigAccess>& pair) {
+    for (const auto& stored_pair : unique_access_pairs) {
+        if (!LibvigAccess::content_equal(stored_pair.first, pair.first)) continue;
+        if (!LibvigAccess::content_equal(stored_pair.second, pair.second)) continue;
+
+        return true;
+    }
+
+    return false;
+}
+
 void RSSConfigBuilder::load_rss_config_options() {
     for (const auto& option : rss_config.options)
         R3S_cfg_load_opt(&cfg, option);

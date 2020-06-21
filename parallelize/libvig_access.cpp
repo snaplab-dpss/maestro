@@ -30,28 +30,48 @@ bool operator==(const PacketDependencyProcessed &lhs,
          lhs.get_protocol() == rhs.get_protocol();
 }
 
-std::unique_ptr<PacketDependencyProcessed>
-PacketDependencyProcessed::try_process(const PacketDependency &pd) {
-  unsigned int offset = pd.get_offset();
-  unsigned int layer = pd.get_layer();
-  unsigned int protocol = pd.get_protocol();
+bool operator==(const PacketDependencyIncompatible &lhs, const PacketDependencyIncompatible &rhs) {
+  return lhs.get_description() == rhs.get_description();
+}
+
+void LibvigAccess::add_dependency(const PacketDependencyProcessed &dependency) {
+  packet_dependencies.push_back(dependency);
+}
+
+void LibvigAccess::add_dependency(
+    const PacketDependencyIncompatible &dependency) {
+  packet_dependencies_incompatible.push_back(dependency);
+}
+
+void LibvigAccess::add_dependency(const PacketDependency &dependency) {
+  auto it = std::find(packet_dependencies.begin(), packet_dependencies.end(),
+                      dependency);
+
+  if (it != packet_dependencies.end())
+    return;
+
+  unsigned int offset = dependency.get_offset();
+  unsigned int layer = dependency.get_layer();
+  unsigned int protocol = dependency.get_protocol();
 
   // IPv4
   if (layer == 3 && protocol == 0x0800) {
 
     if (offset == 9) {
-      // sprintf(dep.error_descr, "IPv4 protocolcol");
+      add_dependency(PacketDependencyIncompatible(dependency, "IPv4 protocol"));
+      return;
     } else if (offset >= 12 && offset <= 15) {
-      return std::unique_ptr<PacketDependencyProcessed>(
-          new PacketDependencyProcessed(pd, R3S::R3S_PF_IPV4_SRC, 15 - offset));
+      add_dependency(PacketDependencyProcessed(dependency, R3S::R3S_PF_IPV4_SRC, 15 - offset));
+      return;
     } else if (offset >= 16 && offset <= 19) {
-      return std::unique_ptr<PacketDependencyProcessed>(
-          new PacketDependencyProcessed(pd, R3S::R3S_PF_IPV4_DST, 19 - offset));
+      add_dependency(PacketDependencyProcessed(dependency, R3S::R3S_PF_IPV4_DST, 19 - offset));
+      return;
     } else if (offset >= 20) {
-      // sprintf(dep.error_descr, "IPv4 options");
+      add_dependency(PacketDependencyIncompatible(dependency, "IPv4 options"));
+      return;
     } else {
-      // sprintf(dep.error_descr, "Unknown IPv4 field at byte %u\n",
-      // dep.offset);
+      add_dependency(PacketDependencyIncompatible(dependency, "Unknown IPv4 field"));
+      return;
     }
   }
 
@@ -68,66 +88,53 @@ PacketDependencyProcessed::try_process(const PacketDependency &pd) {
   // TCP
   else if (layer == 4 && protocol == 0x06) {
     if (offset <= 1) {
-      return std::unique_ptr<PacketDependencyProcessed>(
-          new PacketDependencyProcessed(pd, R3S::R3S_PF_TCP_SRC, offset));
+      add_dependency(PacketDependencyProcessed(dependency, R3S::R3S_PF_TCP_SRC, offset));
+      return;
     } else if (offset >= 2 && offset <= 3) {
-      return std::unique_ptr<PacketDependencyProcessed>(
-          new PacketDependencyProcessed(pd, R3S::R3S_PF_TCP_DST, offset - 2));
+      add_dependency(PacketDependencyProcessed(dependency, R3S::R3S_PF_TCP_DST, offset - 2));
+      return;
     } else {
-      // sprintf(dep.error_descr, "Unknown TCP field at byte %u\n", dep.offset);
+      add_dependency(PacketDependencyIncompatible(dependency, "Unknown TCP field"));
+      return;
     }
   }
 
   // UDP
   else if (layer == 4 && protocol == 0x11) {
     if (offset <= 1) {
-      return std::unique_ptr<PacketDependencyProcessed>(
-          new PacketDependencyProcessed(pd, R3S::R3S_PF_UDP_SRC, offset));
+      add_dependency(PacketDependencyProcessed(dependency, R3S::R3S_PF_UDP_SRC, offset));
+      return;
     } else if (offset >= 2 && offset <= 3) {
-      return std::unique_ptr<PacketDependencyProcessed>(
-          new PacketDependencyProcessed(pd, R3S::R3S_PF_UDP_DST, offset - 2));
+      add_dependency(PacketDependencyProcessed(dependency, R3S::R3S_PF_UDP_DST, offset - 2));
+      return;
     } else {
-      // sprintf(dep.error_descr, "Unknown UDP field at byte %u\n", dep.offset);
+      add_dependency(PacketDependencyIncompatible(dependency, "Unknown UDP field"));
+      return;
     }
   }
-
-  return std::unique_ptr<PacketDependencyProcessed>();
-}
-
-void LibvigAccess::add_dependency(const PacketDependency &dependency) {
-  auto it = std::find(packet_dependencies.begin(), packet_dependencies.end(),
-                      dependency);
-
-  if (it != packet_dependencies.end())
-    return;
-
-  auto processed = PacketDependencyProcessed::try_process(dependency);
-  if (processed) {
-    packet_dependencies.push_back(*processed);
-    return;
-  }
-
-  packet_dependencies_not_processed.push_back(dependency);
 }
 
 bool operator==(const LibvigAccess &lhs, const LibvigAccess &rhs) {
-  return lhs.get_device() == rhs.get_device() &&
-         lhs.get_object() == rhs.get_object() &&
-         lhs.get_dependencies() == rhs.get_dependencies() &&
-         lhs.get_dependencies_not_processed() == rhs.get_dependencies_not_processed();
-    
+  return lhs.get_id() == rhs.get_id();
 }
 
-LibvigAccess &LibvigAccess::find(std::vector<LibvigAccess> &accesses,
+LibvigAccess &LibvigAccess::find_by_id(std::vector<LibvigAccess> &accesses,
                                  const unsigned int &id) {
   for (auto &a : accesses)
     if (a.get_id() == id)
       return a;
-  // throw exception
 
   Logger::error() << "LibvigAccess not found (id " << id << ")"
-            << "\n";
+                  << "\n";
   exit(1);
+}
+
+bool LibvigAccess::content_equal(const LibvigAccess &access1,
+                                 const LibvigAccess &access2) {
+  return access1.get_device() == access2.get_device() &&
+         access1.get_object() == access2.get_object() &&
+         access1.get_dependencies() == access2.get_dependencies() &&
+         access1.get_dependencies_incompatible() == access2.get_dependencies_incompatible();
 }
 
 std::vector<PacketDependencyProcessed>
@@ -141,11 +148,13 @@ LibvigAccess::zip_accesses_dependencies(const LibvigAccess &access1,
   const std::vector<PacketDependencyProcessed> &access2_dependencies =
       access2.get_dependencies();
 
-  zipped.insert(zipped.end(), access1_dependencies.begin(), access1_dependencies.end());
-  zipped.insert(zipped.end(), access2_dependencies.begin(), access2_dependencies.end());
-  
+  zipped.insert(zipped.end(), access1_dependencies.begin(),
+                access1_dependencies.end());
+  zipped.insert(zipped.end(), access2_dependencies.begin(),
+                access2_dependencies.end());
+
   std::sort(zipped.begin(), zipped.end());
 
   return zipped;
 }
-}
+} // namespace ParallelSynthesizer

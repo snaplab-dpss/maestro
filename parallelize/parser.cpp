@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <numeric>
 
+#include "logger.h"
 #include "parser.h"
 
 namespace ParallelSynthesizer {
@@ -40,9 +41,10 @@ std::istringstream Parser::consume_token(std::string &line,
   auto found = line.find(token);
 
   if (found == std::string::npos) {
-    std::cerr << "[ERORR] Token not found." << '\n';
-    std::cerr << "        Input:   " << line << '\n';
-    std::cerr << "        Missing: " << token << std::endl;
+
+    Logger::error() << "Token not found" << "\n";
+    Logger::error() << "Input:   " << line << "\n";
+    Logger::error() << "Missing: " << token << "\n";
 
     exit(1);
   }
@@ -52,7 +54,7 @@ std::istringstream Parser::consume_token(std::string &line,
 
 void Parser::parse_access(std::vector<std::string> &state_content) {
   if (state_content.size() < 3) {
-    std::cerr << "[ERROR] Missing parameters of access component" << std::endl;
+    Logger::error() << "Missing parameters of access component" << "\n";
     exit(1);
   }
 
@@ -101,10 +103,29 @@ void Parser::parse_access(std::vector<std::string> &state_content) {
   }
 }
 
+void Parser::report() {
+  std::vector< std::pair<unsigned int, PacketDependencyIncompatible> > incompatible_dependency_id_pairs;
+
+  for (const auto& access : accesses) {
+    for (const auto& incompatible_dependency : access.get_dependencies_incompatible()) {
+      std::pair<unsigned int, PacketDependencyIncompatible> pair(access.get_id(), incompatible_dependency);
+      auto found_it = std::find(incompatible_dependency_id_pairs.begin(), incompatible_dependency_id_pairs.end(), pair);
+      if (found_it != incompatible_dependency_id_pairs.end()) continue;
+
+      Logger::error() << "Incompatible dependency (access id ";
+      Logger::error() << access.get_id();
+      Logger::error() << "): ";
+      Logger::error() << incompatible_dependency.get_description();
+      Logger::error() << "\n";
+
+      incompatible_dependency_id_pairs.push_back(pair);
+    }
+  }
+}
+
 void Parser::parse_constraint(std::vector<std::string> &state_content) {
   if (state_content.size() < 5) {
-    std::cerr << "[ERROR] Missing parameters of constraint component"
-              << std::endl;
+    Logger::error() << "Missing parameters of constraint component" << "\n";
     exit(1);
   }
 
@@ -121,8 +142,7 @@ void Parser::parse_constraint(std::vector<std::string> &state_content) {
   iss >> std::ws >> second;
 
   if (state_content[2] != Tokens::STATEMENT_START) {
-    std::cerr << "[ERROR] Missing start statement on constraint component"
-              << std::endl;
+    Logger::error() << "Missing start statement of constraint component" << "\n";
     exit(1);
   }
 
@@ -142,7 +162,7 @@ void Parser::parse(std::string filepath) {
   file.open(filepath.c_str(), std::ios::in);
 
   if (!file.is_open()) {
-    std::cerr << "Error trying to open file." << std::endl;
+    Logger::error() << "Failed to open file" << "\n";
     exit(1);
   }
 
@@ -169,5 +189,8 @@ void Parser::parse(std::string filepath) {
   }
 
   file.close();
+
+  report();
 }
+
 }

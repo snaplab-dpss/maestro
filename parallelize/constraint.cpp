@@ -122,4 +122,13 @@ void Constraint::zip_packet_fields_expression_and_values(
                                zipped_dependencies[i]);
   }
 }
+
+void Constraint::check_incompatible_dependencies() {
+  if (first.get_dependencies_incompatible().size() ||
+    second.get_dependencies_incompatible().size()) {
+    Logger::error() << "Dependencies incompatible with RSS. Nothing we can do." << "\n";
+    exit(1);
+  }
+}
+
 }
