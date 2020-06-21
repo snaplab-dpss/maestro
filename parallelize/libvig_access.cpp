@@ -112,6 +112,19 @@ void LibvigAccess::add_dependency(const PacketDependency &dependency) {
       return;
     }
   }
+
+  else {
+    std::stringstream s;
+    s << "Unknown (layer: ";
+    s << dependency.get_layer();
+    s << ", protocol: ";
+    s << dependency.get_protocol();
+    s << ", offset: ";
+    s << dependency.get_offset();
+    s << ")";
+
+    add_dependency(PacketDependencyIncompatible(dependency, s.str()));
+  }
 }
 
 bool operator==(const LibvigAccess &lhs, const LibvigAccess &rhs) {

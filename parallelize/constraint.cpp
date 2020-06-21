@@ -107,10 +107,16 @@ void Constraint::zip_packet_fields_expression_and_values(
   auto zipped_dependencies_size = zipped_dependencies.size();
 
   if (zipped_dependencies_size != pfes_sorted_copy.size()) {
-    Logger::error() << "zipped dependencies size different than the number of available packet fields "
-                    << "(" << zipped_dependencies_size
-                    << " != " << pfes_sorted_copy.size()
-                    << ")" << "\n";
+    Logger::error() << "\n";
+    Logger::error() << "Total number of dependencies is different than ";
+    Logger::error() << "total number of available packet fields.";
+    Logger::error() << "\n";
+    Logger::error() << "This is most likely caused by incompatible packet fields.";
+    Logger::error() << "\n";
+    Logger::error() << "Number of dependencies:  " << zipped_dependencies_size;
+    Logger::error() << "\n";
+    Logger::error() << "Number of packet fields: " << pfes_sorted_copy.size();
+    Logger::error() << "\n";
     exit(1);
   }
 

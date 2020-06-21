@@ -40,7 +40,6 @@ public:
     ) {
         R3S_cfg_init(&cfg);
 
-        
         for (const auto& raw_constraint : raw_constraints) {
             LibvigAccess& first = LibvigAccess::find_by_id(accesses, raw_constraint.get_first_access_id());
             LibvigAccess& second = LibvigAccess::find_by_id(accesses, raw_constraint.get_second_access_id());
