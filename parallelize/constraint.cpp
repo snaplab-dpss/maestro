@@ -111,7 +111,7 @@ void Constraint::zip_packet_fields_expression_and_values(
     Logger::error() << "Total number of dependencies is different than ";
     Logger::error() << "total number of available packet fields.";
     Logger::error() << "\n";
-    Logger::error() << "This is most likely caused by incompatible packet fields.";
+    Logger::error() << "This is most likely caused by RSS incompatible packet fields.";
     Logger::error() << "\n";
     Logger::error() << "Number of dependencies:  " << zipped_dependencies_size;
     Logger::error() << "\n";
