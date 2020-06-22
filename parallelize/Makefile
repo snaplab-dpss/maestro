@@ -3,8 +3,9 @@ CC=clang++ -std=c++11 -stdlib=libstdc++
 Z3_INCLUDE=-I$(Z3_DIR)/build/include
 R3S_INCLUDE=-I$(R3S_DIR)/include
 
-Z3_LIB_FLAGS=-lz3 -Wl,-rpath,$(Z3_DIR)/build/lib -L$(Z3_DIR)/build/lib -I$(Z3_DIR)/build/include
-R3S_LIB_FLAGS=-lr3s -Wl,-rpath,$(R3S_DIR)/build/lib -L$(R3S_DIR)/build/lib -I$(R3S_DIR)/include
+Z3_LIB_FLAGS=-lz3 -Wl,-rpath,$(Z3_DIR)/build/lib -L$(Z3_DIR)/build/lib
+#R3S_LIB_FLAGS=-lr3s -Wl,-rpath,$(R3S_DIR)/build/lib -L$(R3S_DIR)/build/lib
+R3S_LIB_FLAGS=-lr3sd -Wl,-rpath,$(R3S_DIR)/debug/lib -L$(R3S_DIR)/debug/lib
 
 NF_DIR=$(shell pwd)
 SRC=$(NF_DIR)/../parallelize
@@ -20,6 +21,7 @@ all: $(BUILD)/libvig_access.o $(BUILD)/rss_config_builder.o $(BUILD)/constraint.
 		$(BUILD)/rss_config_builder.o 		\
 		$(BUILD)/logger.o			 		\
 		$(Z3_LIB_FLAGS) $(R3S_LIB_FLAGS)	\
+		$(Z3_INCLUDE) $(R3S_INCLUDE)		\
 		-lstdc++
 
 $(BUILD)/libvig_access.o: $(SRC)/libvig_access.cpp $(SRC)/libvig_access.h

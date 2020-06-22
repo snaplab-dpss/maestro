@@ -19,7 +19,7 @@ private:
 public:
 
     const std::vector<R3S::R3S_opt_t>& get_options() { return options; }
-    const R3S::R3S_key_t& get_key() { return key; }
+    R3S::R3S_key_t&& get_key() { return std::forward<R3S::R3S_key_t>(key); }
 
     friend class RSSConfigBuilder;
 };

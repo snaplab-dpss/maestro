@@ -10,6 +10,8 @@ namespace R3S {
 #include <r3s.h>
 }
 
+using namespace ParallelSynthesizer;
+
 int main(int argc, char *argv[]) {
 
   if (argc < 2) {
@@ -18,42 +20,36 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  ParallelSynthesizer::Logger::MINIMUM_LOG_LEVEL = ParallelSynthesizer::Logger::Level::LOG;
+  Logger::MINIMUM_LOG_LEVEL = Logger::Level::DEBUG;
 
   char *libvig_access_out = argv[1];
 
-  R3S::R3S_cnstrs_func cnstrs[1];
-  R3S::R3S_status_t status;
-
-  ParallelSynthesizer::Parser parser;
-
+  Parser parser;
   parser.parse(libvig_access_out);
 
-  for (auto &access : parser.get_accesses()) {
-    ParallelSynthesizer::Logger::debug() << "==========================\n";
-    ParallelSynthesizer::Logger::debug() << "id:     " << access.get_id() << '\n';
-    ParallelSynthesizer::Logger::debug() << "device: " << access.get_device() << '\n';
-    ParallelSynthesizer::Logger::debug() << "object: " << access.get_object() << '\n';
+  RSSConfigBuilder rss_cfg_builder(parser.get_accesses(),
+                                   parser.get_raw_constraints());
 
-    for (auto &dep : access.get_dependencies()) {
-      if (dep.has_valid_packet_field())
-        ParallelSynthesizer::Logger::debug() << "pf:    " << R3S_pf_to_string(dep.get_packet_field()) << '\n';
-    }
+  /*
+  for (unsigned i = 0; i < 10; i++) {
+    auto packets_pair = rss_cfg_builder.generate_packets();
+    Logger::log() << "\n";
+    Logger::log() << "[Generated packets]";
+    Logger::log() << "\n";
 
-    ParallelSynthesizer::Logger::debug() << '\n';
+    Logger::log() << "\n";
+    Logger::log() << R3S_packet_to_string(packets_pair.first);
+    Logger::log() << "\n";
+    Logger::log() << R3S_packet_to_string(packets_pair.second);
+    Logger::log() << "\n";
   }
-
-  for (auto &raw_constraint : parser.get_raw_constraints()) {
-    ParallelSynthesizer::Logger::debug() << "==========================\n";
-    ParallelSynthesizer::Logger::debug() << "first:      " << raw_constraint.get_first_access_id() << '\n';
-    ParallelSynthesizer::Logger::debug() << "second:     " << raw_constraint.get_second_access_id();
-    ParallelSynthesizer::Logger::debug() << '\n';
-    ParallelSynthesizer::Logger::debug() << "expression: " << raw_constraint.get_expression() << '\n';
-    ParallelSynthesizer::Logger::debug() << '\n';
-  }
-
-  ParallelSynthesizer::RSSConfigBuilder rss_cfg_builder(parser.get_accesses(),
-                                                  parser.get_raw_constraints());
+  */
 
   rss_cfg_builder.build();
+
+  auto config = rss_cfg_builder.get_generated_rss_cfg();
+  
+  Logger::log() << "Generated key:";
+  Logger::log() << "\n";
+  Logger::log() << R3S::R3S_key_to_string(config.get_key());
 }

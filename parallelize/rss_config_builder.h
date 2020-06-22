@@ -82,15 +82,22 @@ public:
             Logger::log() << "  " << device;
             Logger::log() << "\n";
         }
+
+        find_compatible_rss_config_options();
+        load_rss_config_options();
+
+        R3S_set_user_data(&cfg, (void *) &constraints);
     }
 
     const R3S::R3S_cfg_t& get_cfg() const { return cfg; }
     const std::vector<Constraint>& get_constraints() const { return constraints; }
+    const RSSConfig& get_generated_rss_cfg() const { return rss_config; }
 
     static R3S::Z3_ast ast_replace(R3S::Z3_context ctx, R3S::Z3_ast root, R3S::Z3_ast target, R3S::Z3_ast dst);
     static R3S::Z3_ast make_solver_constraints(R3S::R3S_cfg_t cfg, R3S::R3S_packet_ast_t p1, R3S::R3S_packet_ast_t p2);
 
     void build();
+    std::pair<R3S::R3S_packet_t, R3S::R3S_packet_t> generate_packets();
 };
 
 }
