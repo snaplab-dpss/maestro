@@ -8,7 +8,7 @@ namespace ParallelSynthesizer {
 
 void RSSConfigBuilder::merge_unique_packet_field_dependencies(
     const std::vector<R3S::R3S_pf_t> &packet_fields) {
-  for (auto &packet_field : packet_fields) {
+  for (const auto& packet_field : packet_fields) {
     auto found_it =
         std::find(unique_packet_fields_dependencies.begin(),
                   unique_packet_fields_dependencies.end(), packet_field);
@@ -147,6 +147,7 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
   Logger::debug() << "*************************************************";
   Logger::debug() << "\n";
 
+  bool constraint_incompatible_with_current_opt = false;
   for (auto &constraint : constraints) {
     R3S::Z3_ast &constraint_expression = constraint.get_expression();
 
@@ -170,20 +171,47 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
     Logger::debug() << constraint.get_first_access().get_device()
                     << " (device) ";
     Logger::debug() << constraint.get_first_access().get_object()
-                    << " (object) "
-                    << "\n";
+                    << " (object) ";
+
+    for (const auto &packet_field_expr_value : constraint.get_packet_fields()) {
+      PacketFieldExpression packet_dependency_expr =
+          packet_field_expr_value.first;
+      if (packet_dependency_expr.get_packet_chunks_id() != constraint.get_packet_chunks_ids_pair().first)
+        continue;
+      PacketDependencyProcessed packet_dependency_value =
+          packet_field_expr_value.second;
+      if (packet_dependency_value.should_ignore()) continue;
+
+      Logger::debug() << " " << R3S_pf_to_string(packet_dependency_value.get_packet_field());
+    }
+    Logger::debug() << "\n";
+
     Logger::debug() << "second: ";
     Logger::debug() << constraint.get_second_access().get_id() << " (id) ";
     Logger::debug() << constraint.get_second_access().get_device()
                     << " (device) ";
     Logger::debug() << constraint.get_second_access().get_object()
-                    << " (object) "
-                    << "\n";
+                    << " (object) ";
+
+    for (const auto &packet_field_expr_value : constraint.get_packet_fields()) {
+      PacketFieldExpression packet_dependency_expr =
+          packet_field_expr_value.first;
+      if (packet_dependency_expr.get_packet_chunks_id() != constraint.get_packet_chunks_ids_pair().second)
+        continue;
+      PacketDependencyProcessed packet_dependency_value =
+          packet_field_expr_value.second;
+      if (packet_dependency_value.should_ignore()) continue;
+
+      Logger::debug() << " " << R3S_pf_to_string(packet_dependency_value.get_packet_field());
+    }
+    Logger::debug() << "\n";
 
     Logger::debug() << "";
 
     Logger::debug() << "[Constraint before]";
+    Logger::debug() << "\n";
     Logger::debug() << Z3_ast_to_string(cfg.ctx, constraint_expression);
+    Logger::debug() << "\n";
 
     for (const auto &packet_field_expr_value : constraint.get_packet_fields()) {
       PacketFieldExpression packet_dependency_expr =
@@ -200,26 +228,42 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
 
       R3S::Z3_ast packet_field_ast;
       R3S::R3S_status_t status;
+      R3S::Z3_ast target_ast;
 
-      status = R3S_packet_extract_pf(cfg, target_packet,
+      if (!packet_dependency_value.should_ignore()) {
+        status = R3S_packet_extract_pf(cfg, target_packet,
                                      packet_dependency_value.get_packet_field(),
                                      &packet_field_ast);
-      if (status != R3S::R3S_STATUS_SUCCESS)
-        return NULL;
+        if (status != R3S::R3S_STATUS_SUCCESS) {
+          constraint_incompatible_with_current_opt = true;
+          break;
+        }
 
-      unsigned int packet_field_ast_size =
-          Z3_get_bv_sort_size(cfg.ctx, Z3_get_sort(cfg.ctx, packet_field_ast));
+        unsigned int packet_field_ast_size =
+            Z3_get_bv_sort_size(cfg.ctx, Z3_get_sort(cfg.ctx, packet_field_ast));
 
-      unsigned int high =
-          packet_field_ast_size - packet_dependency_value.get_bytes() * 8 - 1;
-      unsigned int low = high - 7;
+        unsigned int high =
+            packet_field_ast_size - packet_dependency_value.get_bytes() * 8 - 1;
+        unsigned int low = high - 7;
 
-      R3S::Z3_ast packet_field_byte_ast =
-          Z3_mk_extract(cfg.ctx, high, low, packet_field_ast);
+        target_ast = Z3_mk_extract(cfg.ctx, high, low, packet_field_ast);
+      }
+
+      else {
+        target_ast = Z3_mk_bvxor(
+          cfg.ctx,
+          packet_dependency_expr.get_expression(),
+          packet_dependency_expr.get_expression());        
+      }
 
       constraint_expression = ast_replace(
           cfg.ctx, constraint_expression,
-          packet_dependency_expr.get_expression(), packet_field_byte_ast);
+          packet_dependency_expr.get_expression(), target_ast);
+    }
+
+    if (constraint_incompatible_with_current_opt) {
+      constraint_incompatible_with_current_opt = false;
+      continue;
     }
 
     generated_constraints.push_back(

@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 #include <algorithm>
+#include <assert.h>
 
 namespace R3S {
 #include <r3s.h>
@@ -44,6 +45,7 @@ private:
   std::string description;
 
 public:
+
   PacketDependencyIncompatible(const PacketDependency &_pd,
                                const std::string &_description)
       : PacketDependency(_pd) {
@@ -68,27 +70,45 @@ class PacketDependencyProcessed : public PacketDependency {
 private:
   R3S::R3S_pf_t packet_field;
   unsigned int bytes;
+  bool ignore;
 
 public:
+  PacketDependencyProcessed(const PacketDependency &_pd,
+                            const unsigned int &_bytes)
+      : PacketDependency(_pd) {
+    ignore = true;
+    bytes = _bytes;
+  }
+  
   PacketDependencyProcessed(const PacketDependency &_pd,
                             const R3S::R3S_pf_t &_packet_field,
                             const unsigned int &_bytes)
       : PacketDependency(_pd) {
     packet_field = _packet_field;
     bytes = _bytes;
+    ignore = false;
   }
 
   PacketDependencyProcessed(const PacketDependencyProcessed &_pdp)
       : PacketDependency(_pdp.get_layer(), _pdp.get_protocol(),
                          _pdp.get_offset()) {
-    packet_field = _pdp.get_packet_field();
+    if (!_pdp.should_ignore()) {
+      packet_field = _pdp.get_packet_field();
+    }
+    
     bytes = _pdp.get_bytes();
+    ignore = _pdp.should_ignore();
   }
 
   bool has_valid_packet_field() const override { return true; }
 
-  const R3S::R3S_pf_t &get_packet_field() const { return packet_field; }
+  const R3S::R3S_pf_t &get_packet_field() const { 
+    assert(!ignore && "This packet field dependency should be ignored");
+    return packet_field;
+  }
+
   const unsigned int &get_bytes() const { return bytes; }
+  const bool& should_ignore() const { return ignore; }
 
   friend bool operator==(const PacketDependencyProcessed &lhs,
                          const PacketDependencyProcessed &rhs);
@@ -144,6 +164,8 @@ public:
     std::vector<R3S::R3S_pf_t> packet_fields;
 
     for (const auto &dependency : packet_dependencies) {
+      if (dependency.should_ignore()) continue;
+
       auto packet_field = dependency.get_packet_field();
       auto found_it =
           std::find(packet_fields.begin(), packet_fields.end(), packet_field);
@@ -164,9 +186,6 @@ public:
   static LibvigAccess &find_by_id(std::vector<LibvigAccess> &accesses,
                                   const unsigned int &id);
   static bool content_equal(const LibvigAccess &access1,
-                            const LibvigAccess &access2);
-  static std::vector<PacketDependencyProcessed>
-  zip_accesses_dependencies(const LibvigAccess &access1,
                             const LibvigAccess &access2);
 };
 

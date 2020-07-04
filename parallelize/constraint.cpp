@@ -98,34 +98,49 @@ void Constraint::fill_packet_fields(R3S::Z3_ast &expr,
 void Constraint::zip_packet_fields_expression_and_values(
     const std::vector<PacketFieldExpression>& pfes) {
 
-  auto zipped_dependencies =
-      LibvigAccess::zip_accesses_dependencies(first, second);
+  auto first_deps = first.get_dependencies();
+  auto second_deps = second.get_dependencies();
+
+  unsigned int smaller_packet_chunks_id = pfes[0].get_packet_chunks_id();
+  for (const auto& pfe : pfes) {
+    const auto &id = pfe.get_packet_chunks_id();
+    if (id == smaller_packet_chunks_id) continue;
+
+    if (smaller_packet_chunks_id > id)
+      smaller_packet_chunks_id = id;
+
+    break;
+  }
 
   auto pfes_sorted_copy = pfes;
   std::sort(pfes_sorted_copy.begin(), pfes_sorted_copy.end());
 
-  auto zipped_dependencies_size = zipped_dependencies.size();
-
-  if (zipped_dependencies_size != pfes_sorted_copy.size()) {
+  if (first_deps.size() + second_deps.size() != pfes_sorted_copy.size()) {
     Logger::error() << "\n";
     Logger::error() << "Total number of dependencies is different than ";
     Logger::error() << "total number of available packet fields.";
     Logger::error() << "\n";
     Logger::error() << "This is most likely caused by RSS incompatible packet fields.";
     Logger::error() << "\n";
-    Logger::error() << "Number of dependencies:  " << zipped_dependencies_size;
+    Logger::error() << "Number of dependencies on first access:  " << first_deps.size();
+    Logger::error() << "\n";
+    Logger::error() << "Number of dependencies on second access:  " << second_deps.size();
     Logger::error() << "\n";
     Logger::error() << "Number of packet fields: " << pfes_sorted_copy.size();
     Logger::error() << "\n";
     exit(1);
   }
 
-  for (auto i = 0; i < zipped_dependencies_size; i++) {
-    bool inc = (i < zipped_dependencies_size - 1) &&
-          (pfes_sorted_copy[i].get_index() < pfes_sorted_copy[i + 1].get_index());
-
-    packet_fields.emplace_back(pfes_sorted_copy[i],
-                               zipped_dependencies[i]);
+  unsigned int first_counter  = 0;
+  unsigned int second_counter = 0;
+  for (auto i = 0; i < pfes_sorted_copy.size(); i++) {
+    if (pfes_sorted_copy[i].get_packet_chunks_id() == smaller_packet_chunks_id) {
+      assert(first_counter < first_deps.size() && "Overflow on first access dependencies.");
+      packet_fields.emplace_back(pfes_sorted_copy[i], first_deps[first_counter++]);
+    } else {
+      assert(second_counter < second_deps.size() && "Overflow on second access dependencies.");
+      packet_fields.emplace_back(pfes_sorted_copy[i], second_deps[second_counter++]);
+    }
   }
 }
 

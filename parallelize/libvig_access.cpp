@@ -58,7 +58,12 @@ void LibvigAccess::add_dependency(const PacketDependency &dependency) {
   if (layer == 3 && protocol == 0x0800) {
 
     if (offset == 9) {
-      add_dependency(PacketDependencyIncompatible(dependency, "IPv4 protocol"));
+      // The call path generator and analyzer generates all possible
+      // values for protocol.
+      // It is complete. Therefore, this field can be ignored. If one
+      // incompatible protocol value is used, then it will be caught
+      // later on the incompatible field.
+      add_dependency(PacketDependencyProcessed(dependency, 0));
       return;
     } else if (offset >= 12 && offset <= 15) {
       add_dependency(PacketDependencyProcessed(dependency, R3S::R3S_PF_IPV4_SRC, 15 - offset));
@@ -150,24 +155,4 @@ bool LibvigAccess::content_equal(const LibvigAccess &access1,
          access1.get_dependencies_incompatible() == access2.get_dependencies_incompatible();
 }
 
-std::vector<PacketDependencyProcessed>
-LibvigAccess::zip_accesses_dependencies(const LibvigAccess &access1,
-                                        const LibvigAccess &access2) {
-  std::vector<PacketDependencyProcessed> zipped;
-
-  const std::vector<PacketDependencyProcessed> &access1_dependencies =
-      access1.get_dependencies();
-
-  const std::vector<PacketDependencyProcessed> &access2_dependencies =
-      access2.get_dependencies();
-
-  zipped.insert(zipped.end(), access1_dependencies.begin(),
-                access1_dependencies.end());
-  zipped.insert(zipped.end(), access2_dependencies.begin(),
-                access2_dependencies.end());
-
-  std::sort(zipped.begin(), zipped.end());
-
-  return zipped;
-}
 } // namespace ParallelSynthesizer
