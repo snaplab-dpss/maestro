@@ -85,11 +85,11 @@ public:
   ) : ctx(_ctx), first(_first), second(_second) {
     void check_incompatible_dependencies();
 
-    expression = R3S::Z3_parse_smtlib2_string(
+    expression = Z3_simplify(ctx, R3S::Z3_parse_smtlib2_string(
         ctx,
         raw_constraint.get_expression().c_str(),
         0, 0, 0, 0, 0, 0
-    );
+    ));
 
     packet_chunks_ids_pair = std::pair<int, int>(-1, -1);
     

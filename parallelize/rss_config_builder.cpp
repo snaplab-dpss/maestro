@@ -135,8 +135,10 @@ R3S::Z3_ast RSSConfigBuilder::ast_replace(R3S::Z3_context ctx, R3S::Z3_ast root,
 
 R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
     R3S::R3S_cfg_t cfg, R3S::R3S_packet_ast_t p1, R3S::R3S_packet_ast_t p2) {
+
   std::vector<Constraint> constraints =
       *((std::vector<Constraint> *)R3S_get_user_data(cfg));
+
   std::vector<R3S::Z3_ast> generated_constraints;
 
   Logger::debug() << "\n";
@@ -150,6 +152,63 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
   bool constraint_incompatible_with_current_opt = false;
   for (auto &constraint : constraints) {
     R3S::Z3_ast &constraint_expression = constraint.get_expression();
+
+    for (const auto &packet_field_expr_value : constraint.get_packet_fields()) {
+      PacketFieldExpression packet_dependency_expr =
+          packet_field_expr_value.first;
+      PacketDependencyProcessed packet_dependency_value =
+          packet_field_expr_value.second;
+
+      // TODO: error handling if is neither equal to first or second
+      R3S::R3S_packet_ast_t target_packet =
+          (packet_dependency_expr.get_packet_chunks_id() ==
+           constraint.get_packet_chunks_ids_pair().first)
+              ? p1
+              : p2;
+
+      R3S::Z3_ast packet_field_ast;
+      R3S::R3S_status_t status;
+      R3S::Z3_ast target_ast;
+
+      if (!packet_dependency_value.should_ignore()) {
+        status = R3S_packet_extract_pf(cfg, target_packet,
+                                     packet_dependency_value.get_packet_field(),
+                                     &packet_field_ast);
+        if (status != R3S::R3S_STATUS_SUCCESS) {
+          constraint_incompatible_with_current_opt = true;
+          break;
+        }
+
+        unsigned int packet_field_ast_size =
+            Z3_get_bv_sort_size(cfg.ctx, Z3_get_sort(cfg.ctx, packet_field_ast));
+
+        unsigned int high =
+            packet_field_ast_size - packet_dependency_value.get_bytes() * 8 - 1;
+        unsigned int low = high - 7;
+
+        target_ast = Z3_mk_extract(cfg.ctx, high, low, packet_field_ast);
+      }
+
+      else {
+        target_ast = Z3_mk_bvxor(
+          cfg.ctx,
+          packet_dependency_expr.get_expression(),
+          packet_dependency_expr.get_expression());        
+      }
+
+      constraint_expression = ast_replace(
+          cfg.ctx, constraint_expression,
+          packet_dependency_expr.get_expression(), target_ast);
+    }
+
+    if (constraint_incompatible_with_current_opt) {
+      constraint_incompatible_with_current_opt = false;
+      continue;
+    }
+
+    constraint_expression = Z3_simplify(cfg.ctx, constraint_expression);
+
+    generated_constraints.push_back(constraint_expression);
 
     Logger::debug() << "\n";
     Logger::debug() << "================================================="
@@ -205,90 +264,18 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
       Logger::debug() << " " << R3S_pf_to_string(packet_dependency_value.get_packet_field());
     }
     Logger::debug() << "\n";
-
-    Logger::debug() << "";
-
-    Logger::debug() << "[Constraint before]";
     Logger::debug() << "\n";
-    Logger::debug() << Z3_ast_to_string(cfg.ctx, constraint_expression);
-    Logger::debug() << "\n";
-
-    for (const auto &packet_field_expr_value : constraint.get_packet_fields()) {
-      PacketFieldExpression packet_dependency_expr =
-          packet_field_expr_value.first;
-      PacketDependencyProcessed packet_dependency_value =
-          packet_field_expr_value.second;
-
-      // TODO: error handling if is neither equal to first or second
-      R3S::R3S_packet_ast_t target_packet =
-          (packet_dependency_expr.get_packet_chunks_id() ==
-           constraint.get_packet_chunks_ids_pair().first)
-              ? p1
-              : p2;
-
-      R3S::Z3_ast packet_field_ast;
-      R3S::R3S_status_t status;
-      R3S::Z3_ast target_ast;
-
-      if (!packet_dependency_value.should_ignore()) {
-        status = R3S_packet_extract_pf(cfg, target_packet,
-                                     packet_dependency_value.get_packet_field(),
-                                     &packet_field_ast);
-        if (status != R3S::R3S_STATUS_SUCCESS) {
-          constraint_incompatible_with_current_opt = true;
-          break;
-        }
-
-        unsigned int packet_field_ast_size =
-            Z3_get_bv_sort_size(cfg.ctx, Z3_get_sort(cfg.ctx, packet_field_ast));
-
-        unsigned int high =
-            packet_field_ast_size - packet_dependency_value.get_bytes() * 8 - 1;
-        unsigned int low = high - 7;
-
-        target_ast = Z3_mk_extract(cfg.ctx, high, low, packet_field_ast);
-      }
-
-      else {
-        target_ast = Z3_mk_bvxor(
-          cfg.ctx,
-          packet_dependency_expr.get_expression(),
-          packet_dependency_expr.get_expression());        
-      }
-
-      constraint_expression = ast_replace(
-          cfg.ctx, constraint_expression,
-          packet_dependency_expr.get_expression(), target_ast);
-    }
-
-    if (constraint_incompatible_with_current_opt) {
-      constraint_incompatible_with_current_opt = false;
-      continue;
-    }
-
-    generated_constraints.push_back(
-        Z3_simplify(cfg.ctx, constraint_expression));
-
-    Logger::debug() << "\n";
-    Logger::debug() << "[Constraint after]"
+    Logger::debug() << "[Constraint]"
                     << "\n";
     Logger::debug() << Z3_ast_to_string(cfg.ctx, constraint_expression);
-    Logger::debug() << "\n";
-
-    Logger::debug() << "\n";
-    Logger::debug() << "[Simplified]"
-                    << "\n";
-    Logger::debug() << Z3_ast_to_string(
-                           cfg.ctx, Z3_simplify(cfg.ctx, constraint_expression));
-    Logger::debug() << "\n";
     Logger::debug() << "\n";
   }
 
   R3S::Z3_ast final_constraint;
   
   if (generated_constraints.size() > 1) {
-    final_constraint = Z3_mk_and(
-      cfg.ctx, generated_constraints.size(), &generated_constraints[0]);
+    final_constraint = Z3_simplify(cfg.ctx, Z3_mk_and(
+      cfg.ctx, generated_constraints.size(), &generated_constraints[0]));
   } else if (generated_constraints.size() == 1) {
     final_constraint = generated_constraints[0];
   } else {

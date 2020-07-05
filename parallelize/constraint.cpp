@@ -101,6 +101,9 @@ void Constraint::zip_packet_fields_expression_and_values(
   auto first_deps = first.get_dependencies();
   auto second_deps = second.get_dependencies();
 
+  std::sort(first_deps.begin(), first_deps.end());
+  std::sort(second_deps.begin(), second_deps.end());
+
   unsigned int smaller_packet_chunks_id = pfes[0].get_packet_chunks_id();
   for (const auto& pfe : pfes) {
     const auto &id = pfe.get_packet_chunks_id();
