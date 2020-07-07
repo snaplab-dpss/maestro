@@ -3,6 +3,9 @@
 #include "rss_config_builder.h"
 
 #include <vector>
+#include <algorithm>
+#include <iterator>
+#include <assert.h>
 
 namespace R3S {
 #include <r3s.h>
@@ -13,15 +16,38 @@ namespace ParallelSynthesizer {
 class RSSConfig {
 private:
     std::vector<R3S::R3S_opt_t> options;
-    R3S::R3S_key_t key;
+    //std::vector<R3S::R3S_key_t*> keys;
+
+    R3S::R3S_key_t* keys;
+    unsigned n_keys;
 
     RSSConfig() {}
-public:
 
-    const std::vector<R3S::R3S_opt_t>& get_options() { return options; }
-    R3S::R3S_key_t&& get_key() { return std::forward<R3S::R3S_key_t>(key); }
+    void add_option(const R3S::R3S_opt_t& option) { options.push_back(option); }
+
+    void set_keys(R3S::R3S_key_t* _keys, const unsigned& size) {
+      R3S::R3S_key_t* keys = new R3S::R3S_key_t[size]();
+
+      n_keys = size;
+      for (auto ikey = 0; ikey < size; ikey++) {
+        std::copy_n(keys[ikey], KEY_SIZE, _keys[ikey]);
+      }
+    }
+
+public:
+    const std::vector<R3S::R3S_opt_t>& get_options() const { return options; }
+    const unsigned& get_n_keys() const { return n_keys; }
+
+    R3S::R3S_key_t&& get_key(unsigned i) const {
+      assert(i < n_keys);
+      return std::forward<R3S::R3S_key_t>(keys[i]);
+    }
 
     friend class RSSConfigBuilder;
+
+    ~RSSConfig() {
+      delete[] keys;
+    }
 };
 
 }

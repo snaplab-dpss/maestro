@@ -35,15 +35,6 @@ bool RSSConfigBuilder::is_access_pair_already_stored(
 }
 
 void RSSConfigBuilder::load_rss_config_options() {
-  for (const auto &option : rss_config.options)
-    R3S_cfg_load_opt(&cfg, option);
-
-  Logger::debug() << "\nR3S configuration:"
-                  << "\n";
-  Logger::debug() << R3S_cfg_to_string(cfg) << "\n";
-}
-
-void RSSConfigBuilder::find_compatible_rss_config_options() {
   if (unique_packet_fields_dependencies.size() == 0) {
     Logger::warn()
         << "[WARNING] No dependencies on packet fields. Nothing we can do :("
@@ -58,7 +49,10 @@ void RSSConfigBuilder::find_compatible_rss_config_options() {
   R3S_opts_from_pfs(&unique_packet_fields_dependencies[0],
                     unique_packet_fields_dependencies.size(), &opts, &opts_sz);
 
-  rss_config.options = std::vector<R3S::R3S_opt_t>(opts, opts + opts_sz);
+  for (unsigned iopt = 0; iopt < opts_sz; iopt++) {
+    rss_config.add_option(opts[iopt]);
+    R3S_cfg_load_opt(&cfg, opts[iopt]);
+  }
 }
 
 void RSSConfigBuilder::load_solver_constraints_generators() {
@@ -69,37 +63,54 @@ void RSSConfigBuilder::load_solver_constraints_generators() {
   solver_constraints_generators[0] = &RSSConfigBuilder::make_solver_constraints;
 }
 
-void RSSConfigBuilder::build() {
-  R3S::R3S_key_t &key = rss_config.key;
-  R3S::R3S_status_t status;
-  std::vector<R3S::R3S_cnstrs_func> solver_constraints;
+int RSSConfigBuilder::get_device_index(unsigned int device) const {
+  auto it = std::find(unique_devices.begin(), unique_devices.end(), device);
 
-  solver_constraints.push_back(&RSSConfigBuilder::make_solver_constraints);
+  if (it != unique_devices.end())
+    return std::distance(unique_devices.begin(), it);
+
+  return -1;
+}
+
+void RSSConfigBuilder::build_rss_config() {
+  R3S::R3S_key_t* keys = new R3S::R3S_key_t[unique_devices.size()]();
+  R3S::R3S_status_t status;
 
   Logger::log() << "Running the solver now. This might take a while...";
   Logger::log() << "\n";
 
-  status = R3S::R3S_keys_fit_cnstrs(cfg, &solver_constraints[0], &key);
+  status = R3S::R3S_keys_fit_cnstrs(cfg, &RSSConfigBuilder::make_solver_constraints, keys);
 
   if (status != R3S::R3S_STATUS_SUCCESS) {
     Logger::error() << "Error fitting keys to constraints ";
     Logger::error() << "(status " << R3S_status_to_string(status) << ")";
     Logger::error() << "\n";
 
+    delete[] keys;
     exit(1);
   }
+
+  rss_config.set_keys(keys, unique_devices.size());
+
+  delete[] keys;
 }
 
 std::pair<R3S::R3S_packet_t, R3S::R3S_packet_t>
-RSSConfigBuilder::generate_packets() {
+RSSConfigBuilder::generate_packets(unsigned device1, unsigned device2) {
   R3S::R3S_packet_t p1, p2;
   R3S::R3S_status_t status;
+  R3S::R3S_packet_from_cnstrs_data_t data;
 
   R3S_packet_rand(cfg, &p1);
 
-  if ((status = R3S_packet_from_cnstrs(
-           cfg, p1, &RSSConfigBuilder::make_solver_constraints, &p2)) !=
-      R3S::R3S_STATUS_SUCCESS) {
+  data.constraints = &RSSConfigBuilder::make_solver_constraints;
+  data.key_id_in = device1;
+  data.key_id_out = device2;
+  data.packet_in = p1;
+
+  status = R3S_packet_from_cnstrs(cfg, data, &p2);
+
+  if (status != R3S::R3S_STATUS_SUCCESS) {
     Logger::error() << "Error generating packet from constraints ";
     Logger::error() << "(status " << R3S_status_to_string(status) << ")";
     Logger::error() << "\n";
@@ -135,7 +146,6 @@ R3S::Z3_ast RSSConfigBuilder::ast_replace(R3S::Z3_context ctx, R3S::Z3_ast root,
 
 R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
     R3S::R3S_cfg_t cfg, R3S::R3S_packet_ast_t p1, R3S::R3S_packet_ast_t p2) {
-
   std::vector<Constraint> constraints =
       *((std::vector<Constraint> *)R3S_get_user_data(cfg));
 
@@ -151,6 +161,12 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
 
   bool constraint_incompatible_with_current_opt = false;
   for (auto &constraint : constraints) {
+    auto first_device = constraint.get_first_access().get_device();
+    auto second_device = constraint.get_second_access().get_device();
+
+    if (p1.key_id != first_device || p2.key_id != second_device)
+      continue;
+
     R3S::Z3_ast &constraint_expression = constraint.get_expression();
 
     for (const auto &packet_field_expr_value : constraint.get_packet_fields()) {
@@ -211,16 +227,20 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
     generated_constraints.push_back(constraint_expression);
 
     Logger::debug() << "\n";
-    Logger::debug() << "================================================="
-                    << "\n";
+    Logger::debug() << "=================================================";
+    Logger::debug() << "\n";
 
     Logger::debug() << "\n";
-    Logger::debug() << "[Packet options]"
-                    << "\n";
-    Logger::debug() << "p1 option: " << R3S_opt_to_string(p1.loaded_opt.opt)
-                    << "\n";
-    Logger::debug() << "p2 option: " << R3S_opt_to_string(p2.loaded_opt.opt)
-                    << "\n";
+    Logger::debug() << "[Packet info]";
+    Logger::debug() << "\n";
+    Logger::debug() << "p1 option: " << R3S_opt_to_string(p1.loaded_opt.opt);
+    Logger::debug() << "\n";
+    Logger::debug() << "p1 device: " << p1.key_id;
+    Logger::debug() << "\n";
+    Logger::debug() << "p2 option: " << R3S_opt_to_string(p2.loaded_opt.opt);
+    Logger::debug() << "\n";
+    Logger::debug() << "p2 device: " << p2.key_id;
+    Logger::debug() << "\n";
 
     Logger::debug() << "\n";
     Logger::debug() << "[Access]"
@@ -271,15 +291,22 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
     Logger::debug() << "\n";
   }
 
+  if (generated_constraints.size() == 0)
+    return NULL;
+
+  Logger::debug() << "\n";
+  Logger::debug() << "=================================================";
+  Logger::debug() << "\n";
+  Logger::debug() << "Generated constraints: " << generated_constraints.size();
+  Logger::debug() << "\n";
+
   R3S::Z3_ast final_constraint;
   
   if (generated_constraints.size() > 1) {
     final_constraint = Z3_simplify(cfg.ctx, Z3_mk_and(
       cfg.ctx, generated_constraints.size(), &generated_constraints[0]));
-  } else if (generated_constraints.size() == 1) {
-    final_constraint = generated_constraints[0];
   } else {
-    final_constraint = NULL;
+    final_constraint = generated_constraints[0];
   }
 
   Logger::debug() << "[Final constraint]";

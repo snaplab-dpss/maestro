@@ -111,7 +111,6 @@ void Parser::report() {
       std::pair<unsigned int, PacketDependencyIncompatible> pair(access.get_id(), incompatible_dependency);
       auto found_it = std::find(incompatible_dependency_id_pairs.begin(), incompatible_dependency_id_pairs.end(), pair);
       if (found_it != incompatible_dependency_id_pairs.end()) continue;
-      if (incompatible_dependency.get_ignore()) continue;
 
       Logger::error() << "Incompatible dependency (access id ";
       Logger::error() << access.get_id();

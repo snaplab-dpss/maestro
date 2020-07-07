@@ -26,9 +26,9 @@ private:
     RSSConfig rss_config;
 
 private:
-    void find_compatible_rss_config_options();
     void load_rss_config_options();
     void load_solver_constraints_generators();
+    int get_device_index(unsigned int device) const;
 
     void merge_unique_packet_field_dependencies(const std::vector<R3S::R3S_pf_t>& packet_fields);
     bool is_access_pair_already_stored(const std::pair<LibvigAccess, LibvigAccess>& pair);
@@ -39,6 +39,8 @@ public:
         std::vector<RawConstraint> raw_constraints
     ) {
         R3S_cfg_init(&cfg);
+
+        //cfg.n_procs = 1;
 
         for (const auto& raw_constraint : raw_constraints) {
             LibvigAccess& first = LibvigAccess::find_by_id(accesses, raw_constraint.get_first_access_id());
@@ -78,15 +80,17 @@ public:
         Logger::log() << "\n";
         Logger::log() << "Devices:";
         Logger::log() << "\n";
-        for (auto& device : unique_devices) {
+        for (const auto& device : unique_devices) {
             Logger::log() << "  " << device;
             Logger::log() << "\n";
         }
 
-        find_compatible_rss_config_options();
+        cfg.n_keys = unique_devices.size();
         load_rss_config_options();
 
         R3S_set_user_data(&cfg, (void *) &constraints);
+
+        Logger::log() << "\nR3S configuration:\n" << R3S::R3S_cfg_to_string(cfg) << "\n";
     }
 
     const R3S::R3S_cfg_t& get_cfg() const { return cfg; }
@@ -96,8 +100,8 @@ public:
     static R3S::Z3_ast ast_replace(R3S::Z3_context ctx, R3S::Z3_ast root, R3S::Z3_ast target, R3S::Z3_ast dst);
     static R3S::Z3_ast make_solver_constraints(R3S::R3S_cfg_t cfg, R3S::R3S_packet_ast_t p1, R3S::R3S_packet_ast_t p2);
 
-    void build();
-    std::pair<R3S::R3S_packet_t, R3S::R3S_packet_t> generate_packets();
+    void build_rss_config();
+    std::pair<R3S::R3S_packet_t, R3S::R3S_packet_t> generate_packets(unsigned device1, unsigned device2);
 };
 
 }
