@@ -16,7 +16,6 @@ namespace ParallelSynthesizer {
 class RSSConfig {
 private:
     std::vector<R3S::R3S_opt_t> options;
-    //std::vector<R3S::R3S_key_t*> keys;
 
     R3S::R3S_key_t* keys;
     unsigned n_keys;
@@ -26,11 +25,11 @@ private:
     void add_option(const R3S::R3S_opt_t& option) { options.push_back(option); }
 
     void set_keys(R3S::R3S_key_t* _keys, const unsigned& size) {
-      R3S::R3S_key_t* keys = new R3S::R3S_key_t[size]();
+      keys = new R3S::R3S_key_t[size]();
 
       n_keys = size;
       for (auto ikey = 0; ikey < size; ikey++) {
-        std::copy_n(keys[ikey], KEY_SIZE, _keys[ikey]);
+        std::copy_n(_keys[ikey], KEY_SIZE, keys[ikey]);
       }
     }
 
@@ -49,5 +48,4 @@ public:
       delete[] keys;
     }
 };
-
 }

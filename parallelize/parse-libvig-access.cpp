@@ -20,7 +20,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  Logger::MINIMUM_LOG_LEVEL = Logger::Level::LOG;
+  Logger::MINIMUM_LOG_LEVEL = Logger::Level::WARNING;
 
   char *libvig_access_out = argv[1];
 
@@ -54,5 +54,6 @@ int main(int argc, char *argv[]) {
 
   for (auto i = 0; i < config.get_n_keys(); i++) {
     Logger::log() << R3S::R3S_key_to_string(config.get_key(i));
+    Logger::log() << "\n";
   }
 }

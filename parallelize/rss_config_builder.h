@@ -38,9 +38,9 @@ public:
         std::vector<LibvigAccess>  accesses,
         std::vector<RawConstraint> raw_constraints
     ) {
-        R3S_cfg_init(&cfg);
-
-        //cfg.n_procs = 1;
+        R3S::R3S_cfg_init(&cfg);
+        R3S::Z3_context ctx = R3S::R3S_cfg_get_z3_context(cfg);
+        //R3S::R3S_cfg_set_skew_analysis(cfg, false);
 
         for (const auto& raw_constraint : raw_constraints) {
             LibvigAccess& first = LibvigAccess::find_by_id(accesses, raw_constraint.get_first_access_id());
@@ -65,7 +65,7 @@ public:
             merge_unique_packet_field_dependencies(first.get_unique_packet_fields());
             merge_unique_packet_field_dependencies(second.get_unique_packet_fields());
             
-            constraints.emplace_back(first, second, cfg.ctx, raw_constraint);
+            constraints.emplace_back(first, second, ctx, raw_constraint);
             unique_access_pairs.push_back(access);
         }
 
@@ -73,7 +73,7 @@ public:
         Logger::log() << "Packet field dependencies:";
         Logger::log() << "\n";
         for (auto& pf : unique_packet_fields_dependencies) {
-            Logger::log() << "  " << R3S_pf_to_string(pf);
+            Logger::log() << "  " << R3S::R3S_pf_to_string(pf);
             Logger::log() << "\n";
         }
 
@@ -85,10 +85,10 @@ public:
             Logger::log() << "\n";
         }
 
-        cfg.n_keys = unique_devices.size();
+        R3S::R3S_cfg_set_number_of_keys(cfg, unique_devices.size());
         load_rss_config_options();
 
-        R3S_set_user_data(&cfg, (void *) &constraints);
+        R3S::R3S_cfg_set_user_data(cfg, (void *) &constraints);
 
         Logger::log() << "\nR3S configuration:\n" << R3S::R3S_cfg_to_string(cfg) << "\n";
     }

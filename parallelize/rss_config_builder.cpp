@@ -46,17 +46,17 @@ void RSSConfigBuilder::load_rss_config_options() {
   R3S::R3S_opt_t *opts;
   size_t opts_sz;
 
-  R3S_opts_from_pfs(&unique_packet_fields_dependencies[0],
+  R3S::R3S_opts_from_pfs(&unique_packet_fields_dependencies[0],
                     unique_packet_fields_dependencies.size(), &opts, &opts_sz);
 
   for (unsigned iopt = 0; iopt < opts_sz; iopt++) {
     rss_config.add_option(opts[iopt]);
-    R3S_cfg_load_opt(&cfg, opts[iopt]);
+    R3S::R3S_cfg_load_opt(cfg, opts[iopt]);
   }
 }
 
 void RSSConfigBuilder::load_solver_constraints_generators() {
-  solver_constraints_generators.reserve(cfg.n_keys);
+  solver_constraints_generators.reserve(cfg->n_keys);
 
   // TODO: more than 1 key scenario
 
@@ -90,7 +90,7 @@ void RSSConfigBuilder::build_rss_config() {
     exit(1);
   }
 
-  rss_config.set_keys(keys, unique_devices.size());
+  rss_config.set_keys(keys, cfg->n_keys);
 
   delete[] keys;
 }
@@ -147,17 +147,10 @@ R3S::Z3_ast RSSConfigBuilder::ast_replace(R3S::Z3_context ctx, R3S::Z3_ast root,
 R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
     R3S::R3S_cfg_t cfg, R3S::R3S_packet_ast_t p1, R3S::R3S_packet_ast_t p2) {
   std::vector<Constraint> constraints =
-      *((std::vector<Constraint> *)R3S_get_user_data(cfg));
+      *((std::vector<Constraint> *)R3S::R3S_cfg_get_user_data(cfg));
 
   std::vector<R3S::Z3_ast> generated_constraints;
-
-  Logger::debug() << "\n";
-  Logger::debug() << "*************************************************";
-  Logger::debug() << "\n";
-  Logger::debug() << "*            Constraints generator              *";
-  Logger::debug() << "\n";
-  Logger::debug() << "*************************************************";
-  Logger::debug() << "\n";
+  R3S::Z3_context ctx = R3S::R3S_cfg_get_z3_context(cfg);
 
   bool constraint_incompatible_with_current_opt = false;
   for (auto &constraint : constraints) {
@@ -196,24 +189,24 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
         }
 
         unsigned int packet_field_ast_size =
-            Z3_get_bv_sort_size(cfg.ctx, Z3_get_sort(cfg.ctx, packet_field_ast));
+            Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, packet_field_ast));
 
         unsigned int high =
             packet_field_ast_size - packet_dependency_value.get_bytes() * 8 - 1;
         unsigned int low = high - 7;
 
-        target_ast = Z3_mk_extract(cfg.ctx, high, low, packet_field_ast);
+        target_ast = Z3_mk_extract(ctx, high, low, packet_field_ast);
       }
 
       else {
         target_ast = Z3_mk_bvxor(
-          cfg.ctx,
+          ctx,
           packet_dependency_expr.get_expression(),
           packet_dependency_expr.get_expression());        
       }
 
       constraint_expression = ast_replace(
-          cfg.ctx, constraint_expression,
+          ctx, constraint_expression,
           packet_dependency_expr.get_expression(), target_ast);
     }
 
@@ -222,26 +215,11 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
       continue;
     }
 
-    constraint_expression = Z3_simplify(cfg.ctx, constraint_expression);
+    constraint_expression = Z3_simplify(ctx, constraint_expression);
 
     generated_constraints.push_back(constraint_expression);
 
-    Logger::debug() << "\n";
-    Logger::debug() << "=================================================";
-    Logger::debug() << "\n";
-
-    Logger::debug() << "\n";
-    Logger::debug() << "[Packet info]";
-    Logger::debug() << "\n";
-    Logger::debug() << "p1 option: " << R3S_opt_to_string(p1.loaded_opt.opt);
-    Logger::debug() << "\n";
-    Logger::debug() << "p1 device: " << p1.key_id;
-    Logger::debug() << "\n";
-    Logger::debug() << "p2 option: " << R3S_opt_to_string(p2.loaded_opt.opt);
-    Logger::debug() << "\n";
-    Logger::debug() << "p2 device: " << p2.key_id;
-    Logger::debug() << "\n";
-
+    /*
     Logger::debug() << "\n";
     Logger::debug() << "[Access]"
                     << "\n";
@@ -287,31 +265,43 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
     Logger::debug() << "\n";
     Logger::debug() << "[Constraint]"
                     << "\n";
-    Logger::debug() << Z3_ast_to_string(cfg.ctx, constraint_expression);
+    Logger::debug() << Z3_ast_to_string(ctx, constraint_expression);
     Logger::debug() << "\n";
+    */
   }
 
   if (generated_constraints.size() == 0)
     return NULL;
 
-  Logger::debug() << "\n";
-  Logger::debug() << "=================================================";
-  Logger::debug() << "\n";
-  Logger::debug() << "Generated constraints: " << generated_constraints.size();
-  Logger::debug() << "\n";
-
   R3S::Z3_ast final_constraint;
   
   if (generated_constraints.size() > 1) {
-    final_constraint = Z3_simplify(cfg.ctx, Z3_mk_and(
-      cfg.ctx, generated_constraints.size(), &generated_constraints[0]));
+    final_constraint = Z3_simplify(ctx, Z3_mk_and(
+      ctx, generated_constraints.size(), &generated_constraints[0]));
   } else {
     final_constraint = generated_constraints[0];
   }
 
+  Logger::debug() << "\n";
+  Logger::debug() << "=================================================";
+  Logger::debug() << "\n";
+
+  Logger::debug() << "\n";
+  Logger::debug() << "[Packet info]";
+  Logger::debug() << "\n";
+  Logger::debug() << "p1 option: " << R3S_opt_to_string(p1.loaded_opt.opt);
+  Logger::debug() << "\n";
+  Logger::debug() << "p1 device: " << p1.key_id;
+  Logger::debug() << "\n";
+  Logger::debug() << "p2 option: " << R3S_opt_to_string(p2.loaded_opt.opt);
+  Logger::debug() << "\n";
+  Logger::debug() << "p2 device: " << p2.key_id;
+  Logger::debug() << "\n";
+  Logger::debug() << "\n";
+
   Logger::debug() << "[Final constraint]";
   Logger::debug() << "\n";
-  Logger::debug() << Z3_ast_to_string(cfg.ctx, final_constraint) << "\n";
+  Logger::debug() << Z3_ast_to_string(ctx, final_constraint) << "\n";
 
   return final_constraint;
 }
