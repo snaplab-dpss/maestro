@@ -44,6 +44,7 @@ int main(int argc, char *argv[]) {
     Logger::log() << "\n";
   }
 
+  /*
   for (unsigned i = 0; i < 50; i++) {
     auto packets = rss_cfg_builder.generate_packets(1, 0);
 
@@ -73,6 +74,5 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
   }
-
-  Logger::log() << "finishing...\n";
+  */
 }
