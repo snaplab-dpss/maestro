@@ -101,24 +101,27 @@ RSSConfigBuilder::generate_packets(unsigned device1, unsigned device2) {
   R3S::R3S_status_t status;
   R3S::R3S_packet_from_cnstrs_data_t data;
 
-  R3S_packet_rand(cfg, &p1);
+  R3S::R3S_packet_init(&p1);
+  R3S::R3S_packet_init(&p2);
+
+  R3S::R3S_packet_rand(cfg, &p1);
 
   data.constraints = &RSSConfigBuilder::make_solver_constraints;
-  data.key_id_in = device1;
-  data.key_id_out = device2;
-  data.packet_in = p1;
+  data.key_id_in   = device1;
+  data.key_id_out  = device2;
+  data.packet_in   = p1;
 
-  status = R3S_packet_from_cnstrs(cfg, data, &p2);
+  status = R3S::R3S_packet_from_cnstrs(cfg, data, &p2);
 
   if (status != R3S::R3S_STATUS_SUCCESS) {
     Logger::error() << "Error generating packet from constraints ";
-    Logger::error() << "(status " << R3S_status_to_string(status) << ")";
+    Logger::error() << "(status " << R3S::R3S_status_to_string(status) << ")";
     Logger::error() << "\n";
 
     exit(1);
   }
 
-  return std::pair<R3S::R3S_packet_t, R3S::R3S_packet_t>(p1, p2);
+  return std::make_pair(p1, p2);
 }
 
 R3S::Z3_ast RSSConfigBuilder::ast_replace(R3S::Z3_context ctx, R3S::Z3_ast root,

@@ -40,7 +40,7 @@ public:
     ) {
         R3S::R3S_cfg_init(&cfg);
         R3S::Z3_context ctx = R3S::R3S_cfg_get_z3_context(cfg);
-        //R3S::R3S_cfg_set_skew_analysis(cfg, false);
+        R3S::R3S_cfg_set_skew_analysis(cfg, false);
 
         for (const auto& raw_constraint : raw_constraints) {
             LibvigAccess& first = LibvigAccess::find_by_id(accesses, raw_constraint.get_first_access_id());
@@ -102,6 +102,10 @@ public:
 
     void build_rss_config();
     std::pair<R3S::R3S_packet_t, R3S::R3S_packet_t> generate_packets(unsigned device1, unsigned device2);
+
+    ~RSSConfigBuilder() {
+        R3S::R3S_cfg_delete(cfg);
+    }
 };
 
 }

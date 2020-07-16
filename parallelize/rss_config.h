@@ -20,7 +20,9 @@ private:
     R3S::R3S_key_t* keys;
     unsigned n_keys;
 
-    RSSConfig() {}
+    RSSConfig() {
+        keys = NULL;
+    }
 
     void add_option(const R3S::R3S_opt_t& option) { options.push_back(option); }
 
@@ -37,15 +39,15 @@ public:
     const std::vector<R3S::R3S_opt_t>& get_options() const { return options; }
     const unsigned& get_n_keys() const { return n_keys; }
 
-    R3S::R3S_key_t&& get_key(unsigned i) const {
-      assert(i < n_keys);
-      return std::forward<R3S::R3S_key_t>(keys[i]);
+    R3S::R3S_key_t*& get_keys() {
+      return keys;
     }
 
     friend class RSSConfigBuilder;
 
     ~RSSConfig() {
-      delete[] keys;
+      if (keys != NULL)
+        delete[] keys;
     }
 };
 }
