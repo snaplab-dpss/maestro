@@ -32,7 +32,7 @@ make -f ../parallelize/Makefile > /dev/null
 echo "[*] Building load-call-paths"
 
 cd "$KLEE_DIR"
-./build.sh > "$BUILD/klee-build-log.txt" 2>&1
+./build.sh > /dev/null
 ln -sf "$KLEE_DIR/build/bin/load-call-paths" "$BUILD/load-call-paths"
 cd "$NF_DIR"
 
@@ -43,8 +43,8 @@ cd "$NF_DIR"
 echo "[*] Parsing call paths"
 CALL_PATHS=$NF_DIR/klee-last/test*.call_path
 "$BUILD/load-call-paths" $CALL_PATHS \
-    2> "$BUILD/livbig-access-log.txt" \
-    > "$BUILD/livbig-access-out.txt"
+    2> "$BUILD/report-log.txt" \
+    > "$BUILD/report.lva"
 
 echo "[*] Parsing libvig report"
-"$BUILD/parse-libvig-access" "$BUILD/livbig-access-out.txt"
+"$BUILD/parse-libvig-access" "$BUILD/report.lva"
