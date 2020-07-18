@@ -10,8 +10,9 @@ const std::string ID = "id";
 const std::string DEVICE = "device";
 const std::string OBJECT = "object";
 const std::string LAYER = "layer";
-const std::string PROTOCOL = "proto";
-const std::string DEPENDENCY = "dep";
+const std::string PROTOCOL = "protocol";
+const std::string DEPENDENCY = "dependency";
+const std::string OPERATION = "operation";
 
 const std::string CONSTRAINT_START = "BEGIN CONSTRAINT";
 const std::string CONSTRAINT_END = "END CONSTRAINT";
@@ -21,6 +22,14 @@ const std::string SECOND = "second";
 
 const std::string STATEMENT_START = "BEGIN SMT";
 const std::string STATEMENT_END = "END SMT";
+
+namespace Operations {
+
+const std::string READ = "read";
+const std::string WRITE = "write";
+const std::string NOP = "nop";
+
+}
 
 }
 }

@@ -50,9 +50,9 @@ void LibvigAccess::add_dependency(const PacketDependency &dependency) {
   if (it != packet_dependencies.end())
     return;
 
-  unsigned int offset = dependency.get_offset();
-  unsigned int layer = dependency.get_layer();
-  unsigned int protocol = dependency.get_protocol();
+  auto offset = dependency.get_offset();
+  auto layer = dependency.get_layer();
+  auto protocol = dependency.get_protocol();
 
   // IPv4
   if (layer == 3 && protocol == 0x0800) {

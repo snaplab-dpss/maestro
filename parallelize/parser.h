@@ -11,18 +11,24 @@ namespace ParallelSynthesizer {
 class Parser {
   
 private:
+  std::vector<std::string> state_content;
+  unsigned line_counter;
+
   std::vector<LibvigAccess>  accesses;
   std::vector<RawConstraint> raw_constraints;
+
 
 private:
   LibvigAccess& get_or_push_unique_access(const LibvigAccess& access);
   void push_unique_raw_constraint(const RawConstraint& raw_constraint);
 
-  std::istringstream consume_token(std::string& line, const std::string& token);
-  void parse_access(std::vector<std::string>& state_content);
-  void parse_constraint(std::vector<std::string>& state_content);
+  std::istringstream consume_token(const std::string& token);
+  void parse_access();
+  void parse_constraint();
 
 public:
+  Parser() : line_counter(0) {}
+
   const std::vector<LibvigAccess>& get_accesses() const { return accesses; }
 
   const std::vector<RawConstraint>&

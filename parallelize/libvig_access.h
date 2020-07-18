@@ -10,6 +10,9 @@ namespace R3S {
 #include <r3s.h>
 }
 
+#include "logger.h"
+#include "tokens.h"
+
 namespace ParallelSynthesizer {
 
 class PacketDependency {
@@ -115,11 +118,16 @@ public:
 };
 
 class LibvigAccess {
+public:
+    enum Operation {
+        READ, WRITE, NOP
+    };
 
 private:
   unsigned int id;
   unsigned int device;
   unsigned int object;
+  Operation operation;
 
   /*
    * There should never be repeating elements inside this vector.
@@ -134,12 +142,12 @@ private:
 
 public:
   LibvigAccess(const unsigned int &_id, const unsigned int &_device,
-               const unsigned int &_object)
-      : id(_id), device(_device), object(_object) {}
+               const unsigned int &_object, const Operation& _operation)
+      : id(_id), device(_device), object(_object), operation(_operation) {}
 
   LibvigAccess(const LibvigAccess &access)
       : LibvigAccess(access.get_id(), access.get_device(),
-                     access.get_object()) {
+                     access.get_object(), access.get_operation()) {
     for (const auto &dependency : access.get_dependencies())
       packet_dependencies.emplace_back(dependency);
 
@@ -150,6 +158,7 @@ public:
   const unsigned int &get_id() const { return id; }
   const unsigned int &get_device() const { return device; }
   const unsigned int &get_object() const { return object; }
+  const Operation &get_operation() const { return operation; }
 
   const std::vector<PacketDependencyProcessed> &get_dependencies() const {
     return packet_dependencies;
@@ -185,8 +194,29 @@ public:
 
   static LibvigAccess &find_by_id(std::vector<LibvigAccess> &accesses,
                                   const unsigned int &id);
+
   static bool content_equal(const LibvigAccess &access1,
                             const LibvigAccess &access2);
+
+  static Operation parse_operation_token(std::string operation) {
+      if (operation == Tokens::Operations::WRITE) {
+        return Operation::WRITE;
+      }
+
+      if (operation == Tokens::Operations::READ) {
+        return Operation::READ;
+      }
+
+      if (operation == Tokens::Operations::NOP) {
+        return Operation::NOP;
+      }
+
+      Logger::error() << "Invalid operation token \"";
+      Logger::error() << operation;
+      Logger::error() << "\n";
+
+      exit(1);
+  }
 };
 
 } // namespace ParallelSynthesizer

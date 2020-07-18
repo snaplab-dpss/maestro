@@ -20,7 +20,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  Logger::MINIMUM_LOG_LEVEL = Logger::Level::LOG;
+  Logger::MINIMUM_LOG_LEVEL = Logger::Level::DEBUG;
 
   char *libvig_access_out = argv[1];
 
