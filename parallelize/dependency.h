@@ -18,13 +18,10 @@ protected:
     bool processed;
     bool packet_related;
 
-    Dependency()
-        : ignore(false), rss_compatible(false), processed(false), packet_related(false) {}
-
     Dependency(bool _ignore, bool _rss_compatible, bool _processed, bool _packet_related)
         : ignore(_ignore), rss_compatible(_rss_compatible), processed(_processed), packet_related(_packet_related) {}
 
-    virtual std::ostream& print(std::ostream&) const = 0;
+    virtual std::ostream& print(std::ostream& os) const = 0;
 
 public:
     bool should_ignore() const { return ignore; }
@@ -36,6 +33,8 @@ public:
     virtual Dependency* clone() const = 0;
 
     friend std::ostream& operator<<(std::ostream& os, const Dependency& dependency);
+
+    virtual ~Dependency() {}
 };
 
 class PacketDependency : public Dependency {
@@ -58,7 +57,7 @@ public:
   const unsigned int &get_protocol() const { return protocol; }
   const unsigned int &get_offset() const { return offset; }
 
-  std::unique_ptr<const Dependency> get_unique() const override {
+  virtual std::unique_ptr<const Dependency> get_unique() const override {
     return std::unique_ptr<const Dependency>(new PacketDependency(*this));
   }
 
@@ -119,7 +118,13 @@ public:
       return new PacketDependencyIncompatible(*this);
   }
 
+  std::unique_ptr<const Dependency> get_unique() const override {
+    return std::unique_ptr<const Dependency>(new PacketDependencyIncompatible(*this));
+  }
+
   virtual std::ostream& print(std::ostream& os) const override {
+      PacketDependency::print(os);
+
       os << " [incompatible] ";
       os << description;
 
@@ -167,7 +172,13 @@ public:
       return new PacketDependencyProcessed(*this);
   }
 
+  std::unique_ptr<const Dependency> get_unique() const override {
+    return std::unique_ptr<const Dependency>(new PacketDependencyProcessed(*this));
+  }
+
   virtual std::ostream& print(std::ostream& os) const override {
+      PacketDependency::print(os);
+
       if (!ignore) {
           os << " (";
           os << R3S::R3S_pf_to_string(packet_field);

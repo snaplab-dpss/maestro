@@ -8,40 +8,35 @@
 namespace ParallelSynthesizer {
 
 void LibvigAccess::add_dependency(const Dependency* dependency) {
-    Logger::debug() << "Adding dependency:";
-    Logger::debug() << "\n";
-    Logger::debug() << *dependency;
-    Logger::debug() << "\n";
-    Logger::debug() << "\n";
+    assert(dependency && "invalid dependency");
 
     if (!dependency->is_processed() && dependency->is_packet_related()) {
       const auto packet_dependency = dynamic_cast<const PacketDependency*>(dependency);
       assert(packet_dependency);
       process_packet_dependency(packet_dependency);
+    } else if (!dependency->is_processed() && !dependency->is_packet_related()) {
+      // TODO:
+      assert(false && "not implemented");
     } else {
-      dependencies.emplace_back(dependency);
+      dependencies.emplace_back(dependency->clone());
     }
 }
 
 void LibvigAccess::process_packet_dependency(const PacketDependency* dependency_ptr) {
-  const auto dependency = *dependency_ptr;
+  assert(dependency_ptr && "invalid dependency");
 
-  Logger::debug() << "Processing and adding dependency:";
-  Logger::debug() << "\n";
-  Logger::debug() << dependency;
-  Logger::debug() << "\n";
-  Logger::debug() << "\n";
+  const auto dependency = *dependency_ptr;
 
   auto it = std::find_if(
     dependencies.begin(),
     dependencies.end(),
-    [&](std::unique_ptr<const Dependency>& _dependency) -> bool {
+    [&](const std::unique_ptr<const Dependency>& _dependency) -> bool {
       if (!_dependency->is_processed()) return false;
       if (!_dependency->is_packet_related()) return false;
 
-      Logger::warn() << "trying this: ";
-      Logger::warn() << *_dependency;
-      Logger::warn() << "\n";
+      // Logger::warn() << "trying this: ";
+      // Logger::warn() << *_dependency.get();
+      // Logger::warn() << "\n";
 
       const auto _packet_dependency = dynamic_cast<const PacketDependency*>(_dependency.get());
       assert(_packet_dependency);
@@ -49,7 +44,6 @@ void LibvigAccess::process_packet_dependency(const PacketDependency* dependency_
       return (*_packet_dependency) == dependency;
     }
   );
-
 
   if (it != dependencies.end())
     return;
@@ -179,7 +173,7 @@ std::ostream& operator<<(std::ostream& os, const LibvigAccess& access) {
     for (const auto& dep : access.dependencies) {
           os << "\n";
           os << "  ";
-          os << dep.get();
+          os << *dep.get();
     }
 
     return os;

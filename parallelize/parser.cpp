@@ -192,14 +192,6 @@ void Parser::parse(std::string filepath) {
 
       line_counter++;
       state = State::Init;
-
-      Logger::debug() << "\n";
-      Logger::debug() << "==============================";
-      Logger::debug() << "\n";
-      Logger::debug() << "line " << line_counter;
-      Logger::debug() << "\n";
-      Logger::debug() << "==============================";
-      Logger::debug() << "\n";
     } else if (line == Tokens::CONSTRAINT_END) {
       parse_constraint();
       state_content.clear();
