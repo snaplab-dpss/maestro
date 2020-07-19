@@ -111,7 +111,8 @@ void Parser::parse_access() {
     iss >> std::ws >> offset;
 
     PacketDependency dependency(layer, protocol, offset);
-    access.add_dependency(dependency);
+    auto unique = dependency.get_unique();
+    access.add_dependency(unique.get());
   }
 }
 
@@ -119,15 +120,22 @@ void Parser::report() {
   std::vector< std::pair<unsigned int, PacketDependencyIncompatible> > incompatible_dependency_id_pairs;
 
   for (const auto& access : accesses) {
-    for (const auto& incompatible_dependency : access.get_dependencies_incompatible()) {
-      std::pair<unsigned int, PacketDependencyIncompatible> pair(access.get_id(), incompatible_dependency);
+    for (const auto& dependency : access.get_dependencies()) {
+
+      if (dependency->is_rss_compatible() || dependency->should_ignore())
+        continue;
+
+      const auto& incompatible = dynamic_cast<const PacketDependencyIncompatible&>(*dependency);
+
+      std::pair<unsigned int, PacketDependencyIncompatible> pair(access.get_id(), incompatible);
       auto found_it = std::find(incompatible_dependency_id_pairs.begin(), incompatible_dependency_id_pairs.end(), pair);
       if (found_it != incompatible_dependency_id_pairs.end()) continue;
 
       Logger::error() << "Incompatible dependency (access id ";
       Logger::error() << access.get_id();
       Logger::error() << "): ";
-      Logger::error() << incompatible_dependency.get_description();
+      Logger::error() << "\n";
+      Logger::error() << incompatible;
       Logger::error() << "\n";
 
       incompatible_dependency_id_pairs.push_back(pair);
@@ -184,6 +192,14 @@ void Parser::parse(std::string filepath) {
 
       line_counter++;
       state = State::Init;
+
+      Logger::debug() << "\n";
+      Logger::debug() << "==============================";
+      Logger::debug() << "\n";
+      Logger::debug() << "line " << line_counter;
+      Logger::debug() << "\n";
+      Logger::debug() << "==============================";
+      Logger::debug() << "\n";
     } else if (line == Tokens::CONSTRAINT_END) {
       parse_constraint();
       state_content.clear();

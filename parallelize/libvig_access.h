@@ -12,115 +12,14 @@ namespace R3S {
 
 #include "logger.h"
 #include "tokens.h"
+#include "dependency.h"
 
 namespace ParallelSynthesizer {
-
-class PacketDependency {
-
-private:
-  unsigned int layer;
-  unsigned int protocol;
-  unsigned int offset;
-
-public:
-  PacketDependency(const unsigned int &_layer, const unsigned int &_protocol,
-                   const unsigned int &_offset)
-      : layer(_layer), protocol(_protocol), offset(_offset) {}
-
-  PacketDependency(const PacketDependency &pd)
-      : PacketDependency(pd.get_layer(), pd.get_protocol(), pd.get_offset()) {}
-
-  const unsigned int &get_layer() const { return layer; }
-  const unsigned int &get_protocol() const { return protocol; }
-  const unsigned int &get_offset() const { return offset; }
-
-  virtual bool has_valid_packet_field() const { return false; }
-
-  friend bool operator==(const PacketDependency &lhs,
-                         const PacketDependency &rhs);
-  friend bool operator<(const PacketDependency &lhs,
-                        const PacketDependency &rhs);
-};
-
-class PacketDependencyIncompatible : public PacketDependency {
-
-private:
-  std::string description;
-
-public:
-
-  PacketDependencyIncompatible(const PacketDependency &_pd,
-                               const std::string &_description)
-      : PacketDependency(_pd) {
-    description = _description;
-  }
-
-  PacketDependencyIncompatible(const PacketDependencyIncompatible &_pdi)
-      : PacketDependency(_pdi.get_layer(), _pdi.get_protocol(),
-                         _pdi.get_offset()) {
-    description = _pdi.get_description();
-  }
-
-  bool has_valid_packet_field() const override { return false; }
-  const std::string &get_description() const { return description; }
-
-  friend bool operator==(const PacketDependencyIncompatible &lhs,
-                         const PacketDependencyIncompatible &rhs);
-};
-
-class PacketDependencyProcessed : public PacketDependency {
-
-private:
-  R3S::R3S_pf_t packet_field;
-  unsigned int bytes;
-  bool ignore;
-
-public:
-  PacketDependencyProcessed(const PacketDependency &_pd,
-                            const unsigned int &_bytes)
-      : PacketDependency(_pd) {
-    ignore = true;
-    bytes = _bytes;
-  }
-  
-  PacketDependencyProcessed(const PacketDependency &_pd,
-                            const R3S::R3S_pf_t &_packet_field,
-                            const unsigned int &_bytes)
-      : PacketDependency(_pd) {
-    packet_field = _packet_field;
-    bytes = _bytes;
-    ignore = false;
-  }
-
-  PacketDependencyProcessed(const PacketDependencyProcessed &_pdp)
-      : PacketDependency(_pdp.get_layer(), _pdp.get_protocol(),
-                         _pdp.get_offset()) {
-    if (!_pdp.should_ignore()) {
-      packet_field = _pdp.get_packet_field();
-    }
-    
-    bytes = _pdp.get_bytes();
-    ignore = _pdp.should_ignore();
-  }
-
-  bool has_valid_packet_field() const override { return true; }
-
-  const R3S::R3S_pf_t &get_packet_field() const { 
-    assert(!ignore && "This packet field dependency should be ignored");
-    return packet_field;
-  }
-
-  const unsigned int &get_bytes() const { return bytes; }
-  const bool& should_ignore() const { return ignore; }
-
-  friend bool operator==(const PacketDependencyProcessed &lhs,
-                         const PacketDependencyProcessed &rhs);
-};
 
 class LibvigAccess {
 public:
     enum Operation {
-        READ, WRITE, NOP
+        READ, WRITE, NOP, INIT
     };
 
 private:
@@ -128,6 +27,8 @@ private:
   unsigned int device;
   unsigned int object;
   Operation operation;
+
+  bool are_dependencies_sorted;
 
   /*
    * There should never be repeating elements inside this vector.
@@ -137,22 +38,19 @@ private:
    * tendencies, and because this will not have many elements, I
    * decided to just use a vector.
    */
-  std::vector<PacketDependencyProcessed> packet_dependencies;
-  std::vector<PacketDependencyIncompatible> packet_dependencies_incompatible;
+  std::vector< std::unique_ptr<const Dependency> > dependencies;
 
 public:
   LibvigAccess(const unsigned int &_id, const unsigned int &_device,
                const unsigned int &_object, const Operation& _operation)
-      : id(_id), device(_device), object(_object), operation(_operation) {}
+      : id(_id), device(_device), object(_object),
+        operation(_operation), are_dependencies_sorted(false) {}
 
   LibvigAccess(const LibvigAccess &access)
       : LibvigAccess(access.get_id(), access.get_device(),
                      access.get_object(), access.get_operation()) {
     for (const auto &dependency : access.get_dependencies())
-      packet_dependencies.emplace_back(dependency);
-
-    for (const auto &dependency : access.get_dependencies_incompatible())
-      packet_dependencies_incompatible.emplace_back(dependency);
+      dependencies.emplace_back(dependency->clone());
   }
 
   const unsigned int &get_id() const { return id; }
@@ -160,22 +58,43 @@ public:
   const unsigned int &get_object() const { return object; }
   const Operation &get_operation() const { return operation; }
 
-  const std::vector<PacketDependencyProcessed> &get_dependencies() const {
-    return packet_dependencies;
+  const std::vector< std::unique_ptr<const Dependency> > &get_dependencies() const {
+    return dependencies;
   }
 
-  const std::vector<PacketDependencyIncompatible> &
-  get_dependencies_incompatible() const {
-    return packet_dependencies_incompatible;
+  void sort_dependencies() {
+      if (are_dependencies_sorted) return;
+
+      auto dependency_comparator = [](const std::unique_ptr<const Dependency>& d1, const std::unique_ptr<const Dependency>& d2) -> bool {
+        if (!d1->should_ignore()) return true;
+        if (!d1->is_processed()) return true;
+        if (!d1->is_rss_compatible()) return true;
+
+        if (!d2->should_ignore()) return false;
+        if (!d2->is_processed()) return false;
+        if (!d2->is_rss_compatible()) return false;
+
+        const auto& processed1 = dynamic_cast<const PacketDependencyProcessed*>(d1.get());
+        const auto& processed2 = dynamic_cast<const PacketDependencyProcessed*>(d2.get());
+
+        return (*processed1) < (*processed2);
+      };
+
+      std::sort(dependencies.begin(), dependencies.end(), dependency_comparator);
+
+      are_dependencies_sorted = true;
   }
 
   std::vector<R3S::R3S_pf_t> get_unique_packet_fields() const {
     std::vector<R3S::R3S_pf_t> packet_fields;
 
-    for (const auto &dependency : packet_dependencies) {
-      if (dependency.should_ignore()) continue;
+    for (const auto &dependency : dependencies) {
+      if (dependency->should_ignore()) continue;
+      if (!dependency->is_processed()) continue;
+      if (!dependency->is_rss_compatible()) continue;
 
-      auto packet_field = dependency.get_packet_field();
+      const auto packet_dependency_processed = dynamic_cast<const PacketDependencyProcessed*>(dependency.get());
+      auto packet_field = packet_dependency_processed->get_packet_field();
       auto found_it =
           std::find(packet_fields.begin(), packet_fields.end(), packet_field);
       if (found_it != packet_fields.end())
@@ -186,13 +105,12 @@ public:
     return packet_fields;
   }
 
-  void add_dependency(const PacketDependency &dependency);
-  void add_dependency(const PacketDependencyProcessed &dependency);
-  void add_dependency(const PacketDependencyIncompatible &dependency);
+  void add_dependency(const Dependency* dependency);
 
   friend bool operator==(const LibvigAccess &lhs, const LibvigAccess &rhs);
+  friend std::ostream& operator<<(std::ostream& os, const LibvigAccess& access);
 
-  static LibvigAccess &find_by_id(std::vector<LibvigAccess> &accesses,
+  static const LibvigAccess &find_by_id(const std::vector<LibvigAccess> &accesses,
                                   const unsigned int &id);
 
   static bool content_equal(const LibvigAccess &access1,
@@ -211,12 +129,19 @@ public:
         return Operation::NOP;
       }
 
+      if (operation == Tokens::Operations::INIT) {
+          return Operation::INIT;
+      }
+
       Logger::error() << "Invalid operation token \"";
       Logger::error() << operation;
       Logger::error() << "\n";
 
       exit(1);
   }
+
+private:
+  void process_packet_dependency(const PacketDependency* dependency);
 };
 
 } // namespace ParallelSynthesizer

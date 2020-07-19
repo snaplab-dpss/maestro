@@ -96,13 +96,13 @@ void Constraint::fill_packet_fields(R3S::Z3_ast &expr,
 }
 
 void Constraint::zip_packet_fields_expression_and_values(
-    const std::vector<PacketFieldExpression>& pfes) {
+  const std::vector<PacketFieldExpression>& pfes) {
 
-  auto first_deps = first.get_dependencies();
-  auto second_deps = second.get_dependencies();
+  first.sort_dependencies();
+  second.sort_dependencies();
 
-  std::sort(first_deps.begin(), first_deps.end());
-  std::sort(second_deps.begin(), second_deps.end());
+  const auto& first_deps = first.get_dependencies();
+  const auto& second_deps = second.get_dependencies();
 
   unsigned int smaller_packet_chunks_id = pfes[0].get_packet_chunks_id();
   for (const auto& pfe : pfes) {
@@ -119,18 +119,40 @@ void Constraint::zip_packet_fields_expression_and_values(
   std::sort(pfes_sorted_copy.begin(), pfes_sorted_copy.end());
 
   if (first_deps.size() + second_deps.size() != pfes_sorted_copy.size()) {
+
     Logger::error() << "\n";
     Logger::error() << "Total number of dependencies is different than ";
-    Logger::error() << "total number of available packet fields.";
+    Logger::error() << "total number of available expressions of packet fields.";
     Logger::error() << "\n";
+
     Logger::error() << "This is most likely caused by RSS incompatible packet fields.";
     Logger::error() << "\n";
-    Logger::error() << "Number of dependencies on first access:  " << first_deps.size();
+
     Logger::error() << "\n";
-    Logger::error() << "Number of dependencies on second access:  " << second_deps.size();
+    Logger::error() << "First access:";
     Logger::error() << "\n";
-    Logger::error() << "Number of packet fields: " << pfes_sorted_copy.size();
+    Logger::error() << first;
     Logger::error() << "\n";
+
+    Logger::error() << "\n";
+    Logger::error() << "Second access:";
+    Logger::error() << "\n";
+    Logger::error() << second;
+    Logger::error() << "\n";
+
+    Logger::error() << "\n";
+    Logger::error() << "Available expressions of packet fields";
+    Logger::error() << " (";
+    Logger::error() << pfes_sorted_copy.size();
+    Logger::error() << "):";
+    Logger::error() << "\n";
+
+    for (const auto& pfes_sorted_copy_el : pfes_sorted_copy) {
+        Logger::error() << "  ";
+        Logger::error() << R3S::Z3_ast_to_string(pfes_sorted_copy_el.get_context(), pfes_sorted_copy_el.get_expression());
+        Logger::error() << "\n";
+    }
+
     exit(1);
   }
 
@@ -139,19 +161,33 @@ void Constraint::zip_packet_fields_expression_and_values(
   for (auto i = 0; i < pfes_sorted_copy.size(); i++) {
     if (pfes_sorted_copy[i].get_packet_chunks_id() == smaller_packet_chunks_id) {
       assert(first_counter < first_deps.size() && "Overflow on first access dependencies.");
-      packet_fields.emplace_back(pfes_sorted_copy[i], first_deps[first_counter++]);
+      assert(first_deps[first_counter++]->is_packet_related());
+      const auto packet_dependency = dynamic_cast<const PacketDependency*>(first_deps[first_counter++].get());
+      packet_fields.emplace_back(pfes_sorted_copy[i], packet_dependency->clone());
     } else {
       assert(second_counter < second_deps.size() && "Overflow on second access dependencies.");
-      packet_fields.emplace_back(pfes_sorted_copy[i], second_deps[second_counter++]);
+      assert(second_deps[second_counter++]->is_packet_related());
+      const auto packet_dependency = dynamic_cast<const PacketDependency*>(second_deps[second_counter++].get());
+      packet_fields.emplace_back(pfes_sorted_copy[i], packet_dependency->clone());
     }
   }
 }
 
 void Constraint::check_incompatible_dependencies() {
-  if (first.get_dependencies_incompatible().size() ||
-    second.get_dependencies_incompatible().size()) {
-    Logger::error() << "Dependencies incompatible with RSS. Nothing we can do." << "\n";
-    exit(1);
+  const auto &first_dependencies = first.get_dependencies();
+  const auto &second_dependencies = second.get_dependencies();
+
+  auto incompatible_dependency_filter = [](const std::unique_ptr<const Dependency>& dependency) -> bool {
+    if (dependency->should_ignore()) return false;
+    return !dependency->is_rss_compatible();
+  };
+
+  auto first_it = std::find_if(first_dependencies.begin(), first_dependencies.end(), incompatible_dependency_filter);
+  auto second_it = std::find_if(second_dependencies.begin(), second_dependencies.end(), incompatible_dependency_filter);
+
+  if (first_it != first_dependencies.end() || second_it != second_dependencies.end()) {
+      Logger::error() << "Dependencies incompatible with RSS. Nothing we can do." << "\n";
+      exit(1);
   }
 }
 

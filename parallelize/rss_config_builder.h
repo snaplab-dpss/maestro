@@ -35,16 +35,16 @@ private:
 
 public:
     RSSConfigBuilder(
-        std::vector<LibvigAccess>  accesses,
-        std::vector<RawConstraint> raw_constraints
+        const std::vector<LibvigAccess>&  accesses,
+        const std::vector<RawConstraint>& raw_constraints
     ) {
         R3S::R3S_cfg_init(&cfg);
         R3S::Z3_context ctx = R3S::R3S_cfg_get_z3_context(cfg);
-        //R3S::R3S_cfg_set_skew_analysis(cfg, false);
+        R3S::R3S_cfg_set_skew_analysis(cfg, false);
 
         for (const auto& raw_constraint : raw_constraints) {
-            LibvigAccess& first = LibvigAccess::find_by_id(accesses, raw_constraint.get_first_access_id());
-            LibvigAccess& second = LibvigAccess::find_by_id(accesses, raw_constraint.get_second_access_id());
+            const LibvigAccess& first = LibvigAccess::find_by_id(accesses, raw_constraint.get_first_access_id());
+            const LibvigAccess& second = LibvigAccess::find_by_id(accesses, raw_constraint.get_second_access_id());
 
             if (first.get_object() != second.get_object()) {
                 Logger::warn() << "Constraint between different objects doesn't make any sense" << "\n";
@@ -65,7 +65,8 @@ public:
             merge_unique_packet_field_dependencies(first.get_unique_packet_fields());
             merge_unique_packet_field_dependencies(second.get_unique_packet_fields());
             
-            constraints.emplace_back(first, second, ctx, raw_constraint);
+            const auto& new_constraint = Constraint(first, second, ctx, raw_constraint);
+            constraints.emplace_back(std::move(new_constraint));
             unique_access_pairs.push_back(access);
         }
 

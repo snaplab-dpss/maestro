@@ -168,7 +168,8 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
     for (const auto &packet_field_expr_value : constraint.get_packet_fields()) {
       PacketFieldExpression packet_dependency_expr =
           packet_field_expr_value.first;
-      PacketDependencyProcessed packet_dependency_value =
+
+      const std::unique_ptr<const PacketDependency>& packet_dependency_value =
           packet_field_expr_value.second;
 
       // TODO: error handling if is neither equal to first or second
@@ -182,9 +183,13 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
       R3S::R3S_status_t status;
       R3S::Z3_ast target_ast;
 
-      if (!packet_dependency_value.should_ignore()) {
+      if (!packet_dependency_value->should_ignore() &&
+          packet_dependency_value->is_rss_compatible()) {
+
+        const auto dependency_rss_compatible = dynamic_cast<const PacketDependencyProcessed*>(packet_dependency_value.get());
+
         status = R3S_packet_extract_pf(cfg, target_packet,
-                                     packet_dependency_value.get_packet_field(),
+                                     dependency_rss_compatible->get_packet_field(),
                                      &packet_field_ast);
         if (status != R3S::R3S_STATUS_SUCCESS) {
           constraint_incompatible_with_current_opt = true;
@@ -195,10 +200,16 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
             Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, packet_field_ast));
 
         unsigned int high =
-            packet_field_ast_size - packet_dependency_value.get_bytes() * 8 - 1;
+            packet_field_ast_size - dependency_rss_compatible->get_bytes() * 8 - 1;
         unsigned int low = high - 7;
 
         target_ast = Z3_mk_extract(ctx, high, low, packet_field_ast);
+
+      }
+
+      else if (!packet_dependency_value->should_ignore()) {
+          // TODO:
+          assert(false && "TODO");
       }
 
       else {

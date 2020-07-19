@@ -11,17 +11,21 @@ SRC=$(NF_DIR)/../parallelize
 BUILD=$(NF_DIR)/build/parallelization
 KLEE_DIR=$(VIGOR_DIR)/klee
 
-all: $(BUILD)/libvig_access.o $(BUILD)/rss_config_builder.o $(BUILD)/constraint.o $(BUILD)/parser.o $(BUILD)/logger.o
-	$(CC) $(SRC)/parse-libvig-access.cpp  	\
-		-o $(BUILD)/parse-libvig-access 	\
-		$(BUILD)/libvig_access.o        	\
-		$(BUILD)/constraint.o           	\
-		$(BUILD)/parser.o        			\
-		$(BUILD)/rss_config_builder.o 		\
-		$(BUILD)/logger.o			 		\
-		$(Z3_LIB_FLAGS) $(R3S_LIB_FLAGS)	\
-		$(Z3_INCLUDE) $(R3S_INCLUDE)		\
-		-lstdc++
+all: $(BUILD)/dependency.o $(BUILD)/libvig_access.o $(BUILD)/rss_config_builder.o $(BUILD)/constraint.o $(BUILD)/parser.o $(BUILD)/logger.o
+	$(CC) $(SRC)/parse-libvig-access.cpp    \
+	-o $(BUILD)/parse-libvig-access         \
+	$(BUILD)/dependency.o              	\
+	$(BUILD)/libvig_access.o        	\
+	$(BUILD)/constraint.o           	\
+	$(BUILD)/parser.o        		\
+	$(BUILD)/rss_config_builder.o 		\
+	$(BUILD)/logger.o			\
+	$(Z3_LIB_FLAGS) $(R3S_LIB_FLAGS)	\
+	$(Z3_INCLUDE) $(R3S_INCLUDE)		\
+	-lstdc++
+
+$(BUILD)/dependency.o: $(SRC)/dependency.cpp $(SRC)/dependency.h
+	$(CC) -c $(SRC)/dependency.cpp -o $(BUILD)/dependency.o $(R3S_INCLUDE) $(Z3_INCLUDE)
 
 $(BUILD)/libvig_access.o: $(SRC)/libvig_access.cpp $(SRC)/libvig_access.h
 	$(CC) -c $(SRC)/libvig_access.cpp -o $(BUILD)/libvig_access.o $(R3S_INCLUDE) $(Z3_INCLUDE)
