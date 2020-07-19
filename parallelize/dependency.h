@@ -112,6 +112,7 @@ public:
     rss_compatible = _pdi.is_rss_compatible();
     processed = _pdi.is_processed();
     packet_related = _pdi.is_packet_related();
+    ignore = _pdi.should_ignore();
   }
 
   virtual PacketDependencyIncompatible* clone() const override {

@@ -158,18 +158,22 @@ void Constraint::zip_packet_fields_expression_and_values(
 
   unsigned int first_counter  = 0;
   unsigned int second_counter = 0;
-  for (auto i = 0; i < pfes_sorted_copy.size(); i++) {
-    if (pfes_sorted_copy[i].get_packet_chunks_id() == smaller_packet_chunks_id) {
+  for (const auto& pfe_copy : pfes_sorted_copy) {
+    const PacketDependency* packet_dependency;
+
+    if (pfe_copy.get_packet_chunks_id() == smaller_packet_chunks_id) {
+      assert(first_deps[first_counter]->is_packet_related());
       assert(first_counter < first_deps.size() && "Overflow on first access dependencies.");
-      assert(first_deps[first_counter++]->is_packet_related());
-      const auto packet_dependency = dynamic_cast<const PacketDependency*>(first_deps[first_counter++].get());
-      packet_fields.emplace_back(pfes_sorted_copy[i], packet_dependency->clone());
-    } else {
-      assert(second_counter < second_deps.size() && "Overflow on second access dependencies.");
-      assert(second_deps[second_counter++]->is_packet_related());
-      const auto packet_dependency = dynamic_cast<const PacketDependency*>(second_deps[second_counter++].get());
-      packet_fields.emplace_back(pfes_sorted_copy[i], packet_dependency->clone());
+      packet_dependency = dynamic_cast<const PacketDependency*>(first_deps[first_counter++].get());
     }
+
+    else {
+      assert(second_deps[second_counter]->is_packet_related());
+      assert(second_counter < second_deps.size() && "Overflow on second access dependencies.");
+      packet_dependency = dynamic_cast<const PacketDependency*>(second_deps[second_counter++].get());
+    }
+
+    packet_fields.emplace_back(pfe_copy, packet_dependency->clone());
   }
 }
 

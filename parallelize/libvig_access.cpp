@@ -34,10 +34,6 @@ void LibvigAccess::process_packet_dependency(const PacketDependency* dependency_
       if (!_dependency->is_processed()) return false;
       if (!_dependency->is_packet_related()) return false;
 
-      // Logger::warn() << "trying this: ";
-      // Logger::warn() << *_dependency.get();
-      // Logger::warn() << "\n";
-
       const auto _packet_dependency = dynamic_cast<const PacketDependency*>(_dependency.get());
       assert(_packet_dependency);
 

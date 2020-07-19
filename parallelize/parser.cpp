@@ -104,15 +104,14 @@ void Parser::parse_access() {
   iss = consume_token(Tokens::PROTOCOL);
   iss >> std::ws >> protocol;
 
-  for (auto i = 0; i < state_content.size(); i++) {
+  while (state_content.size()) {
     unsigned int offset;
 
     iss = consume_token(Tokens::DEPENDENCY);
     iss >> std::ws >> offset;
 
     PacketDependency dependency(layer, protocol, offset);
-    auto unique = dependency.get_unique();
-    access.add_dependency(unique.get());
+    access.add_dependency(dependency.get_unique().get());
   }
 }
 
