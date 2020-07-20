@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <algorithm>
+#include <map>
 
 namespace ParallelSynthesizer {
 
@@ -93,6 +94,62 @@ void RSSConfigBuilder::build_rss_config() {
   rss_config.set_keys(keys, cfg->n_keys);
 
   delete[] keys;
+}
+
+void RSSConfigBuilder::fill_unique_devices(const std::vector<LibvigAccess>& accesses) {
+    for (const auto& access : accesses) {
+        auto it = std::find(unique_devices.begin(), unique_devices.end(), access.get_device());
+
+        if (it == unique_devices.end()) {
+            unique_devices.push_back(access.get_device());
+        }
+    }
+}
+
+const std::vector<LibvigAccess> RSSConfigBuilder::analyze_operations_on_objects(
+        const std::vector<LibvigAccess>& accesses) {
+    std::vector<LibvigAccess> trimmed_accesses;
+    std::vector<unsigned int> unique_objects;
+
+    for (const auto& access : accesses) {
+        const auto& object = access.get_object();
+        auto found_object = std::find(unique_objects.begin(), unique_objects.end(), object) != unique_objects.end();
+
+        if (found_object) {
+            continue;
+        } else {
+            unique_objects.push_back(object);
+        }
+
+        auto read_op_finder = [&](const LibvigAccess& access) -> bool {
+            return access.get_object() == object && access.get_operation() == LibvigAccess::Operation::READ;
+        };
+
+        auto found_read = std::find_if(accesses.begin(), accesses.end(), read_op_finder) != accesses.end();
+
+        auto write_op_finder = [&](const LibvigAccess& access) -> bool {
+            return access.get_object() == object && access.get_operation() == LibvigAccess::Operation::WRITE;
+        };
+
+        auto found_write = std::find_if(accesses.begin(), accesses.end(), write_op_finder) != accesses.end();
+
+        if (found_read == found_write)
+            continue;
+
+        if (found_read && !found_write) {
+            Logger::warn() << "Reads with no writes on object ";
+            Logger::warn() << object;
+            Logger::warn() << "\n";
+        }
+
+        else {
+            Logger::warn() << "Writes with no reads on object ";
+            Logger::warn() << object;
+            Logger::warn() << "\n";
+        }
+    }
+
+    return trimmed_accesses;
 }
 
 std::pair<R3S::R3S_packet_t, R3S::R3S_packet_t>

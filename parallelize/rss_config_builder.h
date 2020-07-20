@@ -42,6 +42,9 @@ public:
         R3S::Z3_context ctx = R3S::R3S_cfg_get_z3_context(cfg);
         R3S::R3S_cfg_set_skew_analysis(cfg, false);
 
+        fill_unique_devices(accesses);
+        const auto& trimmed_accesses = analyze_operations_on_objects(accesses);
+
         for (const auto& raw_constraint : raw_constraints) {
             const LibvigAccess& first = LibvigAccess::find_by_id(accesses, raw_constraint.get_first_access_id());
             const LibvigAccess& second = LibvigAccess::find_by_id(accesses, raw_constraint.get_second_access_id());
@@ -55,12 +58,6 @@ public:
 
             if (is_access_pair_already_stored(access))
                 continue;
-
-            if (std::find(unique_devices.begin(), unique_devices.end(), first.get_device()) == unique_devices.end())
-                unique_devices.push_back(first.get_device());
-            
-            if (std::find(unique_devices.begin(), unique_devices.end(), second.get_device()) == unique_devices.end())
-                unique_devices.push_back(second.get_device());
 
             merge_unique_packet_field_dependencies(first.get_unique_packet_fields());
             merge_unique_packet_field_dependencies(second.get_unique_packet_fields());
@@ -103,6 +100,9 @@ public:
     static R3S::Z3_ast make_solver_constraints(R3S::R3S_cfg_t cfg, R3S::R3S_packet_ast_t p1, R3S::R3S_packet_ast_t p2);
 
     void build_rss_config();
+    void fill_unique_devices(const std::vector<LibvigAccess>& accesses);
+    const std::vector<LibvigAccess> analyze_operations_on_objects(const std::vector<LibvigAccess>& accesses);
+
     std::pair<R3S::R3S_packet_t, R3S::R3S_packet_t> generate_packets(unsigned device1, unsigned device2);
 
     ~RSSConfigBuilder() {
