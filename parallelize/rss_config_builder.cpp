@@ -109,16 +109,15 @@ void RSSConfigBuilder::fill_unique_devices(const std::vector<LibvigAccess>& acce
 const std::vector<LibvigAccess> RSSConfigBuilder::analyze_operations_on_objects(
         const std::vector<LibvigAccess>& accesses) {
     std::vector<LibvigAccess> trimmed_accesses;
-    std::vector<unsigned int> unique_objects;
+    std::map<unsigned int, bool> store_access_by_object;
 
     for (const auto& access : accesses) {
         const auto& object = access.get_object();
-        auto found_object = std::find(unique_objects.begin(), unique_objects.end(), object) != unique_objects.end();
+        auto store_access = store_access_by_object.find(object);
 
-        if (found_object) {
+        if (store_access != store_access_by_object.end() && store_access->second) {
+            trimmed_accesses.push_back(access);
             continue;
-        } else {
-            unique_objects.push_back(object);
         }
 
         auto read_op_finder = [&](const LibvigAccess& access) -> bool {
@@ -133,19 +132,27 @@ const std::vector<LibvigAccess> RSSConfigBuilder::analyze_operations_on_objects(
 
         auto found_write = std::find_if(accesses.begin(), accesses.end(), write_op_finder) != accesses.end();
 
-        if (found_read == found_write)
+        if (found_read == found_write) {
+            store_access_by_object.insert({ object, true });
+            trimmed_accesses.push_back(access);
             continue;
+        }
 
         if (found_read && !found_write) {
             Logger::warn() << "Reads with no writes on object ";
             Logger::warn() << object;
             Logger::warn() << "\n";
+
+            store_access_by_object.insert({ object, false });
         }
 
         else {
             Logger::warn() << "Writes with no reads on object ";
             Logger::warn() << object;
             Logger::warn() << "\n";
+
+            store_access_by_object.insert({ object, true });
+            trimmed_accesses.push_back(access);
         }
     }
 

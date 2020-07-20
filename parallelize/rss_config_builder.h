@@ -43,11 +43,11 @@ public:
         R3S::R3S_cfg_set_skew_analysis(cfg, false);
 
         fill_unique_devices(accesses);
-        const auto& trimmed_accesses = analyze_operations_on_objects(accesses);
+        const auto trimmed_accesses = analyze_operations_on_objects(accesses);
 
         for (const auto& raw_constraint : raw_constraints) {
-            const LibvigAccess& first = LibvigAccess::find_by_id(accesses, raw_constraint.get_first_access_id());
-            const LibvigAccess& second = LibvigAccess::find_by_id(accesses, raw_constraint.get_second_access_id());
+            const LibvigAccess& first = LibvigAccess::find_by_id(trimmed_accesses, raw_constraint.get_first_access_id());
+            const LibvigAccess& second = LibvigAccess::find_by_id(trimmed_accesses, raw_constraint.get_second_access_id());
 
             if (first.get_object() != second.get_object()) {
                 Logger::warn() << "Constraint between different objects doesn't make any sense" << "\n";
