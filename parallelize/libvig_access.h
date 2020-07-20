@@ -65,7 +65,8 @@ public:
   void sort_dependencies() {
       if (are_dependencies_sorted) return;
 
-      auto dependency_comparator = [](const std::unique_ptr<const Dependency>& d1, const std::unique_ptr<const Dependency>& d2) -> bool {
+      auto dependency_comparator = [](const std::unique_ptr<const Dependency>& d1,
+                                      const std::unique_ptr<const Dependency>& d2) -> bool {
         if (!d1->should_ignore()) return true;
         if (!d1->is_processed()) return true;
         if (!d1->is_rss_compatible()) return true;

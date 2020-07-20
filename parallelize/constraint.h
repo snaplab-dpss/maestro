@@ -84,7 +84,7 @@ public:
     const R3S::Z3_context& _ctx,
     const RawConstraint& raw_constraint
   ) : ctx(_ctx), first(_first), second(_second) {
-    void check_incompatible_dependencies();
+    check_incompatible_dependencies();
 
     expression = Z3_simplify(ctx, R3S::Z3_parse_smtlib2_string(
         ctx,
@@ -95,6 +95,7 @@ public:
     packet_chunks_ids_pair = std::pair<int, int>(-1, -1);
     
     std::vector<PacketFieldExpression> packet_fields_expressions;
+
     fill_packet_fields(expression, packet_fields_expressions);
     zip_packet_fields_expression_and_values(packet_fields_expressions);
   }

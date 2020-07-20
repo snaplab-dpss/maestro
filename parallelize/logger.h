@@ -12,6 +12,7 @@ typedef std::string Color;
 const Color RESET = "\033[0m";
 const Color BLACK = "\033[30m";
 const Color RED = "\033[31m";
+const Color RED_BRIGHT = "\u001b[31;1m";
 const Color GREEN = "\033[32m";
 const Color YELLOW = "\033[33m";
 const Color BLUE = "\033[34m";
@@ -58,7 +59,7 @@ private:
                 color = Colors::CYAN;
                 break;
             case ERROR:
-                color = Colors::RED;
+                color = Colors::RED_BRIGHT;
                 break;
             default:
                 color = Colors::WHITE;

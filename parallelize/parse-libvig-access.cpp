@@ -20,7 +20,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  Logger::MINIMUM_LOG_LEVEL = Logger::Level::DEBUG;
+  Logger::MINIMUM_LOG_LEVEL = Logger::Level::LOG;
 
   char *libvig_access_out = argv[1];
 
@@ -34,12 +34,12 @@ int main(int argc, char *argv[]) {
   auto config = rss_cfg_builder.get_generated_rss_cfg();
   auto r3s_config = rss_cfg_builder.get_cfg();
 
-  Logger::log() << "Generated key:";
-  Logger::log() << "\n";
-
   auto keys = config.get_keys();
 
   for (auto i = 0; i < config.get_n_keys(); i++) {
+    Logger::log() << "Device ";
+    Logger::log() << i;
+    Logger::log() << ": \n";
     Logger::log() << R3S::R3S_key_to_string(keys[i]);
     Logger::log() << "\n";
   }

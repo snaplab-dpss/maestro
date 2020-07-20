@@ -19,6 +19,7 @@ void LibvigAccess::add_dependency(const Dependency* dependency) {
       assert(false && "not implemented");
     } else {
       dependencies.emplace_back(dependency->clone());
+      are_dependencies_sorted = false;
     }
 }
 
@@ -47,6 +48,14 @@ void LibvigAccess::process_packet_dependency(const PacketDependency* dependency_
   auto offset = dependency.get_offset();
   auto layer = dependency.get_layer();
   auto protocol = dependency.get_protocol();
+
+  if (layer == 2) {
+      // TODO: ethertype
+
+      auto processed = PacketDependencyIncompatible(dependency, "Ethernet field");
+      add_dependency(processed.get_unique().get());
+      return;
+  }
 
   // IPv4
   if (layer == 3 && protocol == 0x0800) {

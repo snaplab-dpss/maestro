@@ -126,8 +126,9 @@ public:
   virtual std::ostream& print(std::ostream& os) const override {
       PacketDependency::print(os);
 
-      os << " [incompatible] ";
+      os << " [incompatible: ";
       os << description;
+      os << "] ";
 
       return os;
   }

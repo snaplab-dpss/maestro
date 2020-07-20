@@ -104,12 +104,13 @@ void Constraint::zip_packet_fields_expression_and_values(
   const auto& first_deps = first.get_dependencies();
   const auto& second_deps = second.get_dependencies();
 
-  unsigned int smaller_packet_chunks_id = pfes[0].get_packet_chunks_id();
+  int smaller_packet_chunks_id = -1;
+
   for (const auto& pfe : pfes) {
     const auto &id = pfe.get_packet_chunks_id();
     if (id == smaller_packet_chunks_id) continue;
 
-    if (smaller_packet_chunks_id > id)
+    if (smaller_packet_chunks_id == -1 || smaller_packet_chunks_id > id)
       smaller_packet_chunks_id = id;
 
     break;
@@ -191,7 +192,7 @@ void Constraint::check_incompatible_dependencies() {
 
   if (first_it != first_dependencies.end() || second_it != second_dependencies.end()) {
       Logger::error() << "Dependencies incompatible with RSS. Nothing we can do." << "\n";
-      exit(1);
+      exit(0);
   }
 }
 

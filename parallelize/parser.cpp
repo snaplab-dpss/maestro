@@ -130,11 +130,14 @@ void Parser::report() {
       auto found_it = std::find(incompatible_dependency_id_pairs.begin(), incompatible_dependency_id_pairs.end(), pair);
       if (found_it != incompatible_dependency_id_pairs.end()) continue;
 
-      Logger::error() << "Incompatible dependency (access id ";
-      Logger::error() << access.get_id();
-      Logger::error() << "): ";
+      Logger::error() << "=============== Incompatible dependency in access ===============";
       Logger::error() << "\n";
-      Logger::error() << incompatible;
+      Logger::error() << "Access:";
+      Logger::error() << "\n";
+      Logger::error() << access;
+      Logger::error() << "\n";
+      Logger::error() << "=================================================================";
+      Logger::error() << "\n";
       Logger::error() << "\n";
 
       incompatible_dependency_id_pairs.push_back(pair);
