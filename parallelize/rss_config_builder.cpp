@@ -165,28 +165,17 @@ const std::vector<LibvigAccess> RSSConfigBuilder::analyze_operations_on_objects(
 
         auto found_write = std::find_if(accesses.begin(), accesses.end(), write_op_finder) != accesses.end();
 
-        if (found_read == found_write) {
-            store_access_by_object.insert({ object, true });
-            trimmed_accesses.push_back(access);
-            continue;
-        }
-
         if (found_read && !found_write) {
             Logger::warn() << "Reads with no writes on object ";
             Logger::warn() << object;
             Logger::warn() << "\n";
 
             store_access_by_object.insert({ object, false });
+            continue;
         }
 
-        else {
-            Logger::warn() << "Writes with no reads on object ";
-            Logger::warn() << object;
-            Logger::warn() << "\n";
-
-            store_access_by_object.insert({ object, true });
-            trimmed_accesses.push_back(access);
-        }
+        store_access_by_object.insert({ object, true });
+        trimmed_accesses.push_back(access);
     }
 
     return trimmed_accesses;

@@ -89,11 +89,11 @@ void Parser::parse_access() {
 
   auto operation_parsed = LibvigAccess::parse_operation_token(operation);
 
-  if (state_content.size() == 0)
-    return;
-
   LibvigAccess &access =
       get_or_push_unique_access(LibvigAccess(id, device, object, operation_parsed));
+
+  if (state_content.size() == 0)
+    return;
 
   unsigned int layer;
   unsigned int protocol;
