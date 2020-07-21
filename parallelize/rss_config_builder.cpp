@@ -36,6 +36,18 @@ bool RSSConfigBuilder::is_access_pair_already_stored(
 }
 
 void RSSConfigBuilder::load_rss_config_options() {
+  if (constraints.size() == 0) {
+    Logger::log() << "No constraints. Configuring RSS with every possible option available.";
+    Logger::log() << "\n";
+
+    for (int iopt = R3S::R3S_FIRST_OPT; iopt <= R3S::R3S_LAST_OPT; iopt++) {
+      auto opt = static_cast<R3S::R3S_opt_t>(iopt);
+      rss_config.add_option(opt);
+      R3S::R3S_cfg_load_opt(cfg, opt);
+    }
+    return;
+  }
+
   if (unique_packet_fields_dependencies.size() == 0) {
     Logger::warn()
         << "[WARNING] No dependencies on packet fields. Nothing we can do :("
@@ -74,8 +86,22 @@ int RSSConfigBuilder::get_device_index(unsigned int device) const {
 }
 
 void RSSConfigBuilder::build_rss_config() {
-  R3S::R3S_key_t* keys = new R3S::R3S_key_t[unique_devices.size()]();
+  R3S::R3S_key_t* keys = new R3S::R3S_key_t[cfg->n_keys]();
   R3S::R3S_status_t status;
+
+  if (constraints.size() == 0) {
+    Logger::log() << "No constraints. Generating random keys.";
+    Logger::log() << "\n";
+
+    for (unsigned i = 0; i < cfg->n_keys; i++) {
+      R3S::R3S_key_rand(cfg, keys[i]);
+    }
+
+    rss_config.set_keys(keys, cfg->n_keys);
+    delete[] keys;
+
+    return;
+  }
 
   Logger::log() << "Running the solver now. This might take a while...";
   Logger::log() << "\n";
@@ -104,6 +130,11 @@ void RSSConfigBuilder::fill_unique_devices(const std::vector<LibvigAccess>& acce
             unique_devices.push_back(access.get_device());
         }
     }
+
+    if (unique_devices.size() == 0) {
+      Logger::warn() << "No devices. No RSS configuration to generate.";
+      exit(0);
+    }
 }
 
 const std::vector<LibvigAccess> RSSConfigBuilder::analyze_operations_on_objects(
@@ -117,6 +148,8 @@ const std::vector<LibvigAccess> RSSConfigBuilder::analyze_operations_on_objects(
 
         if (store_access != store_access_by_object.end() && store_access->second) {
             trimmed_accesses.push_back(access);
+            continue;
+        } else if (store_access != store_access_by_object.end()) {
             continue;
         }
 

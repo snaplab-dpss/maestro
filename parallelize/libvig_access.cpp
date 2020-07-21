@@ -184,17 +184,6 @@ std::ostream& operator<<(std::ostream& os, const LibvigAccess& access) {
     return os;
 }
 
-const LibvigAccess &LibvigAccess::find_by_id(const std::vector<LibvigAccess> &accesses,
-                                 const unsigned int &id) {
-  for (auto &a : accesses)
-    if (a.get_id() == id)
-      return a;
-
-  Logger::error() << "LibvigAccess not found (id " << id << ")"
-                  << "\n";
-  exit(1);
-}
-
 bool LibvigAccess::content_equal(const LibvigAccess &access1,
                                  const LibvigAccess &access2) {
   return access1.get_device() == access2.get_device() &&

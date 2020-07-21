@@ -111,9 +111,6 @@ public:
   friend bool operator==(const LibvigAccess &lhs, const LibvigAccess &rhs);
   friend std::ostream& operator<<(std::ostream& os, const LibvigAccess& access);
 
-  static const LibvigAccess &find_by_id(const std::vector<LibvigAccess> &accesses,
-                                  const unsigned int &id);
-
   static bool content_equal(const LibvigAccess &access1,
                             const LibvigAccess &access2);
 

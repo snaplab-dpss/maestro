@@ -46,8 +46,27 @@ public:
         const auto trimmed_accesses = analyze_operations_on_objects(accesses);
 
         for (const auto& raw_constraint : raw_constraints) {
-            const LibvigAccess& first = LibvigAccess::find_by_id(trimmed_accesses, raw_constraint.get_first_access_id());
-            const LibvigAccess& second = LibvigAccess::find_by_id(trimmed_accesses, raw_constraint.get_second_access_id());
+
+            auto find_first_access = [&](const LibvigAccess& access) -> bool {
+                 return access.get_id() == raw_constraint.get_first_access_id();
+            };
+
+            auto find_first_it = std::find_if(trimmed_accesses.begin(), trimmed_accesses.end(), find_first_access);
+
+            if (find_first_it == trimmed_accesses.end())
+                continue;
+
+            auto find_second_access = [&](const LibvigAccess& access) -> bool {
+                 return access.get_id() == raw_constraint.get_second_access_id();
+            };
+
+            auto find_second_it = std::find_if(trimmed_accesses.begin(), trimmed_accesses.end(), find_second_access);
+
+            if (find_second_it == trimmed_accesses.end())
+                continue;
+
+            const auto& first  = *find_first_it;
+            const auto& second = *find_second_it;
 
             if (first.get_object() != second.get_object()) {
                 Logger::warn() << "Constraint between different objects doesn't make any sense" << "\n";
