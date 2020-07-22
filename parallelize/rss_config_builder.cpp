@@ -143,6 +143,9 @@ const std::vector<LibvigAccess> RSSConfigBuilder::analyze_operations_on_objects(
     std::map<unsigned int, bool> store_access_by_object;
 
     for (const auto& access : accesses) {
+        if (access.get_dependencies().size() == 0)
+            continue;
+
         const auto& object = access.get_object();
         auto store_access = store_access_by_object.find(object);
 
