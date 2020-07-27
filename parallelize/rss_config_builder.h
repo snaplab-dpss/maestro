@@ -43,6 +43,7 @@ public:
         R3S::R3S_cfg_set_skew_analysis(cfg, false);
 
         fill_unique_devices(accesses);
+
         const auto trimmed_accesses = analyze_operations_on_objects(accesses);
 
         for (const auto& raw_constraint : raw_constraints) {

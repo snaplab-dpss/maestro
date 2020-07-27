@@ -20,7 +20,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  Logger::MINIMUM_LOG_LEVEL = Logger::Level::LOG;
+  Logger::MINIMUM_LOG_LEVEL = Logger::Level::DEBUG;
 
   char *libvig_access_out = argv[1];
 
@@ -30,6 +30,7 @@ int main(int argc, char *argv[]) {
   RSSConfigBuilder rss_cfg_builder(parser.get_accesses(),
                                    parser.get_raw_constraints());
 
+  /*
   rss_cfg_builder.build_rss_config();
   auto config = rss_cfg_builder.get_generated_rss_cfg();
   auto r3s_config = rss_cfg_builder.get_cfg();
@@ -43,6 +44,7 @@ int main(int argc, char *argv[]) {
     Logger::log() << R3S::R3S_key_to_string(keys[i]);
     Logger::log() << "\n";
   }
+  */
 
   /*
   for (unsigned i = 0; i < 50; i++) {

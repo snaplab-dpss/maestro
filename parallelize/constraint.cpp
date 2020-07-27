@@ -28,7 +28,7 @@ bool operator<(const PacketFieldExpression& lhs, const PacketFieldExpression& rh
   return lhs.get_index() < rhs.get_index();
 }
 
-const std::string PacketFieldExpression::PACKET_CHUNKS_NAME_PATTERN = "packet_chunks_";
+const std::string PacketFieldExpression::PACKET_CHUNKS_NAME_PATTERN = "packet_chunks__ref_";
 
 bool is_select_from_chunk(R3S::Z3_context &ctx, R3S::Z3_app &app, std::string& symbol_name) {
   R3S::Z3_func_decl app_decl = R3S::Z3_get_app_decl(ctx, app);

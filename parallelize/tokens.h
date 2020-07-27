@@ -27,6 +27,7 @@ namespace Operations {
 
 const std::string READ = "read";
 const std::string WRITE = "write";
+const std::string CREATE = "create";
 const std::string NOP = "nop";
 const std::string INIT = "init";
 

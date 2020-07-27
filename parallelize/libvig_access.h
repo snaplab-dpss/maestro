@@ -19,7 +19,7 @@ namespace ParallelSynthesizer {
 class LibvigAccess {
 public:
     enum Operation {
-        READ, WRITE, NOP, INIT
+        READ, WRITE, NOP, INIT, CREATE
     };
 
 private:
@@ -129,6 +129,10 @@ public:
 
       if (operation == Tokens::Operations::INIT) {
           return Operation::INIT;
+      }
+
+      if (operation == Tokens::Operations::CREATE) {
+          return Operation::CREATE;
       }
 
       Logger::error() << "Invalid operation token \"";

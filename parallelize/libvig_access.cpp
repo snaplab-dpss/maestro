@@ -167,6 +167,9 @@ std::ostream& operator<<(std::ostream& os, const LibvigAccess& access) {
         case LibvigAccess::WRITE:
             os << "write";
             break;
+      case LibvigAccess::CREATE:
+          os << "create";
+          break;
         case LibvigAccess::NOP:
             os << "nop";
             break;
