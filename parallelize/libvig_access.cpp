@@ -7,7 +7,7 @@
 
 namespace ParallelSynthesizer {
 
-void LibvigAccess::add_dependency(const Dependency* dependency) {
+void LibvigAccessArgument::add_dependency(const Dependency* dependency) {
     assert(dependency && "invalid dependency");
 
     if (!dependency->is_processed() && dependency->is_packet_related()) {
@@ -23,7 +23,7 @@ void LibvigAccess::add_dependency(const Dependency* dependency) {
     }
 }
 
-void LibvigAccess::process_packet_dependency(const PacketDependency* dependency_ptr) {
+void LibvigAccessArgument::process_packet_dependency(const PacketDependency* dependency_ptr) {
   assert(dependency_ptr && "invalid dependency");
 
   const auto dependency = *dependency_ptr;
@@ -31,7 +31,7 @@ void LibvigAccess::process_packet_dependency(const PacketDependency* dependency_
   auto it = std::find_if(
     dependencies.begin(),
     dependencies.end(),
-    [&](const std::unique_ptr<const Dependency>& _dependency) -> bool {
+    [&](const std::shared_ptr<const Dependency>& _dependency) -> bool {
       if (!_dependency->is_processed()) return false;
       if (!_dependency->is_packet_related()) return false;
 
@@ -143,55 +143,143 @@ bool operator==(const LibvigAccess &lhs, const LibvigAccess &rhs) {
   return lhs.get_id() == rhs.get_id();
 }
 
-std::ostream& operator<<(std::ostream& os, const LibvigAccess& access) {
-    os << "id        ";
-    os << access.id;
-    os << "\n";
+std::ostream& operator<<(std::ostream& os, const LibvigAccessMetadata& arg) {
+  os << "  interface  ";
+  os << arg.interface;
+  os << "\n";
 
-    os << "device    ";
-    os << access.device;
-    os << "\n";
+  os << "  file       ";
+  os << arg.file;
+  os << "\n";
 
-    os << "object    ";
-    os << access.object;
-    os << "\n";
+  return os;
+}
 
-    os << "operation ";
-    switch (access.operation) {
-        case LibvigAccess::INIT:
-            os << "init";
-            break;
-        case LibvigAccess::READ:
-            os << "read";
-            break;
-        case LibvigAccess::WRITE:
-            os << "write";
-            break;
-      case LibvigAccess::CREATE:
-          os << "create";
-          break;
-        case LibvigAccess::NOP:
-            os << "nop";
-            break;
-    }
-    os << "\n";
+std::ostream& operator<<(std::ostream& os, const LibvigAccessArgument& arg) {
+  os << "  type       ";
+  switch(arg.type) {
+  case LibvigAccessArgument::Type::READ:
+    os << "read";
+    break;
+  case LibvigAccessArgument::Type::WRITE:
+    os << "write";
+    break;
+  case LibvigAccessArgument::Type::RESULT:
+    os << "result";
+    break;
+  }
+  os << "\n";
 
-    os << "dependencies";
-    os << " (" << access.dependencies.size() << "):";
-    for (const auto& dep : access.dependencies) {
+  os << "  expression ";
+  os << arg.expression;
+  os << "\n";
+
+  if (arg.dependencies.size()) {
+    os << "  dependencies";
+    os << " (" << arg.dependencies.size() << "):";
+    for (const auto& dep : arg.dependencies) {
           os << "\n";
-          os << "  ";
+          os << "    ";
           os << *dep.get();
     }
+    os << "\n";
+  }
 
-    return os;
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const LibvigAccess& access) {
+  os << "================ ACCESS ================" << "\n";
+  os << "id         ";
+  os << access.id;
+  os << "\n";
+
+  os << "src device ";
+  os << access.src_device;
+  os << "\n";
+
+  if (access.dst_device.first) {
+    os << "dst device ";
+    os << access.dst_device.second;
+    os << "\n";
+  }
+
+  os << "operation  ";
+  switch (access.operation) {
+    case LibvigAccess::INIT:
+      os << "init";
+      break;
+    case LibvigAccess::READ:
+      os << "read";
+      break;
+    case LibvigAccess::WRITE:
+      os << "write";
+      break;
+    case LibvigAccess::CREATE:
+      os << "create";
+      break;
+    case LibvigAccess::VERIFY:
+      os << "verify";
+      break;
+    case LibvigAccess::DESTROY:
+      os << "delete";
+      break;
+    case LibvigAccess::NOP:
+      os << "nop";
+      break;
+  }
+  os << "\n";
+
+  os << "object     ";
+  os << access.object;
+  os << "\n";
+
+  if (access.arguments.size()) {
+    os << "arguments:";
+    for (const auto& arg : access.arguments) {
+      os << "\n";
+      os << arg;
+    }
+  }
+
+  if (access.metadata.first) {
+    os << "metadata:";
+    os << "\n";
+    os << access.metadata.second;
+  }
+
+  os << "========================================" << "\n";
+
+  return os;
+}
+
+bool operator==(const LibvigAccessArgument &lhs, const LibvigAccessArgument &rhs) {
+  return lhs.type == rhs.type &&
+      lhs.expression == rhs.expression &&
+      lhs.get_dependencies() == rhs.get_dependencies();
 }
 
 bool LibvigAccess::content_equal(const LibvigAccess &access1,
                                  const LibvigAccess &access2) {
-  return access1.get_device() == access2.get_device() &&
-         access1.get_object() == access2.get_object() &&
-         access1.get_dependencies() == access2.get_dependencies();
+  if (access1.get_src_device() != access2.get_src_device())
+    return false;
+
+  if (access1.is_dst_device_set() != access2.is_dst_device_set())
+    return false;
+
+  if (access1.is_dst_device_set() && (access1.get_dst_device() != access2.get_dst_device()))
+    return false;
+
+  if (access1.get_object() != access2.get_object())
+    return false;
+
+  if (access1.get_operation() != access2.get_operation())
+    return false;
+
+  if (access1.get_arguments() != access2.get_arguments())
+    return false;
+
+  return true;
 }
 
 } // namespace ParallelSynthesizer

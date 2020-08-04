@@ -79,8 +79,8 @@ public:
             if (is_access_pair_already_stored(access))
                 continue;
 
-            merge_unique_packet_field_dependencies(first.get_unique_packet_fields());
-            merge_unique_packet_field_dependencies(second.get_unique_packet_fields());
+            // merge_unique_packet_field_dependencies(first.get_unique_packet_fields());
+            // merge_unique_packet_field_dependencies(second.get_unique_packet_fields());
 
             const auto& new_constraint = Constraint(first, second, ctx, raw_constraint);
             constraints.emplace_back(std::move(new_constraint));

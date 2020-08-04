@@ -124,10 +124,10 @@ void RSSConfigBuilder::build_rss_config() {
 
 void RSSConfigBuilder::fill_unique_devices(const std::vector<LibvigAccess>& accesses) {
     for (const auto& access : accesses) {
-        auto it = std::find(unique_devices.begin(), unique_devices.end(), access.get_device());
+        auto it = std::find(unique_devices.begin(), unique_devices.end(), access.get_src_device());
 
         if (it == unique_devices.end()) {
-            unique_devices.push_back(access.get_device());
+            unique_devices.push_back(access.get_src_device());
         }
     }
 
@@ -247,8 +247,8 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
 
   bool constraint_incompatible_with_current_opt = false;
   for (auto &constraint : constraints) {
-    auto first_device = constraint.get_first_access().get_device();
-    auto second_device = constraint.get_second_access().get_device();
+    auto first_device = constraint.get_first_access().get_src_device();
+    auto second_device = constraint.get_second_access().get_src_device();
 
     if (p1.key_id != first_device || p2.key_id != second_device)
       continue;

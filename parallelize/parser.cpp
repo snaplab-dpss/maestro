@@ -10,13 +10,6 @@
 
 namespace ParallelSynthesizer {
 
-enum State {
-  Init,
-  Access,
-  Constraint,
-  Statement
-};
-
 LibvigAccess &Parser::get_or_push_unique_access(const LibvigAccess &access) {
   auto it = std::find(accesses.begin(), accesses.end(), access);
 
@@ -28,94 +21,293 @@ LibvigAccess &Parser::get_or_push_unique_access(const LibvigAccess &access) {
   return *it;
 }
 
-void Parser::push_unique_raw_constraint(const RawConstraint &raw_constraint) {
-  auto it =
-      std::find(raw_constraints.begin(), raw_constraints.end(), raw_constraint);
+bool Parser::consume_token(const std::string &token, std::istringstream& iss, bool optional) {
+  assert(states.top().content.size());
 
-  if (it == raw_constraints.end())
-    raw_constraints.push_back(raw_constraint);
-}
+  if (optional && last_loaded_content_type() != LoadedContentType::UNPARSED)
+    return false;
 
-std::istringstream Parser::consume_token(const std::string &token) {
-  assert(state_content.size());
+  assert(last_loaded_content_type() == LoadedContentType::UNPARSED);
 
-  auto line = *state_content.begin();
+  auto line = last_loaded_content().unparsed.value;
   auto found = line.find(token);
 
-  line_counter++;
-  state_content.erase(state_content.begin());
+  if (found == std::string::npos && !optional) {
 
-  if (found == std::string::npos) {
-
-    Logger::error() << "Token not found";
-    Logger::error() << "\n";
-    Logger::error() << "Line:    " << line_counter;
-    Logger::error() << "\n";
-    Logger::error() << "Input:   \"" << line << "\"";
-    Logger::error() << "\n";
-    Logger::error() << "Missing: \"" << token << "\"";
-    Logger::error() << "\n";
+    Logger::error() << "Token not found" << "\n";
+    Logger::error() << "Line:    " << line_counter << "\n";
+    Logger::error() << "Input:   " << "\"" << line << "\"" << "\n";
+    Logger::error() << "Missing: " << "\"" << token << "\"" << "\n";
 
     exit(1);
   }
 
-  return std::istringstream(line.substr(found + token.length()));
+  else if (found == std::string::npos) {
+    return false;
+  }
+
+  line_counter++;
+  consume_content();
+
+  std::string consumed;
+  if (optional) {
+    auto optional_token_found = line.find(Tokens::OPTIONAL) != std::string::npos;
+    consumed = line.substr(found + token.length() + (optional_token_found ? Tokens::OPTIONAL.size() : 0));
+  } else {
+    consumed = line.substr(found + token.length());
+  }
+  iss = std::istringstream(consumed);
+
+  return true;
 }
 
 void Parser::parse_access() {
-  if (state_content.size() < 3) {
-    Logger::error() << "Missing parameters of access component" << "\n";
-    exit(1);
-  }
-
   unsigned int id;
-  unsigned int device;
+  unsigned int src_device;
+  std::pair<bool, unsigned int> dst_device;
+  LibvigAccess::Operation operation;
   unsigned int object;
-  std::string operation;
 
   std::istringstream iss;
 
-  iss = consume_token(Tokens::ID);
+  consume_token(Tokens::Access::START, iss);
+
+  consume_token(Tokens::Access::ID, iss);
   iss >> std::ws >> id;
 
-  iss = consume_token(Tokens::DEVICE);
-  iss >> std::ws >> device;
+  consume_token(Tokens::Access::SRC_DEVICE, iss);
+  iss >> std::ws >> src_device;
 
-  iss = consume_token(Tokens::OBJECT);
+  dst_device.first = consume_token(Tokens::Access::DST_DEVICE, iss, true);
+  if (dst_device.first) iss >> std::ws >> dst_device.second;
+
+  {
+    std::string operation_str;
+    consume_token(Tokens::Access::OPERATION, iss);
+    iss >> std::ws >> operation_str;
+    operation = LibvigAccess::parse_operation_token(operation_str);
+  }
+
+  consume_token(Tokens::Access::OBJECT, iss);
   iss >> std::ws >> object;
 
-  iss = consume_token(Tokens::OPERATION);
-  iss >> std::ws >> operation;
-
-  auto operation_parsed = LibvigAccess::parse_operation_token(operation);
-
   LibvigAccess &access =
-      get_or_push_unique_access(LibvigAccess(id, device, object, operation_parsed));
+      get_or_push_unique_access(LibvigAccess(id, src_device, dst_device, operation, object));
 
-  if (state_content.size() == 0)
+  if (consume_token(Tokens::Access::END, iss, true)) {
+    states.pop();
     return;
+  }
+
+  while (states.top().content.size()) {
+    if (last_loaded_content_type() == LoadedContentType::ARGUMENT) {
+      auto argument = last_loaded_content().argument.value;
+      access.add_argument(argument);
+    }
+
+    else if (last_loaded_content_type() == LoadedContentType::METADATA) {
+      auto metadata = last_loaded_content().metadata.value;
+      access.add_metadata(metadata);
+    }
+
+    else
+      break;
+
+    consume_content();
+  }
+
+  consume_token(Tokens::Access::END, iss);
+  states.pop();
+}
+
+void Parser::parse_argument() {
+  LibvigAccessArgument::Type type;
+  std::string expression;
+  std::istringstream iss;
+
+  consume_token(Tokens::Argument::START, iss);
+
+  {
+    std::string type_str;
+    consume_token(Tokens::Argument::TYPE, iss);
+    iss >> std::ws >> type_str;
+    type = LibvigAccessArgument::parse_argument_type_token(type_str);
+  }
+
+  assert(last_loaded_content_type() == LoadedContentType::EXPRESSION);
+
+  expression = last_loaded_content().expression.value;
+  consume_content();
+
+  LibvigAccessArgument argument(type, expression);
+
+  if(states.top().content.size() && last_loaded_content_type() == LoadedContentType::PACKET_DEPENDENCIES) {
+    auto dependencies = last_loaded_content().dependencies.value;
+    for (const auto& dependency : dependencies)
+      argument.add_dependency(dependency.get());
+
+    consume_content();
+  }
+
+  consume_token(Tokens::Argument::END, iss);
+
+  states.pop();
+  states.top().content.emplace_back(argument);
+}
+
+void Parser::parse_expression() {
+  std::vector<std::string> fragments;
+  std::istringstream iss;
+
+  consume_token(Tokens::Expression::START, iss);
+
+  while (states.top().content.size()) {
+    assert(last_loaded_content_type() == LoadedContentType::UNPARSED);
+
+    if (consume_token(Tokens::Expression::END, iss, true))
+      break;
+
+    fragments.push_back(last_loaded_content().unparsed.value);
+    consume_content();
+  }
+
+  states.pop();
+  states.top().content.emplace_back(fragments);
+}
+
+void Parser::parse_packet_dependencies() {
+  std::vector< std::shared_ptr<const Dependency> > dependencies;
+  std::istringstream iss;
+
+  consume_token(Tokens::PacketDependencies::START, iss);
+
+  assert(states.top().content.size());
+
+  while (states.top().content.size()) {
+    if (last_loaded_content_type() != LoadedContentType::CHUNK)
+      break;
+
+    auto chunk = last_loaded_content().chunk.value;
+    dependencies.push_back(chunk);
+
+    consume_content();
+  }
+
+  consume_token(Tokens::PacketDependencies::END, iss);
+
+  states.pop();
+  states.top().content.emplace_back(dependencies);
+}
+
+void Parser::parse_chunk() {
+  std::vector< std::shared_ptr<const Dependency> > dependencies;
+  std::istringstream iss;
 
   unsigned int layer;
-  unsigned int protocol;
+  std::pair<bool, unsigned int> protocol;
 
-  iss = consume_token(Tokens::LAYER);
+  consume_token(Tokens::Chunk::START, iss);
+
+  consume_token(Tokens::Chunk::LAYER, iss);
   iss >> std::ws >> layer;
 
-  iss = consume_token(Tokens::PROTOCOL);
-  iss >> std::ws >> protocol;
+  protocol.first = consume_token(Tokens::Chunk::PROTOCOL, iss, true);
+  if (protocol.first) iss >> std::ws >> protocol.second;
 
-  while (state_content.size()) {
+  while (states.top().content.size()) {
     unsigned int offset;
 
-    iss = consume_token(Tokens::DEPENDENCY);
+    if (!consume_token(Tokens::Chunk::DEPENDENCY, iss, true))
+      break;
+
     iss >> std::ws >> offset;
 
-    PacketDependency dependency(layer, protocol, offset);
-    access.add_dependency(dependency.get_unique().get());
+    PacketDependency dependency(layer, offset, protocol);
+    dependencies.emplace_back(dependency.clone());
+  }
+
+  consume_token(Tokens::Chunk::END, iss);
+
+  states.pop();
+
+  for (const auto& dependency : dependencies) {
+    states.top().content.emplace_back(dependency);
   }
 }
 
+void Parser::parse_metadata() {
+  std::string interface;
+  std::string file;
+  std::istringstream iss;
+
+
+  consume_token(Tokens::Metadata::START, iss);
+
+  consume_token(Tokens::Metadata::INTERFACE, iss);
+  iss >> std::ws >> interface;
+
+  consume_token(Tokens::Metadata::FILE, iss);
+  iss >> std::ws >> file;
+
+  LibvigAccessMetadata metadata(interface, file);
+
+  consume_token(Tokens::Metadata::END, iss);
+
+  states.pop();
+  states.top().content.emplace_back(metadata);
+}
+
+void Parser::parse(const std::string& filepath) {
+  // TODO: deal with errors
+  std::fstream file;
+  std::string line;
+
+  file.open(filepath.c_str(), std::ios::in);
+
+  if (!file.is_open()) {
+    Logger::error() << "Failed to open file" << "\n";
+    exit(1);
+  }
+
+  while (getline(file, line)) {
+
+    if (line == Tokens::Access::START ||
+        line == Tokens::Argument::START ||
+        line == Tokens::Expression::START ||
+        line == Tokens::PacketDependencies::START ||
+        line == Tokens::Chunk::START ||
+        line == Tokens::Metadata::START) {
+      states.emplace();
+    }
+
+    states.top().content.emplace_back(line);
+
+    if (line == Tokens::Access::END)
+      parse_access();
+
+    else if (line == Tokens::Argument::END)
+      parse_argument();
+
+    else if (line == Tokens::Expression::END)
+      parse_expression();
+
+    else if (line == Tokens::PacketDependencies::END)
+      parse_packet_dependencies();
+
+    else if (line == Tokens::Chunk::END)
+      parse_chunk();
+
+    else if (line == Tokens::Metadata::END)
+      parse_metadata();
+  }
+
+  file.close();
+
+  report();
+}
+
 void Parser::report() {
+  /*
   std::vector< std::pair<unsigned int, PacketDependencyIncompatible> > incompatible_dependency_id_pairs;
 
   for (const auto& access : accesses) {
@@ -143,77 +335,7 @@ void Parser::report() {
       incompatible_dependency_id_pairs.push_back(pair);
     }
   }
-}
-
-void Parser::parse_constraint() {
-  if (state_content.size() < 5) {
-    Logger::error() << "Missing parameters of constraint component" << "\n";
-    exit(1);
-  }
-
-  unsigned int first;
-  unsigned int second;
-  std::string expression;
-
-  std::istringstream iss;
-
-  iss = consume_token(Tokens::FIRST);
-  iss >> std::ws >> first;
-
-  iss = consume_token(Tokens::SECOND);
-  iss >> std::ws >> second;
-
-  consume_token(Tokens::STATEMENT_START);
-
-  expression = std::accumulate(state_content.begin(), state_content.end() - 1,
-                               std::string(""));
-
-  RawConstraint raw_constraint(first, second, expression);
-  push_unique_raw_constraint(raw_constraint);
-}
-
-void Parser::parse(std::string filepath) {
-  // TODO: deal with errors
-  std::fstream file;
-
-  file.open(filepath.c_str(), std::ios::in);
-
-  if (!file.is_open()) {
-    Logger::error() << "Failed to open file" << "\n";
-    exit(1);
-  }
-
-  std::string line;
-  State state(State::Init);
-
-  while (getline(file, line)) {
-
-    if (line == Tokens::ACCESS_END) {
-      parse_access();
-      state_content.clear();
-
-      line_counter++;
-      state = State::Init;
-    } else if (line == Tokens::CONSTRAINT_END) {
-      parse_constraint();
-      state_content.clear();
-
-      line_counter++;
-      state = State::Init;
-    } else if (line == Tokens::ACCESS_START) {
-      line_counter++;
-      state = State::Access;
-    } else if (line == Tokens::CONSTRAINT_START) {
-      line_counter++;
-      state = State::Constraint;
-    } else {
-      state_content.push_back(line);
-    }
-  }
-
-  file.close();
-
-  report();
+  */
 }
 
 }

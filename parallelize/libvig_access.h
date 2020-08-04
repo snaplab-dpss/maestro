@@ -16,17 +16,50 @@ namespace R3S {
 
 namespace ParallelSynthesizer {
 
-class LibvigAccess {
+class LibvigAccessMetadata {
+private:
+  std::string interface;
+  std::string file;
+
 public:
-    enum Operation {
-        READ, WRITE, NOP, INIT, CREATE
-    };
+  LibvigAccessMetadata() {}
+
+  LibvigAccessMetadata(const std::string& _interface, const std::string _file)
+    : interface(_interface), file(_file) {}
+
+  LibvigAccessMetadata(const LibvigAccessMetadata& metadata)
+    : LibvigAccessMetadata(metadata.interface, metadata.file) {}
+
+  const std::string& get_interface() const { return interface; }
+  const std::string& get_file() const { return file; }
+
+  friend std::ostream& operator<<(std::ostream& os, const LibvigAccessMetadata& arg);
+};
+
+class LibvigAccessArgument {
+public:
+  enum Type {
+    READ, WRITE, RESULT
+  };
+
+  static Type parse_argument_type_token(std::string arg_type) {
+    if (arg_type == Tokens::ArgumentType::READ)
+      return READ;
+    if (arg_type == Tokens::ArgumentType::WRITE)
+      return WRITE;
+    if (arg_type == Tokens::ArgumentType::RESULT)
+      return RESULT;
+
+    Logger::error() << "Invalid argument type token \"";
+    Logger::error() << arg_type;
+    Logger::error() << "\n";
+
+    exit(1);
+  }
 
 private:
-  unsigned int id;
-  unsigned int device;
-  unsigned int object;
-  Operation operation;
+  Type type;
+  std::string expression;
 
   bool are_dependencies_sorted;
 
@@ -38,35 +71,27 @@ private:
    * tendencies, and because this will not have many elements, I
    * decided to just use a vector.
    */
-  std::vector< std::unique_ptr<const Dependency> > dependencies;
+  std::vector< std::shared_ptr<const Dependency> > dependencies;
 
 public:
-  LibvigAccess(const unsigned int &_id, const unsigned int &_device,
-               const unsigned int &_object, const Operation& _operation)
-      : id(_id), device(_device), object(_object),
-        operation(_operation), are_dependencies_sorted(false) {}
+  LibvigAccessArgument(const Type& _type, std::string _expr)
+    : type(_type), expression(_expr), are_dependencies_sorted(false) {}
 
-  LibvigAccess(const LibvigAccess &access)
-      : LibvigAccess(access.get_id(), access.get_device(),
-                     access.get_object(), access.get_operation()) {
-    for (const auto &dependency : access.get_dependencies())
+  LibvigAccessArgument(const LibvigAccessArgument& argument)
+    : LibvigAccessArgument(argument.type, argument.expression) {
+    for (const auto &dependency : argument.dependencies)
       dependencies.emplace_back(dependency->clone());
   }
 
-  const unsigned int &get_id() const { return id; }
-  const unsigned int &get_device() const { return device; }
-  const unsigned int &get_object() const { return object; }
-  const Operation &get_operation() const { return operation; }
-
-  const std::vector< std::unique_ptr<const Dependency> > &get_dependencies() const {
+  const std::vector< std::shared_ptr<const Dependency> > &get_dependencies() const {
     return dependencies;
   }
 
   void sort_dependencies() {
       if (are_dependencies_sorted) return;
 
-      auto dependency_comparator = [](const std::unique_ptr<const Dependency>& d1,
-                                      const std::unique_ptr<const Dependency>& d2) -> bool {
+      auto dependency_comparator = [](const std::shared_ptr<const Dependency>& d1,
+                                      const std::shared_ptr<const Dependency>& d2) -> bool {
         if (!d1->should_ignore()) return true;
         if (!d1->is_processed()) return true;
         if (!d1->is_rss_compatible()) return true;
@@ -108,8 +133,66 @@ public:
 
   void add_dependency(const Dependency* dependency);
 
-  friend bool operator==(const LibvigAccess &lhs, const LibvigAccess &rhs);
+  friend std::ostream& operator<<(std::ostream& os, const LibvigAccessArgument& arg);
+  friend bool operator==(const LibvigAccessArgument &lhs, const LibvigAccessArgument &rhs);
+
+private:
+  void process_packet_dependency(const PacketDependency* dependency);
+};
+
+class LibvigAccess {
+public:
+    enum Operation {
+        READ, WRITE, NOP, INIT, CREATE, VERIFY, DESTROY
+    };
+
+private:
+  unsigned int id;
+  unsigned int src_device;
+  std::pair<bool, unsigned int> dst_device;
+  Operation operation;
+  unsigned int object;
+
+  std::vector<LibvigAccessArgument> arguments;
+  std::pair<bool, LibvigAccessMetadata> metadata;
+
+public:
+  LibvigAccess(const unsigned int &_id,
+               const unsigned int &_src_device,
+               const std::pair<bool, unsigned int> _dst_device,
+               const Operation& _operation, const unsigned int &_object)
+      : id(_id), src_device(_src_device), dst_device(_dst_device),
+        operation(_operation), object(_object) {
+    metadata.first = false;
+  }
+
+  LibvigAccess(const LibvigAccess &access)
+      : LibvigAccess(access.id, access.src_device, access.dst_device, access.operation, access.object) {
+    arguments = access.arguments;
+    metadata = access.metadata;
+  }
+
+  const unsigned int &get_id() const { return id; }
+  const unsigned int &get_src_device() const { return src_device; }
+  const unsigned int &get_dst_device() const { assert(dst_device.first); return dst_device.second; }
+  const Operation &get_operation() const { return operation; }
+  const unsigned int &get_object() const { return object; }
+  const std::vector<LibvigAccessArgument>& get_arguments() const { return arguments; }
+  const LibvigAccessMetadata& get_metadata() const { assert(metadata.first); return metadata.second; }
+
+  const bool is_dst_device_set() const { return dst_device.first; }
+  const bool is_metadata_set() const { return metadata.first; }
+
+  void add_argument(const LibvigAccessArgument& argument) {
+    arguments.emplace_back(argument);
+  }
+
+  void add_metadata(const LibvigAccessMetadata& _metadata) {
+    metadata = std::make_pair(true, _metadata);
+  }
+
   friend std::ostream& operator<<(std::ostream& os, const LibvigAccess& access);
+  friend bool operator==(const LibvigAccess& lhs, const LibvigAccess& rhs);
 
   static bool content_equal(const LibvigAccess &access1,
                             const LibvigAccess &access2);
@@ -135,15 +218,20 @@ public:
           return Operation::CREATE;
       }
 
+      if (operation == Tokens::Operations::VERIFY) {
+          return Operation::VERIFY;
+      }
+
+      if (operation == Tokens::Operations::DESTROY) {
+          return Operation::DESTROY;
+      }
+
       Logger::error() << "Invalid operation token \"";
       Logger::error() << operation;
       Logger::error() << "\n";
 
       exit(1);
   }
-
-private:
-  void process_packet_dependency(const PacketDependency* dependency);
 };
 
 } // namespace ParallelSynthesizer

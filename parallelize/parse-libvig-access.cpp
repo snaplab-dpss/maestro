@@ -24,13 +24,15 @@ int main(int argc, char *argv[]) {
 
   char *libvig_access_out = argv[1];
 
-  Parser parser;
-  parser.parse(libvig_access_out);
+  Parser parser(libvig_access_out);
 
-  RSSConfigBuilder rss_cfg_builder(parser.get_accesses(),
-                                   parser.get_raw_constraints());
+  for (const auto& access : parser.get_accesses())
+    Logger::log() << access << "\n";
+
 
   /*
+  RSSConfigBuilder rss_cfg_builder(parser.get_accesses(),
+                                   parser.get_raw_constraints());
   rss_cfg_builder.build_rss_config();
   auto config = rss_cfg_builder.get_generated_rss_cfg();
   auto r3s_config = rss_cfg_builder.get_cfg();

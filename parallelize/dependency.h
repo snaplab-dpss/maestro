@@ -39,23 +39,38 @@ public:
 
 class PacketDependency : public Dependency {
 
-private:
+protected:
   unsigned int layer;
-  unsigned int protocol;
   unsigned int offset;
+  std::pair<bool, unsigned int> protocol;
 
 public:
   PacketDependency(const unsigned int &_layer,
-                   const unsigned int &_protocol,
+                   const unsigned int &_offset,
+                   const std::pair<bool, unsigned int> &_protocol)
+      : Dependency(false, false, false, true), layer(_layer), offset(_offset), protocol(_protocol) { }
+
+  PacketDependency(const unsigned int &_layer,
+                   const unsigned int &_offset,
+                   const unsigned int &_protocol)
+      : Dependency(false, false, false, true), layer(_layer), offset(_offset) {
+    protocol = std::make_pair(true, _protocol);
+  }
+
+  PacketDependency(const unsigned int &_layer,
                    const unsigned int &_offset)
-      : Dependency(false, false, false, true), layer(_layer), protocol(_protocol), offset(_offset) {}
+      : Dependency(false, false, false, true), layer(_layer), offset(_offset) {
+    protocol.first = false;
+  }
 
   PacketDependency(const PacketDependency &pd)
-      : PacketDependency(pd.get_layer(), pd.get_protocol(), pd.get_offset()) {}
+      : PacketDependency(pd.layer, pd.offset, pd.protocol) {}
 
+  const unsigned int &get_protocol() const { assert(protocol.first); return protocol.second; }
   const unsigned int &get_layer() const { return layer; }
-  const unsigned int &get_protocol() const { return protocol; }
   const unsigned int &get_offset() const { return offset; }
+
+  bool is_protocol_set() const { return protocol.first; }
 
   virtual std::unique_ptr<const Dependency> get_unique() const override {
     return std::unique_ptr<const Dependency>(new PacketDependency(*this));
@@ -68,8 +83,10 @@ public:
   virtual std::ostream& print(std::ostream& os) const override {
       os << "layer ";
       os << layer;
-      os << " protocol 0x";
-      os << std::hex << protocol;
+      if (protocol.first) {
+        os << " protocol 0x";
+        os << std::hex << protocol.second;
+      }
       os << " offset ";
       os << offset;
 
@@ -107,7 +124,10 @@ public:
 
 
   PacketDependencyIncompatible(const PacketDependencyIncompatible &_pdi)
-      : PacketDependency(_pdi.get_layer(), _pdi.get_protocol(), _pdi.get_offset()) {
+      : PacketDependency(_pdi.get_layer(), _pdi.get_offset()) {
+    protocol.first = _pdi.is_protocol_set();
+    if (protocol.first) protocol.second = _pdi.get_protocol();
+
     description = _pdi.get_description();
     rss_compatible = _pdi.is_rss_compatible();
     processed = _pdi.is_processed();

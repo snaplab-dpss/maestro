@@ -97,6 +97,7 @@ void Constraint::fill_packet_fields(R3S::Z3_ast &expr,
 
 void Constraint::zip_packet_fields_expression_and_values(
   const std::vector<PacketFieldExpression>& pfes) {
+  /*
 
   first.sort_dependencies();
   second.sort_dependencies();
@@ -176,9 +177,11 @@ void Constraint::zip_packet_fields_expression_and_values(
 
     packet_fields.emplace_back(pfe_copy, packet_dependency->clone());
   }
+  */
 }
 
 void Constraint::check_incompatible_dependencies() {
+  /*
   const auto &first_dependencies = first.get_dependencies();
   const auto &second_dependencies = second.get_dependencies();
 
@@ -194,6 +197,7 @@ void Constraint::check_incompatible_dependencies() {
       Logger::error() << "Dependencies incompatible with RSS. Nothing we can do." << "\n";
       exit(0);
   }
+  */
 }
 
 }

@@ -3,34 +3,66 @@
 namespace ParallelSynthesizer {
 namespace Tokens {
 
-const std::string ACCESS_START = "BEGIN ACCESS";
-const std::string ACCESS_END = "END ACCESS";
+const std::string OPTIONAL = "?";
 
+namespace Access {
+const std::string START = "BEGIN ACCESS";
+const std::string END = "END ACCESS";
 const std::string ID = "id";
-const std::string DEVICE = "device";
+const std::string SRC_DEVICE = "src_device";
+const std::string DST_DEVICE = "dst_device";
+const std::string OPERATION = "operation";
 const std::string OBJECT = "object";
+}
+
+namespace Operations {
+const std::string READ = "READ";
+const std::string WRITE = "WRITE";
+const std::string CREATE = "CREATE";
+const std::string VERIFY = "VERIFY";
+const std::string DESTROY = "DESTROY";
+const std::string NOP = "NOP";
+const std::string INIT = "INIT";
+}
+
+namespace Argument {
+const std::string START = "BEGIN ARGUMENT";
+const std::string END = "END ARGUMENT";
+const std::string TYPE = "type";
+const std::string EXPRESSION = "expression";
+}
+
+namespace ArgumentType {
+const std::string READ = "read";
+const std::string WRITE = "write";
+const std::string RESULT = "result";
+}
+
+namespace Expression {
+const std::string START = "BEGIN EXPRESSION";
+const std::string END = "END EXPRESSION";
+}
+
+namespace PacketDependencies {
+const std::string START = "BEGIN PACKET DEPENDENCIES";
+const std::string END = "END PACKET DEPENDENCIES";
+}
+
+namespace Chunk {
+const std::string START = "BEGIN CHUNK";
+const std::string END = "END CHUNK";
+
 const std::string LAYER = "layer";
 const std::string PROTOCOL = "protocol";
 const std::string DEPENDENCY = "dependency";
-const std::string OPERATION = "operation";
+}
 
-const std::string CONSTRAINT_START = "BEGIN CONSTRAINT";
-const std::string CONSTRAINT_END = "END CONSTRAINT";
+namespace Metadata {
+const std::string START = "BEGIN METADATA";
+const std::string END = "END METADATA";
 
-const std::string FIRST = "first";
-const std::string SECOND = "second";
-
-const std::string STATEMENT_START = "BEGIN SMT";
-const std::string STATEMENT_END = "END SMT";
-
-namespace Operations {
-
-const std::string READ = "read";
-const std::string WRITE = "write";
-const std::string CREATE = "create";
-const std::string NOP = "nop";
-const std::string INIT = "init";
-
+const std::string INTERFACE = "interface";
+const std::string FILE = "file";
 }
 
 }

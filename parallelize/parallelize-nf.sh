@@ -29,11 +29,11 @@ echo "[*] Building parse-libvig-access"
 make clean > /dev/null
 make -f ../parallelize/Makefile > /dev/null
 
-echo "[*] Building load-call-paths"
+echo "[*] Building analyze-libvig-call-paths"
 
 cd "$KLEE_DIR"
 ./build.sh > /dev/null
-ln -sf "$KLEE_DIR/build/bin/load-call-paths" "$BUILD/load-call-paths"
+ln -sf "$KLEE_DIR/build/bin/analyse-libvig-call-paths" "$BUILD/analyse-libvig-call-paths"
 cd "$NF_DIR"
 
 # ================
@@ -42,7 +42,7 @@ cd "$NF_DIR"
 
 echo "[*] Parsing call paths"
 CALL_PATHS=$NF_DIR/klee-last/test*.call_path
-"$BUILD/load-call-paths" $CALL_PATHS \
+"$BUILD/analyse-libvig-call-paths" $CALL_PATHS \
     2> "$BUILD/report-log.txt" \
     > "$BUILD/report.lva"
 
