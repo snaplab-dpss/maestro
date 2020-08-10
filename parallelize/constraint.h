@@ -56,8 +56,7 @@ private:
   R3S::Z3_ast expression;
   std::pair<int, int> packet_chunks_ids_pair;
   std::vector<std::pair<PacketFieldExpression,
-                        std::shared_ptr<const PacketDependency> > >
-  packet_fields;
+                        std::shared_ptr<const PacketDependency> > > packet_fields;
 
 private:
   void generate_expression_from_read_args();

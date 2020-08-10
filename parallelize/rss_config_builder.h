@@ -37,6 +37,7 @@ private:
 
   void fill_unique_devices(const std::vector<LibvigAccess> &accesses);
   void fill_constraints(const std::vector<LibvigAccess> &accesses);
+  void analyse_constraints();
 
 public:
   RSSConfigBuilder(const std::vector<LibvigAccess> &accesses) {
@@ -45,9 +46,20 @@ public:
 
     fill_unique_devices(accesses);
 
-    const auto trimmed_accesses = analyze_operations_on_objects(accesses);
+    const auto trimmed_accesses = analyse_operations_on_objects(accesses);
 
     fill_constraints(trimmed_accesses);
+    analyse_constraints();
+
+    /*
+    for (const auto& constraint : constraints) {
+      Logger::debug() << "\n";
+      Logger::debug() << "Constraint expr: " << R3S::Z3_ast_to_string(constraint.get_context(), constraint.get_expression());
+      Logger::debug() << "\n";
+      Logger::debug() << "Packet dependencies number: " << constraint.get_packet_fields().size();
+      Logger::debug() << "\n";
+    }
+    */
 
     // unique_access_pairs.push_back(access);
 
@@ -89,7 +101,7 @@ public:
   void build_rss_config();
 
   const std::vector<LibvigAccess>
-  analyze_operations_on_objects(const std::vector<LibvigAccess> &accesses);
+  analyse_operations_on_objects(const std::vector<LibvigAccess> &accesses);
 
   std::pair<R3S::R3S_packet_t, R3S::R3S_packet_t>
   generate_packets(unsigned device1, unsigned device2);

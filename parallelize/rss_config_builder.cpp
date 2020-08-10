@@ -97,6 +97,26 @@ void RSSConfigBuilder::fill_constraints(const std::vector<LibvigAccess> &accesse
   }
 }
 
+void RSSConfigBuilder::analyse_constraints() {
+  std::vector<Constraint> filtered_constraints;
+
+  for (const auto& constraint : constraints) {
+    if (constraint.get_packet_fields().size())
+      filtered_constraints.push_back(constraint);
+
+    /*
+    Logger::debug() << "\n";
+    Logger::debug() << "expression" << R3S::Z3_ast_to_string(constraint.get_context(), constraint.get_expression()) << "\n";
+    Logger::debug() << "first" << "\n";
+    Logger::debug() << constraint.get_first_access() << "\n";
+    Logger::debug() << "second" << "\n";
+    Logger::debug() << constraint.get_second_access() << "\n";
+    */
+  }
+
+  constraints = filtered_constraints;
+}
+
 void RSSConfigBuilder::load_solver_constraints_generators() {
   solver_constraints_generators.reserve(cfg->n_keys);
 
@@ -181,7 +201,7 @@ void RSSConfigBuilder::fill_unique_devices(
   }
 }
 
-const std::vector<LibvigAccess> RSSConfigBuilder::analyze_operations_on_objects(
+const std::vector<LibvigAccess> RSSConfigBuilder::analyse_operations_on_objects(
     const std::vector<LibvigAccess> &accesses) {
   std::vector<LibvigAccess> trimmed_accesses;
   std::map<unsigned int, bool> access_by_object;

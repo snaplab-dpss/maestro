@@ -6,6 +6,25 @@
 
 namespace ParallelSynthesizer {
 
+R3S::Z3_ast parse_expr(R3S::Z3_context ctx, const std::string& expr_str) {
+  auto expr = R3S::Z3_parse_smtlib2_string(ctx, expr_str.c_str(), 0, 0, 0, 0, 0, 0);
+
+  assert(R3S::Z3_get_ast_kind(ctx, expr) == R3S::Z3_APP_AST);
+
+  R3S::Z3_app app = R3S::Z3_to_app(ctx, expr);
+
+  R3S::Z3_func_decl app_decl = R3S::Z3_get_app_decl(ctx, app);
+  R3S::Z3_symbol symbol_app_name = R3S::Z3_get_decl_name(ctx, app_decl);
+  std::string app_name = R3S::Z3_get_symbol_string(ctx, symbol_app_name);
+
+  assert(app_name == "=");
+  assert(R3S::Z3_get_app_num_args(ctx, app) == 2);
+
+  R3S::Z3_ast app_arg = R3S::Z3_get_app_arg(ctx, app, 1);
+
+  return app_arg;
+}
+
 void Constraint::generate_expression_from_read_args() {
   auto first_read_arg = first.get_argument(LibvigAccessArgument::Type::READ);
   auto second_read_arg = second.get_argument(LibvigAccessArgument::Type::READ);
@@ -16,15 +35,15 @@ void Constraint::generate_expression_from_read_args() {
   auto first_expr_str = first_read_arg->get_expression();
   auto second_expr_str = second_read_arg->get_expression();
 
-  auto first_expr =
-      R3S::Z3_simplify(ctx, R3S::Z3_parse_smtlib2_string(
-                                ctx, first_expr_str.c_str(), 0, 0, 0, 0, 0, 0));
-
-  auto second_expr = R3S::Z3_simplify(
-      ctx, R3S::Z3_parse_smtlib2_string(ctx, second_expr_str.c_str(), 0, 0, 0,
-                                        0, 0, 0));
+  auto first_expr = parse_expr(ctx, first_expr_str);
+  auto second_expr = parse_expr(ctx, second_expr_str);
 
   expression = R3S::Z3_simplify(ctx, R3S::Z3_mk_eq(ctx, first_expr, second_expr));
+
+  Logger::warn() << "\n";
+  Logger::warn() << "first  " << R3S::Z3_ast_to_string(ctx, first_expr) << "\n";
+  Logger::warn() << "second " << R3S::Z3_ast_to_string(ctx, second_expr) << "\n";
+  Logger::warn() << "final  " << R3S::Z3_ast_to_string(ctx, expression) << "\n";
 }
 
 void PacketFieldExpression::add_unique_packet_field_expression(

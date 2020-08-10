@@ -29,7 +29,7 @@ echo "[*] Building parse-libvig-access"
 make clean > /dev/null
 make -f ../parallelize/Makefile > /dev/null
 
-echo "[*] Building analyze-libvig-call-paths"
+echo "[*] Building analyse-libvig-call-paths"
 
 cd "$KLEE_DIR"
 ./build.sh > /dev/null
