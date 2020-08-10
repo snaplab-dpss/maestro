@@ -64,6 +64,5 @@ const std::string END = "END METADATA";
 const std::string INTERFACE = "interface";
 const std::string FILE = "file";
 }
-
 }
 }

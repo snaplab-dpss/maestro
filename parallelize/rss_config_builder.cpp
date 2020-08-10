@@ -9,7 +9,7 @@ namespace ParallelSynthesizer {
 
 void RSSConfigBuilder::merge_unique_packet_field_dependencies(
     const std::vector<R3S::R3S_pf_t> &packet_fields) {
-  for (const auto& packet_field : packet_fields) {
+  for (const auto &packet_field : packet_fields) {
     auto found_it =
         std::find(unique_packet_fields_dependencies.begin(),
                   unique_packet_fields_dependencies.end(), packet_field);
@@ -37,7 +37,8 @@ bool RSSConfigBuilder::is_access_pair_already_stored(
 
 void RSSConfigBuilder::load_rss_config_options() {
   if (constraints.size() == 0) {
-    Logger::log() << "No constraints. Configuring RSS with every possible option available.";
+    Logger::log() << "No constraints. Configuring RSS with every possible "
+                     "option available.";
     Logger::log() << "\n";
 
     for (int iopt = R3S::R3S_FIRST_OPT; iopt <= R3S::R3S_LAST_OPT; iopt++) {
@@ -60,11 +61,39 @@ void RSSConfigBuilder::load_rss_config_options() {
   size_t opts_sz;
 
   R3S::R3S_opts_from_pfs(&unique_packet_fields_dependencies[0],
-                    unique_packet_fields_dependencies.size(), &opts, &opts_sz);
+                         unique_packet_fields_dependencies.size(), &opts,
+                         &opts_sz);
 
   for (unsigned iopt = 0; iopt < opts_sz; iopt++) {
     rss_config.add_option(opts[iopt]);
     R3S::R3S_cfg_load_opt(cfg, opts[iopt]);
+  }
+}
+
+void RSSConfigBuilder::fill_constraints(const std::vector<LibvigAccess> &accesses) {
+  R3S::Z3_context ctx = R3S::R3S_cfg_get_z3_context(cfg);
+
+  auto size = accesses.size();
+
+  for (unsigned int first_idx = 0; first_idx < size; first_idx++) {
+    for (unsigned int second_idx = first_idx + 1; second_idx < size; second_idx++) {
+      const auto& first = accesses[first_idx];
+      const auto& second = accesses[second_idx];
+
+      auto first_read_arg = first.get_argument(LibvigAccessArgument::Type::READ);
+      auto second_read_arg = second.get_argument(LibvigAccessArgument::Type::READ);
+
+      if (first_read_arg == nullptr || second_read_arg == nullptr)
+        continue;
+
+      if (first.get_object() != second.get_object())
+        continue;
+
+      constraints.emplace_back(first, second, ctx);
+
+      merge_unique_packet_field_dependencies(first_read_arg->get_unique_packet_fields());
+      merge_unique_packet_field_dependencies(second_read_arg->get_unique_packet_fields());
+    }
   }
 }
 
@@ -86,7 +115,7 @@ int RSSConfigBuilder::get_device_index(unsigned int device) const {
 }
 
 void RSSConfigBuilder::build_rss_config() {
-  R3S::R3S_key_t* keys = new R3S::R3S_key_t[cfg->n_keys]();
+  R3S::R3S_key_t *keys = new R3S::R3S_key_t[cfg->n_keys]();
   R3S::R3S_status_t status;
 
   if (constraints.size() == 0) {
@@ -106,7 +135,8 @@ void RSSConfigBuilder::build_rss_config() {
   Logger::log() << "Running the solver now. This might take a while...";
   Logger::log() << "\n";
 
-  status = R3S::R3S_keys_fit_cnstrs(cfg, &RSSConfigBuilder::make_solver_constraints, keys);
+  status = R3S::R3S_keys_fit_cnstrs(
+      cfg, &RSSConfigBuilder::make_solver_constraints, keys);
 
   if (status != R3S::R3S_STATUS_SUCCESS) {
     Logger::error() << "Error fitting keys to constraints ";
@@ -122,67 +152,84 @@ void RSSConfigBuilder::build_rss_config() {
   delete[] keys;
 }
 
-void RSSConfigBuilder::fill_unique_devices(const std::vector<LibvigAccess>& accesses) {
-    for (const auto& access : accesses) {
-        auto it = std::find(unique_devices.begin(), unique_devices.end(), access.get_src_device());
+void RSSConfigBuilder::fill_unique_devices(
+    const std::vector<LibvigAccess> &accesses) {
+  for (const auto &access : accesses) {
+    auto src_device = access.get_src_device();
+    auto src_it =
+        std::find(unique_devices.begin(), unique_devices.end(), src_device);
 
-        if (it == unique_devices.end()) {
-            unique_devices.push_back(access.get_src_device());
-        }
+    if (src_it == unique_devices.end()) {
+      unique_devices.push_back(src_device);
     }
 
-    if (unique_devices.size() == 0) {
-      Logger::warn() << "No devices. No RSS configuration to generate.";
-      exit(0);
+    if (!access.is_dst_device_set())
+      continue;
+
+    auto dst_device = access.get_dst_device();
+    auto dst_it =
+        std::find(unique_devices.begin(), unique_devices.end(), dst_device);
+
+    if (dst_it == unique_devices.end()) {
+      unique_devices.push_back(dst_device);
     }
+  }
+
+  if (unique_devices.size() == 0) {
+    Logger::warn() << "No devices. No RSS configuration to generate.";
+    exit(0);
+  }
 }
 
 const std::vector<LibvigAccess> RSSConfigBuilder::analyze_operations_on_objects(
-        const std::vector<LibvigAccess>& accesses) {
-    std::vector<LibvigAccess> trimmed_accesses;
-    std::map<unsigned int, bool> store_access_by_object;
+    const std::vector<LibvigAccess> &accesses) {
+  std::vector<LibvigAccess> trimmed_accesses;
+  std::map<unsigned int, bool> access_by_object;
 
-    for (const auto& access : accesses) {
-        const auto& object = access.get_object();
-        auto store_access = store_access_by_object.find(object);
+  for (const auto &access : accesses) {
+    const auto &object = access.get_object();
+    auto store_access = access_by_object.find(object);
 
-        if (store_access != store_access_by_object.end() && store_access->second) {
-            trimmed_accesses.push_back(access);
-            continue;
-        } else if (store_access != store_access_by_object.end()) {
-            continue;
-        }
-
-        auto read_op_finder = [&](const LibvigAccess& access) -> bool {
-            return access.get_object() == object && access.get_operation() == LibvigAccess::Operation::READ;
-        };
-
-        auto found_read = std::find_if(accesses.begin(), accesses.end(), read_op_finder) != accesses.end();
-
-        auto write_op_finder = [&](const LibvigAccess& access) -> bool {
-            if (access.get_object() != object)
-              return false;
-
-            return access.get_operation() == LibvigAccess::Operation::WRITE ||
-                   access.get_operation() == LibvigAccess::Operation::CREATE;
-        };
-
-        auto found_write = std::find_if(accesses.begin(), accesses.end(), write_op_finder) != accesses.end();
-
-        if (found_read && !found_write) {
-            Logger::warn() << "Reads with no writes on object ";
-            Logger::warn() << object;
-            Logger::warn() << "\n";
-
-            store_access_by_object.insert({ object, false });
-            continue;
-        }
-
-        store_access_by_object.insert({ object, true });
-        trimmed_accesses.push_back(access);
+    if (store_access != access_by_object.end() && store_access->second) {
+      trimmed_accesses.push_back(access);
+      continue;
+    } else if (store_access != access_by_object.end()) {
+      continue;
     }
 
-    return trimmed_accesses;
+    auto read_op_finder = [&](const LibvigAccess & access)->bool {
+      return access.get_object() == object &&
+             access.get_operation() == LibvigAccess::Operation::READ;
+    };
+
+    auto found_read = std::find_if(accesses.begin(), accesses.end(),
+                                   read_op_finder) != accesses.end();
+
+    auto write_op_finder = [&](const LibvigAccess & access)->bool {
+      if (access.get_object() != object)
+        return false;
+
+      return access.get_operation() == LibvigAccess::Operation::WRITE ||
+             access.get_operation() == LibvigAccess::Operation::CREATE;
+    };
+
+    auto found_write = std::find_if(accesses.begin(), accesses.end(),
+                                    write_op_finder) != accesses.end();
+
+    if (found_read && !found_write) {
+      Logger::warn() << "Reads with no writes on object ";
+      Logger::warn() << object;
+      Logger::warn() << "\n";
+
+      access_by_object.insert({ object, false });
+      continue;
+    }
+
+    access_by_object.insert({ object, true });
+    trimmed_accesses.push_back(access);
+  }
+
+  return trimmed_accesses;
 }
 
 std::pair<R3S::R3S_packet_t, R3S::R3S_packet_t>
@@ -197,9 +244,9 @@ RSSConfigBuilder::generate_packets(unsigned device1, unsigned device2) {
   R3S::R3S_packet_rand(cfg, &p1);
 
   data.constraints = &RSSConfigBuilder::make_solver_constraints;
-  data.key_id_in   = device1;
-  data.key_id_out  = device2;
-  data.packet_in   = p1;
+  data.key_id_in = device1;
+  data.key_id_out = device2;
+  data.packet_in = p1;
 
   status = R3S::R3S_packet_from_cnstrs(cfg, data, &p2);
 
@@ -259,7 +306,7 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
       PacketFieldExpression packet_dependency_expr =
           packet_field_expr_value.first;
 
-      const std::unique_ptr<const PacketDependency>& packet_dependency_value =
+      const std::shared_ptr<const PacketDependency> &packet_dependency_value =
           packet_field_expr_value.second;
 
       // TODO: error handling if is neither equal to first or second
@@ -276,11 +323,13 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
       if (!packet_dependency_value->should_ignore() &&
           packet_dependency_value->is_rss_compatible()) {
 
-        const auto dependency_rss_compatible = dynamic_cast<const PacketDependencyProcessed*>(packet_dependency_value.get());
+        const auto dependency_rss_compatible =
+            dynamic_cast<const PacketDependencyProcessed *>(
+                packet_dependency_value.get());
 
-        status = R3S_packet_extract_pf(cfg, target_packet,
-                                     dependency_rss_compatible->get_packet_field(),
-                                     &packet_field_ast);
+        status = R3S_packet_extract_pf(
+            cfg, target_packet, dependency_rss_compatible->get_packet_field(),
+            &packet_field_ast);
         if (status != R3S::R3S_STATUS_SUCCESS) {
           constraint_incompatible_with_current_opt = true;
           break;
@@ -289,29 +338,23 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
         unsigned int packet_field_ast_size =
             Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, packet_field_ast));
 
-        unsigned int high =
-            packet_field_ast_size - dependency_rss_compatible->get_bytes() * 8 - 1;
+        unsigned int high = packet_field_ast_size -
+                            dependency_rss_compatible->get_bytes() * 8 - 1;
         unsigned int low = high - 7;
 
         target_ast = Z3_mk_extract(ctx, high, low, packet_field_ast);
 
+      } else if (!packet_dependency_value->should_ignore()) {
+        // TODO:
+        assert(false && "TODO");
+      } else {
+        target_ast = Z3_mk_bvxor(ctx, packet_dependency_expr.get_expression(),
+                                 packet_dependency_expr.get_expression());
       }
 
-      else if (!packet_dependency_value->should_ignore()) {
-          // TODO:
-          assert(false && "TODO");
-      }
-
-      else {
-        target_ast = Z3_mk_bvxor(
-          ctx,
-          packet_dependency_expr.get_expression(),
-          packet_dependency_expr.get_expression());        
-      }
-
-      constraint_expression = ast_replace(
-          ctx, constraint_expression,
-          packet_dependency_expr.get_expression(), target_ast);
+      constraint_expression =
+          ast_replace(ctx, constraint_expression,
+                      packet_dependency_expr.get_expression(), target_ast);
     }
 
     if (constraint_incompatible_with_current_opt) {
@@ -337,13 +380,15 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
     for (const auto &packet_field_expr_value : constraint.get_packet_fields()) {
       PacketFieldExpression packet_dependency_expr =
           packet_field_expr_value.first;
-      if (packet_dependency_expr.get_packet_chunks_id() != constraint.get_packet_chunks_ids_pair().first)
+      if (packet_dependency_expr.get_packet_chunks_id() !=
+    constraint.get_packet_chunks_ids_pair().first)
         continue;
       PacketDependencyProcessed packet_dependency_value =
           packet_field_expr_value.second;
       if (packet_dependency_value.should_ignore()) continue;
 
-      Logger::debug() << " " << R3S_pf_to_string(packet_dependency_value.get_packet_field());
+      Logger::debug() << " " <<
+    R3S_pf_to_string(packet_dependency_value.get_packet_field());
     }
     Logger::debug() << "\n";
 
@@ -357,13 +402,15 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
     for (const auto &packet_field_expr_value : constraint.get_packet_fields()) {
       PacketFieldExpression packet_dependency_expr =
           packet_field_expr_value.first;
-      if (packet_dependency_expr.get_packet_chunks_id() != constraint.get_packet_chunks_ids_pair().second)
+      if (packet_dependency_expr.get_packet_chunks_id() !=
+    constraint.get_packet_chunks_ids_pair().second)
         continue;
       PacketDependencyProcessed packet_dependency_value =
           packet_field_expr_value.second;
       if (packet_dependency_value.should_ignore()) continue;
 
-      Logger::debug() << " " << R3S_pf_to_string(packet_dependency_value.get_packet_field());
+      Logger::debug() << " " <<
+    R3S_pf_to_string(packet_dependency_value.get_packet_field());
     }
     Logger::debug() << "\n";
     Logger::debug() << "\n";
@@ -378,10 +425,11 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
     return NULL;
 
   R3S::Z3_ast final_constraint;
-  
+
   if (generated_constraints.size() > 1) {
-    final_constraint = Z3_simplify(ctx, Z3_mk_and(
-      ctx, generated_constraints.size(), &generated_constraints[0]));
+    final_constraint =
+        Z3_simplify(ctx, Z3_mk_and(ctx, generated_constraints.size(),
+                                   &generated_constraints[0]));
   } else {
     final_constraint = generated_constraints[0];
   }

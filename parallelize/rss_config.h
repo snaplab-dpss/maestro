@@ -15,39 +15,35 @@ namespace ParallelSynthesizer {
 
 class RSSConfig {
 private:
-    std::vector<R3S::R3S_opt_t> options;
+  std::vector<R3S::R3S_opt_t> options;
 
-    R3S::R3S_key_t* keys;
-    unsigned n_keys;
+  R3S::R3S_key_t *keys;
+  unsigned n_keys;
 
-    RSSConfig() {
-        keys = NULL;
+  RSSConfig() { keys = NULL; }
+
+  void add_option(const R3S::R3S_opt_t &option) { options.push_back(option); }
+
+  void set_keys(R3S::R3S_key_t *_keys, const unsigned &size) {
+    keys = new R3S::R3S_key_t[size]();
+
+    n_keys = size;
+    for (auto ikey = 0; ikey < size; ikey++) {
+      std::copy_n(_keys[ikey], KEY_SIZE, keys[ikey]);
     }
-
-    void add_option(const R3S::R3S_opt_t& option) { options.push_back(option); }
-
-    void set_keys(R3S::R3S_key_t* _keys, const unsigned& size) {
-      keys = new R3S::R3S_key_t[size]();
-
-      n_keys = size;
-      for (auto ikey = 0; ikey < size; ikey++) {
-        std::copy_n(_keys[ikey], KEY_SIZE, keys[ikey]);
-      }
-    }
+  }
 
 public:
-    const std::vector<R3S::R3S_opt_t>& get_options() const { return options; }
-    const unsigned& get_n_keys() const { return n_keys; }
+  const std::vector<R3S::R3S_opt_t> &get_options() const { return options; }
+  const unsigned &get_n_keys() const { return n_keys; }
 
-    R3S::R3S_key_t*& get_keys() {
-      return keys;
-    }
+  R3S::R3S_key_t *&get_keys() { return keys; }
 
-    friend class RSSConfigBuilder;
+  friend class RSSConfigBuilder;
 
-    ~RSSConfig() {
-      if (keys != NULL)
-        delete[] keys;
-    }
+  ~RSSConfig() {
+    if (keys != NULL)
+      delete[] keys;
+  }
 };
 }

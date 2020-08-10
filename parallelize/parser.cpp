@@ -21,7 +21,8 @@ LibvigAccess &Parser::get_or_push_unique_access(const LibvigAccess &access) {
   return *it;
 }
 
-bool Parser::consume_token(const std::string &token, std::istringstream& iss, bool optional) {
+bool Parser::consume_token(const std::string &token, std::istringstream &iss,
+                           bool optional) {
   assert(states.top().content.size());
 
   if (optional && last_loaded_content_type() != LoadedContentType::UNPARSED)
@@ -34,15 +35,18 @@ bool Parser::consume_token(const std::string &token, std::istringstream& iss, bo
 
   if (found == std::string::npos && !optional) {
 
-    Logger::error() << "Token not found" << "\n";
+    Logger::error() << "Token not found"
+                    << "\n";
     Logger::error() << "Line:    " << line_counter << "\n";
-    Logger::error() << "Input:   " << "\"" << line << "\"" << "\n";
-    Logger::error() << "Missing: " << "\"" << token << "\"" << "\n";
+    Logger::error() << "Input:   "
+                    << "\"" << line << "\""
+                    << "\n";
+    Logger::error() << "Missing: "
+                    << "\"" << token << "\""
+                    << "\n";
 
     exit(1);
-  }
-
-  else if (found == std::string::npos) {
+  } else if (found == std::string::npos) {
     return false;
   }
 
@@ -51,8 +55,11 @@ bool Parser::consume_token(const std::string &token, std::istringstream& iss, bo
 
   std::string consumed;
   if (optional) {
-    auto optional_token_found = line.find(Tokens::OPTIONAL) != std::string::npos;
-    consumed = line.substr(found + token.length() + (optional_token_found ? Tokens::OPTIONAL.size() : 0));
+    auto optional_token_found =
+        line.find(Tokens::OPTIONAL) != std::string::npos;
+    consumed =
+        line.substr(found + token.length() +
+                    (optional_token_found ? Tokens::OPTIONAL.size() : 0));
   } else {
     consumed = line.substr(found + token.length());
   }
@@ -79,7 +86,8 @@ void Parser::parse_access() {
   iss >> std::ws >> src_device;
 
   dst_device.first = consume_token(Tokens::Access::DST_DEVICE, iss, true);
-  if (dst_device.first) iss >> std::ws >> dst_device.second;
+  if (dst_device.first)
+    iss >> std::ws >> dst_device.second;
 
   {
     std::string operation_str;
@@ -91,8 +99,8 @@ void Parser::parse_access() {
   consume_token(Tokens::Access::OBJECT, iss);
   iss >> std::ws >> object;
 
-  LibvigAccess &access =
-      get_or_push_unique_access(LibvigAccess(id, src_device, dst_device, operation, object));
+  LibvigAccess &access = get_or_push_unique_access(
+      LibvigAccess(id, src_device, dst_device, operation, object));
 
   if (consume_token(Tokens::Access::END, iss, true)) {
     states.pop();
@@ -103,14 +111,10 @@ void Parser::parse_access() {
     if (last_loaded_content_type() == LoadedContentType::ARGUMENT) {
       auto argument = last_loaded_content().argument.value;
       access.add_argument(argument);
-    }
-
-    else if (last_loaded_content_type() == LoadedContentType::METADATA) {
+    } else if (last_loaded_content_type() == LoadedContentType::METADATA) {
       auto metadata = last_loaded_content().metadata.value;
       access.add_metadata(metadata);
-    }
-
-    else
+    } else
       break;
 
     consume_content();
@@ -141,9 +145,10 @@ void Parser::parse_argument() {
 
   LibvigAccessArgument argument(type, expression);
 
-  if(states.top().content.size() && last_loaded_content_type() == LoadedContentType::PACKET_DEPENDENCIES) {
+  if (states.top().content.size() &&
+      last_loaded_content_type() == LoadedContentType::PACKET_DEPENDENCIES) {
     auto dependencies = last_loaded_content().dependencies.value;
-    for (const auto& dependency : dependencies)
+    for (const auto &dependency : dependencies)
       argument.add_dependency(dependency.get());
 
     consume_content();
@@ -176,7 +181,7 @@ void Parser::parse_expression() {
 }
 
 void Parser::parse_packet_dependencies() {
-  std::vector< std::shared_ptr<const Dependency> > dependencies;
+  std::vector<std::shared_ptr<const Dependency> > dependencies;
   std::istringstream iss;
 
   consume_token(Tokens::PacketDependencies::START, iss);
@@ -200,7 +205,7 @@ void Parser::parse_packet_dependencies() {
 }
 
 void Parser::parse_chunk() {
-  std::vector< std::shared_ptr<const Dependency> > dependencies;
+  std::vector<std::shared_ptr<const Dependency> > dependencies;
   std::istringstream iss;
 
   unsigned int layer;
@@ -212,7 +217,8 @@ void Parser::parse_chunk() {
   iss >> std::ws >> layer;
 
   protocol.first = consume_token(Tokens::Chunk::PROTOCOL, iss, true);
-  if (protocol.first) iss >> std::ws >> protocol.second;
+  if (protocol.first)
+    iss >> std::ws >> protocol.second;
 
   while (states.top().content.size()) {
     unsigned int offset;
@@ -230,7 +236,7 @@ void Parser::parse_chunk() {
 
   states.pop();
 
-  for (const auto& dependency : dependencies) {
+  for (const auto &dependency : dependencies) {
     states.top().content.emplace_back(dependency);
   }
 }
@@ -239,7 +245,6 @@ void Parser::parse_metadata() {
   std::string interface;
   std::string file;
   std::istringstream iss;
-
 
   consume_token(Tokens::Metadata::START, iss);
 
@@ -257,7 +262,7 @@ void Parser::parse_metadata() {
   states.top().content.emplace_back(metadata);
 }
 
-void Parser::parse(const std::string& filepath) {
+void Parser::parse(const std::string &filepath) {
   // TODO: deal with errors
   std::fstream file;
   std::string line;
@@ -265,18 +270,17 @@ void Parser::parse(const std::string& filepath) {
   file.open(filepath.c_str(), std::ios::in);
 
   if (!file.is_open()) {
-    Logger::error() << "Failed to open file" << "\n";
+    Logger::error() << "Failed to open file"
+                    << "\n";
     exit(1);
   }
 
   while (getline(file, line)) {
 
-    if (line == Tokens::Access::START ||
-        line == Tokens::Argument::START ||
+    if (line == Tokens::Access::START || line == Tokens::Argument::START ||
         line == Tokens::Expression::START ||
         line == Tokens::PacketDependencies::START ||
-        line == Tokens::Chunk::START ||
-        line == Tokens::Metadata::START) {
+        line == Tokens::Chunk::START || line == Tokens::Metadata::START) {
       states.emplace();
     }
 
@@ -308,7 +312,8 @@ void Parser::parse(const std::string& filepath) {
 
 void Parser::report() {
   /*
-  std::vector< std::pair<unsigned int, PacketDependencyIncompatible> > incompatible_dependency_id_pairs;
+  std::vector< std::pair<unsigned int, PacketDependencyIncompatible> >
+  incompatible_dependency_id_pairs;
 
   for (const auto& access : accesses) {
     for (const auto& dependency : access.get_dependencies()) {
@@ -316,19 +321,24 @@ void Parser::report() {
       if (dependency->is_rss_compatible() || dependency->should_ignore())
         continue;
 
-      const auto& incompatible = dynamic_cast<const PacketDependencyIncompatible&>(*dependency);
+      const auto& incompatible = dynamic_cast<const
+  PacketDependencyIncompatible&>(*dependency);
 
-      std::pair<unsigned int, PacketDependencyIncompatible> pair(access.get_id(), incompatible);
-      auto found_it = std::find(incompatible_dependency_id_pairs.begin(), incompatible_dependency_id_pairs.end(), pair);
+      std::pair<unsigned int, PacketDependencyIncompatible>
+  pair(access.get_id(), incompatible);
+      auto found_it = std::find(incompatible_dependency_id_pairs.begin(),
+  incompatible_dependency_id_pairs.end(), pair);
       if (found_it != incompatible_dependency_id_pairs.end()) continue;
 
-      Logger::error() << "=============== Incompatible dependency in access ===============";
+      Logger::error() << "=============== Incompatible dependency in access
+  ===============";
       Logger::error() << "\n";
       Logger::error() << "Access:";
       Logger::error() << "\n";
       Logger::error() << access;
       Logger::error() << "\n";
-      Logger::error() << "=================================================================";
+      Logger::error() <<
+  "=================================================================";
       Logger::error() << "\n";
       Logger::error() << "\n";
 
@@ -337,5 +347,4 @@ void Parser::report() {
   }
   */
 }
-
 }

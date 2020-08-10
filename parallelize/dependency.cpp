@@ -24,29 +24,29 @@ bool operator<(const PacketDependency &lhs, const PacketDependency &rhs) {
   return false;
 }
 
-std::ostream& operator<<(std::ostream& os, const Dependency& dependency) {
-    dependency.print(os);
+std::ostream &operator<<(std::ostream &os, const Dependency &dependency) {
+  dependency.print(os);
 
-    if (dependency.ignore) {
-        os << " [ignored]";
-    }
+  if (dependency.ignore) {
+    os << " [ignored]";
+  }
 
-    if (!dependency.packet_related){
-        os << " [non packet related]";
-    }
+  if (!dependency.packet_related) {
+    os << " [non packet related]";
+  }
 
-    return os;
+  return os;
 }
 
 bool operator==(const PacketDependencyProcessed &lhs,
                 const PacketDependencyProcessed &rhs) {
-  return lhs.bytes == rhs.bytes &&
-         lhs.get_layer() == rhs.get_layer() &&
+  return lhs.bytes == rhs.bytes && lhs.get_layer() == rhs.get_layer() &&
          lhs.get_offset() == rhs.get_offset() &&
          lhs.get_protocol() == rhs.get_protocol();
 }
 
-bool operator==(const PacketDependencyIncompatible &lhs, const PacketDependencyIncompatible &rhs) {
+bool operator==(const PacketDependencyIncompatible &lhs,
+                const PacketDependencyIncompatible &rhs) {
   return lhs.get_description() == rhs.get_description();
 }
 

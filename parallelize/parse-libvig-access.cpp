@@ -26,13 +26,12 @@ int main(int argc, char *argv[]) {
 
   Parser parser(libvig_access_out);
 
-  for (const auto& access : parser.get_accesses())
+  for (const auto &access : parser.get_accesses())
     Logger::log() << access << "\n";
 
+  RSSConfigBuilder rss_cfg_builder(parser.get_accesses());
 
   /*
-  RSSConfigBuilder rss_cfg_builder(parser.get_accesses(),
-                                   parser.get_raw_constraints());
   rss_cfg_builder.build_rss_config();
   auto config = rss_cfg_builder.get_generated_rss_cfg();
   auto r3s_config = rss_cfg_builder.get_cfg();
@@ -68,14 +67,14 @@ int main(int argc, char *argv[]) {
     R3S::R3S_key_hash(r3s_config, keys[0], packets.second, &o2);
 
     if (o1 != o2) {
-        Logger::error() << "Hash output mismatch";
-        Logger::error() << "\n";
-        Logger::error() << R3S::R3S_key_hash_output_to_string(o1);
-        Logger::error() << " != ";
-        Logger::error() << R3S::R3S_key_hash_output_to_string(o2);
-        Logger::error() << "\n";
+      Logger::error() << "Hash output mismatch";
+      Logger::error() << "\n";
+      Logger::error() << R3S::R3S_key_hash_output_to_string(o1);
+      Logger::error() << " != ";
+      Logger::error() << R3S::R3S_key_hash_output_to_string(o2);
+      Logger::error() << "\n";
 
-        exit(1);
+      exit(1);
     }
   }
   */

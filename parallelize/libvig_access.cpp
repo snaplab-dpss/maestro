@@ -7,40 +7,58 @@
 
 namespace ParallelSynthesizer {
 
-void LibvigAccessArgument::add_dependency(const Dependency* dependency) {
-    assert(dependency && "invalid dependency");
+std::shared_ptr<const LibvigAccessArgument>
+LibvigAccess::get_argument(const LibvigAccessArgument::Type &type) const {
+  auto is_right_arg_type = [&](const LibvigAccessArgument & arg)->bool {
+    return arg.get_type() == type;
+  };
 
-    if (!dependency->is_processed() && dependency->is_packet_related()) {
-      const auto packet_dependency = dynamic_cast<const PacketDependency*>(dependency);
-      assert(packet_dependency);
-      process_packet_dependency(packet_dependency);
-    } else if (!dependency->is_processed() && !dependency->is_packet_related()) {
-      // TODO:
-      assert(false && "not implemented");
-    } else {
-      dependencies.emplace_back(dependency->clone());
-      are_dependencies_sorted = false;
-    }
+  auto found_it =
+      std::find_if(arguments.begin(), arguments.end(), is_right_arg_type);
+
+  if (found_it == arguments.end())
+    return nullptr;
+
+  return std::make_shared<const LibvigAccessArgument>(*found_it);
 }
 
-void LibvigAccessArgument::process_packet_dependency(const PacketDependency* dependency_ptr) {
+void LibvigAccessArgument::add_dependency(const Dependency *dependency) {
+  assert(dependency && "invalid dependency");
+
+  if (!dependency->is_processed() && dependency->is_packet_related()) {
+    const auto packet_dependency =
+        dynamic_cast<const PacketDependency *>(dependency);
+    assert(packet_dependency);
+    process_packet_dependency(packet_dependency);
+  } else if (!dependency->is_processed() && !dependency->is_packet_related()) {
+    // TODO:
+    assert(false && "not implemented");
+  } else {
+    dependencies.emplace_back(dependency->clone());
+    are_dependencies_sorted = false;
+  }
+}
+
+void LibvigAccessArgument::process_packet_dependency(
+    const PacketDependency *dependency_ptr) {
   assert(dependency_ptr && "invalid dependency");
 
   const auto dependency = *dependency_ptr;
 
   auto it = std::find_if(
-    dependencies.begin(),
-    dependencies.end(),
-    [&](const std::shared_ptr<const Dependency>& _dependency) -> bool {
-      if (!_dependency->is_processed()) return false;
-      if (!_dependency->is_packet_related()) return false;
+      dependencies.begin(), dependencies.end(),
+      [&](const std::shared_ptr<const Dependency> & _dependency)->bool {
+        if (!_dependency->is_processed())
+          return false;
+        if (!_dependency->is_packet_related())
+          return false;
 
-      const auto _packet_dependency = dynamic_cast<const PacketDependency*>(_dependency.get());
-      assert(_packet_dependency);
+        const auto _packet_dependency =
+            dynamic_cast<const PacketDependency *>(_dependency.get());
+        assert(_packet_dependency);
 
-      return (*_packet_dependency) == dependency;
-    }
-  );
+        return (*_packet_dependency) == dependency;
+      });
 
   if (it != dependencies.end())
     return;
@@ -50,11 +68,11 @@ void LibvigAccessArgument::process_packet_dependency(const PacketDependency* dep
   auto protocol = dependency.get_protocol();
 
   if (layer == 2) {
-      // TODO: ethertype
+    // TODO: ethertype
 
-      auto processed = PacketDependencyIncompatible(dependency, "Ethernet field");
-      add_dependency(processed.get_unique().get());
-      return;
+    auto processed = PacketDependencyIncompatible(dependency, "Ethernet field");
+    add_dependency(processed.get_unique().get());
+    return;
   }
 
   // IPv4
@@ -66,15 +84,18 @@ void LibvigAccessArgument::process_packet_dependency(const PacketDependency* dep
       // It is complete. Therefore, this field can be ignored. If one
       // incompatible protocol value is used, then it will be caught
       // later on the incompatible field.
-      auto processed = PacketDependencyIncompatible(dependency, "IPv4 protocol", true);
+      auto processed =
+          PacketDependencyIncompatible(dependency, "IPv4 protocol", true);
       add_dependency(processed.get_unique().get());
       return;
     } else if (offset >= 12 && offset <= 15) {
-      auto processed = PacketDependencyProcessed(dependency, R3S::R3S_PF_IPV4_SRC, 15 - offset);
+      auto processed = PacketDependencyProcessed(
+          dependency, R3S::R3S_PF_IPV4_SRC, 15 - offset);
       add_dependency(processed.get_unique().get());
       return;
     } else if (offset >= 16 && offset <= 19) {
-      auto processed = PacketDependencyProcessed(dependency, R3S::R3S_PF_IPV4_DST, 19 - offset);
+      auto processed = PacketDependencyProcessed(
+          dependency, R3S::R3S_PF_IPV4_DST, 19 - offset);
       add_dependency(processed.get_unique().get());
       return;
     } else if (offset >= 20) {
@@ -82,7 +103,8 @@ void LibvigAccessArgument::process_packet_dependency(const PacketDependency* dep
       add_dependency(processed.get_unique().get());
       return;
     } else {
-      auto processed = PacketDependencyIncompatible(dependency, "Unknown IPv4 field");
+      auto processed =
+          PacketDependencyIncompatible(dependency, "Unknown IPv4 field");
       add_dependency(processed.get_unique().get());
       return;
     }
@@ -101,15 +123,18 @@ void LibvigAccessArgument::process_packet_dependency(const PacketDependency* dep
   // TCP
   else if (layer == 4 && protocol == 0x06) {
     if (offset <= 1) {
-      auto processed = PacketDependencyProcessed(dependency, R3S::R3S_PF_TCP_SRC, offset);
+      auto processed =
+          PacketDependencyProcessed(dependency, R3S::R3S_PF_TCP_SRC, offset);
       add_dependency(processed.get_unique().get());
       return;
     } else if (offset >= 2 && offset <= 3) {
-      auto processed = PacketDependencyProcessed(dependency, R3S::R3S_PF_TCP_DST, offset - 2);
+      auto processed = PacketDependencyProcessed(
+          dependency, R3S::R3S_PF_TCP_DST, offset - 2);
       add_dependency(processed.get_unique().get());
       return;
     } else {
-      auto processed = PacketDependencyIncompatible(dependency, "Unknown TCP field");
+      auto processed =
+          PacketDependencyIncompatible(dependency, "Unknown TCP field");
       add_dependency(processed.get_unique().get());
       return;
     }
@@ -118,21 +143,22 @@ void LibvigAccessArgument::process_packet_dependency(const PacketDependency* dep
   // UDP
   else if (layer == 4 && protocol == 0x11) {
     if (offset <= 1) {
-      auto processed = PacketDependencyProcessed(dependency, R3S::R3S_PF_UDP_SRC, offset);
+      auto processed =
+          PacketDependencyProcessed(dependency, R3S::R3S_PF_UDP_SRC, offset);
       add_dependency(processed.get_unique().get());
       return;
     } else if (offset >= 2 && offset <= 3) {
-      auto processed = PacketDependencyProcessed(dependency, R3S::R3S_PF_UDP_DST, offset - 2);
+      auto processed = PacketDependencyProcessed(
+          dependency, R3S::R3S_PF_UDP_DST, offset - 2);
       add_dependency(processed.get_unique().get());
       return;
     } else {
-      auto processed = PacketDependencyIncompatible(dependency, "Unknown UDP field");
+      auto processed =
+          PacketDependencyIncompatible(dependency, "Unknown UDP field");
       add_dependency(processed.get_unique().get());
       return;
     }
-  }
-
-  else {
+  } else {
     auto processed = PacketDependencyIncompatible(dependency, "Unknown");
     add_dependency(processed.get_unique().get());
     return;
@@ -143,7 +169,7 @@ bool operator==(const LibvigAccess &lhs, const LibvigAccess &rhs) {
   return lhs.get_id() == rhs.get_id();
 }
 
-std::ostream& operator<<(std::ostream& os, const LibvigAccessMetadata& arg) {
+std::ostream &operator<<(std::ostream &os, const LibvigAccessMetadata &arg) {
   os << "  interface  ";
   os << arg.interface;
   os << "\n";
@@ -155,18 +181,18 @@ std::ostream& operator<<(std::ostream& os, const LibvigAccessMetadata& arg) {
   return os;
 }
 
-std::ostream& operator<<(std::ostream& os, const LibvigAccessArgument& arg) {
+std::ostream &operator<<(std::ostream &os, const LibvigAccessArgument &arg) {
   os << "  type       ";
-  switch(arg.type) {
-  case LibvigAccessArgument::Type::READ:
-    os << "read";
-    break;
-  case LibvigAccessArgument::Type::WRITE:
-    os << "write";
-    break;
-  case LibvigAccessArgument::Type::RESULT:
-    os << "result";
-    break;
+  switch (arg.type) {
+    case LibvigAccessArgument::Type::READ:
+      os << "read";
+      break;
+    case LibvigAccessArgument::Type::WRITE:
+      os << "write";
+      break;
+    case LibvigAccessArgument::Type::RESULT:
+      os << "result";
+      break;
   }
   os << "\n";
 
@@ -177,10 +203,10 @@ std::ostream& operator<<(std::ostream& os, const LibvigAccessArgument& arg) {
   if (arg.dependencies.size()) {
     os << "  dependencies";
     os << " (" << arg.dependencies.size() << "):";
-    for (const auto& dep : arg.dependencies) {
-          os << "\n";
-          os << "    ";
-          os << *dep.get();
+    for (const auto &dep : arg.dependencies) {
+      os << "\n";
+      os << "    ";
+      os << *dep.get();
     }
     os << "\n";
   }
@@ -188,8 +214,9 @@ std::ostream& operator<<(std::ostream& os, const LibvigAccessArgument& arg) {
   return os;
 }
 
-std::ostream& operator<<(std::ostream& os, const LibvigAccess& access) {
-  os << "================ ACCESS ================" << "\n";
+std::ostream &operator<<(std::ostream &os, const LibvigAccess &access) {
+  os << "================ ACCESS ================"
+     << "\n";
   os << "id         ";
   os << access.id;
   os << "\n";
@@ -236,7 +263,7 @@ std::ostream& operator<<(std::ostream& os, const LibvigAccess& access) {
 
   if (access.arguments.size()) {
     os << "arguments:";
-    for (const auto& arg : access.arguments) {
+    for (const auto &arg : access.arguments) {
       os << "\n";
       os << arg;
     }
@@ -248,15 +275,16 @@ std::ostream& operator<<(std::ostream& os, const LibvigAccess& access) {
     os << access.metadata.second;
   }
 
-  os << "========================================" << "\n";
+  os << "========================================"
+     << "\n";
 
   return os;
 }
 
-bool operator==(const LibvigAccessArgument &lhs, const LibvigAccessArgument &rhs) {
-  return lhs.type == rhs.type &&
-      lhs.expression == rhs.expression &&
-      lhs.get_dependencies() == rhs.get_dependencies();
+bool operator==(const LibvigAccessArgument &lhs,
+                const LibvigAccessArgument &rhs) {
+  return lhs.type == rhs.type && lhs.expression == rhs.expression &&
+         lhs.get_dependencies() == rhs.get_dependencies();
 }
 
 bool LibvigAccess::content_equal(const LibvigAccess &access1,
@@ -267,7 +295,8 @@ bool LibvigAccess::content_equal(const LibvigAccess &access1,
   if (access1.is_dst_device_set() != access2.is_dst_device_set())
     return false;
 
-  if (access1.is_dst_device_set() && (access1.get_dst_device() != access2.get_dst_device()))
+  if (access1.is_dst_device_set() &&
+      (access1.get_dst_device() != access2.get_dst_device()))
     return false;
 
   if (access1.get_object() != access2.get_object())
