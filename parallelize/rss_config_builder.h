@@ -86,6 +86,12 @@ public:
 
     Logger::log() << "\nR3S configuration:\n" << R3S::R3S_cfg_to_string(cfg)
                   << "\n";
+
+    Logger::debug() << "Constraints:" << "\n";
+    for (const auto& constraint : constraints) {
+      Logger::debug() << constraint;
+      Logger::debug() << "\n";
+    }
   }
 
   const R3S::R3S_cfg_t &get_cfg() const { return cfg; }

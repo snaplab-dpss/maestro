@@ -25,47 +25,107 @@ R3S::Z3_ast parse_expr(R3S::Z3_context ctx, const std::string& expr_str) {
   return app_arg;
 }
 
+bool operator==(const PacketDependenciesExpression &lhs, const PacketDependenciesExpression& rhs) {
+  return R3S::Z3_is_eq_ast(lhs.ctx, lhs.expression, rhs.expression);
+}
+
+bool operator<(const PacketDependenciesExpression &lhs,
+               const PacketDependenciesExpression &rhs) {
+  return lhs.get_index() < rhs.get_index();
+}
+
+std::ostream &operator<<(std::ostream &os,
+                         const PacketDependenciesExpression &arg) {
+  os << "expression    ";
+  os << R3S::Z3_ast_to_string(arg.ctx, arg.expression);
+  os << "\n";
+
+  os << "index         ";
+  os << arg.index;
+  os << "\n";
+
+  os << "chunk id      ";
+  os << arg.packet_chunks_id;
+  os << "\n";
+
+  os << "dependencies: ";
+  os << "\n";
+
+  if (arg.dependencies.size()) {
+    for (const auto& dependency : arg.dependencies) {
+      os << dependency;
+      os << "\n";
+    }
+  }
+
+  return os;
+}
+
+std::ostream &operator<<(std::ostream &os,
+                         const Constraint &arg) {
+  os << "================ CONSTRAINT ================";
+  os << "\n";
+
+  os << "first access id  ";
+  os << arg.first.get_id();
+  os << "\n";
+
+  os << "first chunk id   ";
+  os << arg.packet_chunks_ids.first;
+  os << "\n";
+
+  os << "second access id ";
+  os << arg.second.get_id();
+  os << "\n";
+
+  os << "second chunk id  ";
+  os << arg.packet_chunks_ids.second;
+  os << "\n";
+
+  os << "expression       ";
+  os << R3S::Z3_ast_to_string(arg.ctx, arg.expression);
+  os << "\n";
+
+  if (arg.packet_dependencies_expressions.size()) {
+    os << "dependencies:";
+    os << "\n";
+    for (const auto& packet_dependency_expression : arg.packet_dependencies_expressions) {
+      os << packet_dependency_expression;
+      os << "\n";
+    }
+  }
+
+  os << "===========================================";
+  os << "\n";
+
+  return os;
+}
+
+const std::string PacketDependenciesExpression::PACKET_CHUNKS_NAME_PATTERN =
+    "packet_chunks__ref_";
+
 void Constraint::generate_expression_from_read_args() {
+  assert(first.has_argument(LibvigAccessArgument::Type::READ));
+  assert(second.has_argument(LibvigAccessArgument::Type::READ));
+
   auto first_read_arg = first.get_argument(LibvigAccessArgument::Type::READ);
   auto second_read_arg = second.get_argument(LibvigAccessArgument::Type::READ);
 
-  assert(first_read_arg);
-  assert(second_read_arg);
-
-  auto first_expr_str = first_read_arg->get_expression();
-  auto second_expr_str = second_read_arg->get_expression();
+  auto first_expr_str = first_read_arg.get_expression();
+  auto second_expr_str = second_read_arg.get_expression();
 
   auto first_expr = parse_expr(ctx, first_expr_str);
   auto second_expr = parse_expr(ctx, second_expr_str);
 
   expression = R3S::Z3_simplify(ctx, R3S::Z3_mk_eq(ctx, first_expr, second_expr));
-
-  Logger::warn() << "\n";
-  Logger::warn() << "first  " << R3S::Z3_ast_to_string(ctx, first_expr) << "\n";
-  Logger::warn() << "second " << R3S::Z3_ast_to_string(ctx, second_expr) << "\n";
-  Logger::warn() << "final  " << R3S::Z3_ast_to_string(ctx, expression) << "\n";
 }
 
-void PacketFieldExpression::add_unique_packet_field_expression(
-    std::vector<PacketFieldExpression> &pfes,
-    const PacketFieldExpression &pfe) {
+void Constraint::store_unique_packet_dependencies_expression(const PacketDependenciesExpression& pde) {
+  auto found_it = std::find(packet_dependencies_expressions.begin(), packet_dependencies_expressions.end(), pde);
 
-  for (auto &stored_pfe : pfes) {
-    if (Z3_is_eq_ast(pfe.get_context(), pfe.get_expression(),
-                     stored_pfe.get_expression()))
-      return;
-  }
-
-  pfes.push_back(pfe);
+  if (found_it == packet_dependencies_expressions.end())
+    packet_dependencies_expressions.push_back(pde);
 }
-
-bool operator<(const PacketFieldExpression &lhs,
-               const PacketFieldExpression &rhs) {
-  return lhs.get_index() < rhs.get_index();
-}
-
-const std::string PacketFieldExpression::PACKET_CHUNKS_NAME_PATTERN =
-    "packet_chunks__ref_";
 
 bool is_select_from_chunk(R3S::Z3_context &ctx, R3S::Z3_app &app,
                           std::string &symbol_name) {
@@ -87,12 +147,11 @@ bool is_select_from_chunk(R3S::Z3_context &ctx, R3S::Z3_app &app,
   symbol_name = R3S::Z3_get_symbol_string(ctx, symbol_array_name);
 
   auto found =
-      symbol_name.find(PacketFieldExpression::PACKET_CHUNKS_NAME_PATTERN);
+      symbol_name.find(PacketDependenciesExpression::PACKET_CHUNKS_NAME_PATTERN);
   return found != std::string::npos;
 }
 
-void Constraint::fill_packet_fields(R3S::Z3_ast &expr,
-                                    std::vector<PacketFieldExpression> &pfes) {
+void Constraint::fill_packet_fields(R3S::Z3_ast &expr) {
   if (R3S::Z3_get_ast_kind(ctx, expr) != R3S::Z3_APP_AST)
     return;
 
@@ -107,21 +166,21 @@ void Constraint::fill_packet_fields(R3S::Z3_ast &expr,
     R3S::Z3_get_numeral_uint(ctx, index_ast, &index);
 
     std::string packet_chunks_id_str = symbol_name.substr(
-        PacketFieldExpression::PACKET_CHUNKS_NAME_PATTERN.size());
+        PacketDependenciesExpression::PACKET_CHUNKS_NAME_PATTERN.size());
 
     // int to unsigned int convertion, be carefull...
     unsigned int packet_chunks_id = std::stoi(packet_chunks_id_str);
 
-    PacketFieldExpression::add_unique_packet_field_expression(
-        pfes, PacketFieldExpression(ctx, expr, index, packet_chunks_id));
+    PacketDependenciesExpression pde(ctx, expr, index, packet_chunks_id);
+    store_unique_packet_dependencies_expression(pde);
 
-    if (packet_chunks_ids_pair.first == -1) {
-      packet_chunks_ids_pair =
-          std::pair<int, int>(packet_chunks_id, packet_chunks_ids_pair.second);
-    } else if (packet_chunks_ids_pair.second == -1 &&
-               packet_chunks_id != packet_chunks_ids_pair.first) {
-      packet_chunks_ids_pair =
-          std::pair<int, int>(packet_chunks_ids_pair.first, packet_chunks_id);
+    if (packet_chunks_ids.first == -1) {
+      packet_chunks_ids = std::make_pair(packet_chunks_id, packet_chunks_ids.second);
+    }
+
+    else if (packet_chunks_ids.second == -1 &&
+               packet_chunks_id != packet_chunks_ids.first) {
+      packet_chunks_ids = std::make_pair(packet_chunks_ids.first, packet_chunks_id);
     }
 
     return;
@@ -130,21 +189,19 @@ void Constraint::fill_packet_fields(R3S::Z3_ast &expr,
   unsigned int num_fields = R3S::Z3_get_app_num_args(ctx, app);
   for (unsigned int i = 0; i < num_fields; i++) {
     R3S::Z3_ast app_arg = R3S::Z3_get_app_arg(ctx, app, i);
-    fill_packet_fields(app_arg, pfes);
+    fill_packet_fields(app_arg);
   }
 }
 
-void Constraint::zip_packet_fields_expression_and_values(
-    const std::vector<PacketFieldExpression> &pfes) {
+void Constraint::zip_packet_fields_expression_and_values() {
+  assert(first.has_argument(LibvigAccessArgument::Type::READ));
+  assert(second.has_argument(LibvigAccessArgument::Type::READ));
 
   auto first_read_arg = first.get_argument(LibvigAccessArgument::Type::READ);
-  auto second_read_arg = first.get_argument(LibvigAccessArgument::Type::READ);
+  auto second_read_arg = second.get_argument(LibvigAccessArgument::Type::READ);
 
-  assert(first_read_arg);
-  assert(second_read_arg);
-
-  auto first_read_arg_copy = *first_read_arg;
-  auto second_read_arg_copy = *second_read_arg;
+  auto first_read_arg_copy = first_read_arg;
+  auto second_read_arg_copy = second_read_arg;
 
   first_read_arg_copy.sort_dependencies();
   second_read_arg_copy.sort_dependencies();
@@ -154,8 +211,8 @@ void Constraint::zip_packet_fields_expression_and_values(
 
   int smaller_packet_chunks_id = -1;
 
-  for (const auto &pfe : pfes) {
-    const auto &id = pfe.get_packet_chunks_id();
+  for (const auto &pde : packet_dependencies_expressions) {
+    const auto &id = pde.get_packet_chunks_id();
     if (id == smaller_packet_chunks_id)
       continue;
 
@@ -165,10 +222,9 @@ void Constraint::zip_packet_fields_expression_and_values(
     break;
   }
 
-  auto pfes_sorted_copy = pfes;
-  std::sort(pfes_sorted_copy.begin(), pfes_sorted_copy.end());
+  std::sort(packet_dependencies_expressions.begin(), packet_dependencies_expressions.end());
 
-  if (first_deps.size() + second_deps.size() != pfes_sorted_copy.size()) {
+  if (first_deps.size() + second_deps.size() < packet_dependencies_expressions.size()) {
 
     Logger::error() << "\n";
     Logger::error() << "Total number of dependencies is different than ";
@@ -195,15 +251,15 @@ void Constraint::zip_packet_fields_expression_and_values(
     Logger::error() << "\n";
     Logger::error() << "Available expressions of packet fields";
     Logger::error() << " (";
-    Logger::error() << pfes_sorted_copy.size();
+    Logger::error() << packet_dependencies_expressions.size();
     Logger::error() << "):";
     Logger::error() << "\n";
 
-    for (const auto &pfes_sorted_copy_el : pfes_sorted_copy) {
+    for (const auto &pde : packet_dependencies_expressions) {
       Logger::error() << "  ";
       Logger::error() << R3S::Z3_ast_to_string(
-                             pfes_sorted_copy_el.get_context(),
-                             pfes_sorted_copy_el.get_expression());
+                             pde.get_context(),
+                             pde.get_expression());
       Logger::error() << "\n";
     }
 
@@ -212,36 +268,57 @@ void Constraint::zip_packet_fields_expression_and_values(
 
   unsigned int first_counter = 0;
   unsigned int second_counter = 0;
-  for (const auto &pfe_copy : pfes_sorted_copy) {
-    const PacketDependency *packet_dependency;
+  for (auto &pde : packet_dependencies_expressions) {
+    const PacketDependency *prev_packet_dependency = nullptr;
+    const PacketDependency *curr_packet_dependency = nullptr;
 
-    if (pfe_copy.get_packet_chunks_id() == smaller_packet_chunks_id) {
-      assert(first_deps[first_counter]->is_packet_related());
-      assert(first_counter < first_deps.size() &&
-             "Overflow on first access dependencies.");
-      packet_dependency = dynamic_cast<const PacketDependency *>(
-          first_deps[first_counter++].get());
-    } else {
-      assert(second_deps[second_counter]->is_packet_related());
-      assert(second_counter < second_deps.size() &&
-             "Overflow on second access dependencies.");
-      packet_dependency = dynamic_cast<const PacketDependency *>(
-          second_deps[second_counter++].get());
-    }
+    do {
+      if (pde.get_packet_chunks_id() == smaller_packet_chunks_id) {
+        assert(first_deps[first_counter]->is_packet_related());
+        assert(first_counter < first_deps.size() &&
+               "Overflow on first access dependencies.");
 
-    packet_fields.emplace_back(pfe_copy, packet_dependency->clone());
+        curr_packet_dependency = dynamic_cast<const PacketDependency *>(
+              first_deps[first_counter].get());
+
+        if (prev_packet_dependency && (
+              prev_packet_dependency->get_layer() != curr_packet_dependency->get_layer() ||
+              prev_packet_dependency->get_offset() != curr_packet_dependency->get_offset())) break;
+
+        first_counter++;
+      }
+
+      else {
+        assert(second_deps[second_counter]->is_packet_related());
+        assert(second_counter < second_deps.size() &&
+               "Overflow on second access dependencies.");
+
+        curr_packet_dependency = dynamic_cast<const PacketDependency *>(
+              second_deps[second_counter].get());
+
+        if (prev_packet_dependency && (
+              prev_packet_dependency->get_layer() != curr_packet_dependency->get_layer() ||
+              prev_packet_dependency->get_offset() != curr_packet_dependency->get_offset())) break;
+
+        second_counter++;
+      }
+
+      pde.store_dependency(curr_packet_dependency);
+      prev_packet_dependency = curr_packet_dependency;
+
+    } while (first_counter < first_deps.size() && second_counter < second_deps.size());
   }
 }
 
 void Constraint::check_incompatible_dependencies() {
+  assert(first.has_argument(LibvigAccessArgument::Type::READ));
+  assert(second.has_argument(LibvigAccessArgument::Type::READ));
+
   auto first_read_arg = first.get_argument(LibvigAccessArgument::Type::READ);
   auto second_read_arg = first.get_argument(LibvigAccessArgument::Type::READ);
 
-  assert(first_read_arg);
-  assert(second_read_arg);
-
-  const auto &first_dependencies = first_read_arg->get_dependencies();
-  const auto &second_dependencies = second_read_arg->get_dependencies();
+  const auto &first_dependencies = first_read_arg.get_dependencies();
+  const auto &second_dependencies = second_read_arg.get_dependencies();
 
   auto incompatible_dependency_filter = [](
       const std::shared_ptr<const Dependency> & dependency)->bool {
@@ -264,4 +341,5 @@ void Constraint::check_incompatible_dependencies() {
     exit(0);
   }
 }
+
 }

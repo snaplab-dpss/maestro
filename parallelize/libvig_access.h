@@ -74,7 +74,7 @@ private:
    * tendencies, and because this will not have many elements, I
    * decided to just use a vector.
    */
-  std::vector<std::shared_ptr<const Dependency> > dependencies;
+  std::vector< std::shared_ptr<Dependency> > dependencies;
 
 public:
   LibvigAccessArgument(const Type &_type, std::string _expr)
@@ -82,14 +82,16 @@ public:
 
   LibvigAccessArgument(const LibvigAccessArgument &argument)
       : LibvigAccessArgument(argument.type, argument.expression) {
-    for (const auto &dependency : argument.dependencies)
-      dependencies.emplace_back(dependency->clone());
+    for (auto& dependency : argument.dependencies) {
+      auto copy = dependency->clone();
+      dependencies.push_back(copy);
+    }
   }
 
   LibvigAccessArgument::Type get_type() const { return type; }
   const std::string &get_expression() const { return expression; }
 
-  const std::vector<std::shared_ptr<const Dependency> > &
+  const std::vector<std::shared_ptr<Dependency> > &
   get_dependencies() const {
     return dependencies;
   }
@@ -99,16 +101,17 @@ public:
       return;
 
     auto dependency_comparator = [](
-        const std::shared_ptr<const Dependency> & d1,
-        const std::shared_ptr<const Dependency> & d2)->bool {
-      if (!d1->should_ignore())
+        const std::shared_ptr<Dependency> & d1,
+        const std::shared_ptr<Dependency> & d2)->bool {
+
+      if (d1->should_ignore())
         return true;
       if (!d1->is_processed())
         return true;
       if (!d1->is_rss_compatible())
         return true;
 
-      if (!d2->should_ignore())
+      if (d2->should_ignore())
         return false;
       if (!d2->is_processed())
         return false;
@@ -116,9 +119,10 @@ public:
         return false;
 
       const auto &processed1 =
-          dynamic_cast<const PacketDependencyProcessed *>(d1.get());
+          dynamic_cast<PacketDependencyProcessed *>(d1.get());
+
       const auto &processed2 =
-          dynamic_cast<const PacketDependencyProcessed *>(d2.get());
+          dynamic_cast<PacketDependencyProcessed *>(d2.get());
 
       return (*processed1) < (*processed2);
     };
@@ -134,18 +138,24 @@ public:
     for (const auto &dependency : dependencies) {
       if (dependency->should_ignore())
         continue;
+
       if (!dependency->is_processed())
         continue;
+
       if (!dependency->is_rss_compatible())
         continue;
 
       const auto packet_dependency_processed =
-          dynamic_cast<const PacketDependencyProcessed *>(dependency.get());
+          dynamic_cast<PacketDependencyProcessed *>(dependency.get());
+
       auto packet_field = packet_dependency_processed->get_packet_field();
+
       auto found_it =
           std::find(packet_fields.begin(), packet_fields.end(), packet_field);
+
       if (found_it != packet_fields.end())
         continue;
+
       packet_fields.push_back(packet_field);
     }
 
@@ -220,8 +230,8 @@ public:
   const bool is_dst_device_set() const { return dst_device.first; }
   const bool is_metadata_set() const { return metadata.first; }
 
-  std::shared_ptr<const LibvigAccessArgument>
-  get_argument(const LibvigAccessArgument::Type &type) const;
+  bool has_argument(const LibvigAccessArgument::Type &type) const;
+  const LibvigAccessArgument& get_argument(const LibvigAccessArgument::Type &type) const;
 
   void add_argument(const LibvigAccessArgument &argument) {
     arguments.emplace_back(argument);

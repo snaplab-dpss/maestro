@@ -80,19 +80,19 @@ void RSSConfigBuilder::fill_constraints(const std::vector<LibvigAccess> &accesse
       const auto& first = accesses[first_idx];
       const auto& second = accesses[second_idx];
 
-      auto first_read_arg = first.get_argument(LibvigAccessArgument::Type::READ);
-      auto second_read_arg = second.get_argument(LibvigAccessArgument::Type::READ);
-
-      if (first_read_arg == nullptr || second_read_arg == nullptr)
+      if (!first.has_argument(LibvigAccessArgument::Type::READ) || !second.has_argument(LibvigAccessArgument::Type::READ))
         continue;
+
+      auto& first_read_arg = first.get_argument(LibvigAccessArgument::Type::READ);
+      auto& second_read_arg = second.get_argument(LibvigAccessArgument::Type::READ);
 
       if (first.get_object() != second.get_object())
         continue;
 
       constraints.emplace_back(first, second, ctx);
 
-      merge_unique_packet_field_dependencies(first_read_arg->get_unique_packet_fields());
-      merge_unique_packet_field_dependencies(second_read_arg->get_unique_packet_fields());
+      merge_unique_packet_field_dependencies(first_read_arg.get_unique_packet_fields());
+      merge_unique_packet_field_dependencies(second_read_arg.get_unique_packet_fields());
     }
   }
 }
@@ -101,7 +101,7 @@ void RSSConfigBuilder::analyse_constraints() {
   std::vector<Constraint> filtered_constraints;
 
   for (const auto& constraint : constraints) {
-    if (constraint.get_packet_fields().size())
+    if (constraint.get_packet_dependencies_expressions().size())
       filtered_constraints.push_back(constraint);
 
     /*
@@ -320,15 +320,13 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
     if (p1.key_id != first_device || p2.key_id != second_device)
       continue;
 
-    R3S::Z3_ast &constraint_expression = constraint.get_expression();
+    R3S::Z3_ast constraint_expression = constraint.get_expression();
 
-    for (const auto &packet_field_expr_value : constraint.get_packet_fields()) {
-      PacketFieldExpression packet_dependency_expr =
-          packet_field_expr_value.first;
-
+    /*
+    for (const auto& packet_dependency_expression : constraint.get_packet_dependencies_expressions()) {
       const std::shared_ptr<const PacketDependency> &packet_dependency_value =
           packet_field_expr_value.second;
-
+      
       // TODO: error handling if is neither equal to first or second
       R3S::R3S_packet_ast_t target_packet =
           (packet_dependency_expr.get_packet_chunks_id() ==
@@ -376,6 +374,7 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
           ast_replace(ctx, constraint_expression,
                       packet_dependency_expr.get_expression(), target_ast);
     }
+    */
 
     if (constraint_incompatible_with_current_opt) {
       constraint_incompatible_with_current_opt = false;

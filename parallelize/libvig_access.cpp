@@ -7,7 +7,7 @@
 
 namespace ParallelSynthesizer {
 
-std::shared_ptr<const LibvigAccessArgument>
+const LibvigAccessArgument&
 LibvigAccess::get_argument(const LibvigAccessArgument::Type &type) const {
   auto is_right_arg_type = [&](const LibvigAccessArgument & arg)->bool {
     return arg.get_type() == type;
@@ -16,10 +16,21 @@ LibvigAccess::get_argument(const LibvigAccessArgument::Type &type) const {
   auto found_it =
       std::find_if(arguments.begin(), arguments.end(), is_right_arg_type);
 
-  if (found_it == arguments.end())
-    return nullptr;
+  if (found_it != arguments.end())
+    return *found_it;
 
-  return std::make_shared<const LibvigAccessArgument>(*found_it);
+  assert(false && "Argument type not in this LibvigAccess");
+}
+
+bool LibvigAccess::has_argument(const LibvigAccessArgument::Type &type) const {
+  auto is_right_arg_type = [&](const LibvigAccessArgument & arg)->bool {
+    return arg.get_type() == type;
+  };
+
+  auto found_it =
+      std::find_if(arguments.begin(), arguments.end(), is_right_arg_type);
+
+  return found_it != arguments.end();
 }
 
 void LibvigAccessArgument::add_dependency(const Dependency *dependency) {
@@ -30,10 +41,14 @@ void LibvigAccessArgument::add_dependency(const Dependency *dependency) {
         dynamic_cast<const PacketDependency *>(dependency);
     assert(packet_dependency);
     process_packet_dependency(packet_dependency);
-  } else if (!dependency->is_processed() && !dependency->is_packet_related()) {
+  }
+
+  else if (!dependency->is_processed() && !dependency->is_packet_related()) {
     // TODO:
     assert(false && "not implemented");
-  } else {
+  }
+
+  else {
     dependencies.emplace_back(dependency->clone());
     are_dependencies_sorted = false;
   }
@@ -47,7 +62,7 @@ void LibvigAccessArgument::process_packet_dependency(
 
   auto it = std::find_if(
       dependencies.begin(), dependencies.end(),
-      [&](const std::shared_ptr<const Dependency> & _dependency)->bool {
+      [&](const std::shared_ptr<Dependency> & _dependency)->bool {
         if (!_dependency->is_processed())
           return false;
         if (!_dependency->is_packet_related())
@@ -71,7 +86,7 @@ void LibvigAccessArgument::process_packet_dependency(
     // TODO: ethertype
 
     auto processed = PacketDependencyIncompatible(dependency, "Ethernet field");
-    add_dependency(processed.get_unique().get());
+    add_dependency(processed.clone().get());
     return;
   }
 
@@ -86,26 +101,26 @@ void LibvigAccessArgument::process_packet_dependency(
       // later on the incompatible field.
       auto processed =
           PacketDependencyIncompatible(dependency, "IPv4 protocol", true);
-      add_dependency(processed.get_unique().get());
+      add_dependency(processed.clone().get());
       return;
     } else if (offset >= 12 && offset <= 15) {
       auto processed = PacketDependencyProcessed(
           dependency, R3S::R3S_PF_IPV4_SRC, 15 - offset);
-      add_dependency(processed.get_unique().get());
+      add_dependency(processed.clone().get());
       return;
     } else if (offset >= 16 && offset <= 19) {
       auto processed = PacketDependencyProcessed(
           dependency, R3S::R3S_PF_IPV4_DST, 19 - offset);
-      add_dependency(processed.get_unique().get());
+      add_dependency(processed.clone().get());
       return;
     } else if (offset >= 20) {
       auto processed = PacketDependencyIncompatible(dependency, "IPv4 options");
-      add_dependency(processed.get_unique().get());
+      add_dependency(processed.clone().get());
       return;
     } else {
       auto processed =
           PacketDependencyIncompatible(dependency, "Unknown IPv4 field");
-      add_dependency(processed.get_unique().get());
+      add_dependency(processed.clone().get());
       return;
     }
   }
@@ -125,17 +140,17 @@ void LibvigAccessArgument::process_packet_dependency(
     if (offset <= 1) {
       auto processed =
           PacketDependencyProcessed(dependency, R3S::R3S_PF_TCP_SRC, offset);
-      add_dependency(processed.get_unique().get());
+      add_dependency(processed.clone().get());
       return;
     } else if (offset >= 2 && offset <= 3) {
       auto processed = PacketDependencyProcessed(
           dependency, R3S::R3S_PF_TCP_DST, offset - 2);
-      add_dependency(processed.get_unique().get());
+      add_dependency(processed.clone().get());
       return;
     } else {
       auto processed =
           PacketDependencyIncompatible(dependency, "Unknown TCP field");
-      add_dependency(processed.get_unique().get());
+      add_dependency(processed.clone().get());
       return;
     }
   }
@@ -145,22 +160,22 @@ void LibvigAccessArgument::process_packet_dependency(
     if (offset <= 1) {
       auto processed =
           PacketDependencyProcessed(dependency, R3S::R3S_PF_UDP_SRC, offset);
-      add_dependency(processed.get_unique().get());
+      add_dependency(processed.clone().get());
       return;
     } else if (offset >= 2 && offset <= 3) {
       auto processed = PacketDependencyProcessed(
           dependency, R3S::R3S_PF_UDP_DST, offset - 2);
-      add_dependency(processed.get_unique().get());
+      add_dependency(processed.clone().get());
       return;
     } else {
       auto processed =
           PacketDependencyIncompatible(dependency, "Unknown UDP field");
-      add_dependency(processed.get_unique().get());
+      add_dependency(processed.clone().get());
       return;
     }
   } else {
     auto processed = PacketDependencyIncompatible(dependency, "Unknown");
-    add_dependency(processed.get_unique().get());
+    add_dependency(processed.clone().get());
     return;
   }
 }

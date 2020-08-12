@@ -31,8 +31,7 @@ public:
   bool is_processed() const { return processed; }
   bool is_packet_related() const { return packet_related; }
 
-  virtual std::unique_ptr<const Dependency> get_unique() const = 0;
-  virtual Dependency *clone() const = 0;
+  virtual std::shared_ptr<Dependency> clone() const = 0;
 
   friend std::ostream &operator<<(std::ostream &os,
                                   const Dependency &dependency);
@@ -76,12 +75,8 @@ public:
 
   bool is_protocol_set() const { return protocol.first; }
 
-  virtual std::unique_ptr<const Dependency> get_unique() const override {
-    return std::unique_ptr<const Dependency>(new PacketDependency(*this));
-  }
-
-  virtual PacketDependency *clone() const override {
-    return new PacketDependency(*this);
+  virtual std::shared_ptr<Dependency> clone() const override {
+    return std::shared_ptr<Dependency>(new PacketDependency(*this));
   }
 
   virtual std::ostream &print(std::ostream &os) const override {
@@ -138,13 +133,8 @@ public:
     ignore = _pdi.should_ignore();
   }
 
-  virtual PacketDependencyIncompatible *clone() const override {
-    return new PacketDependencyIncompatible(*this);
-  }
-
-  std::unique_ptr<const Dependency> get_unique() const override {
-    return std::unique_ptr<const Dependency>(
-        new PacketDependencyIncompatible(*this));
+  virtual std::shared_ptr<Dependency> clone() const override {
+    return std::shared_ptr<Dependency>(new PacketDependencyIncompatible(*this));
   }
 
   virtual std::ostream &print(std::ostream &os) const override {
@@ -194,13 +184,8 @@ public:
 
   const unsigned int &get_bytes() const { return bytes; }
 
-  virtual PacketDependencyProcessed *clone() const override {
-    return new PacketDependencyProcessed(*this);
-  }
-
-  std::unique_ptr<const Dependency> get_unique() const override {
-    return std::unique_ptr<const Dependency>(
-        new PacketDependencyProcessed(*this));
+  virtual std::shared_ptr<Dependency> clone() const override {
+    return std::shared_ptr<Dependency>(new PacketDependencyProcessed(*this));
   }
 
   virtual std::ostream &print(std::ostream &os) const override {

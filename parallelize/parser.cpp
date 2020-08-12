@@ -276,7 +276,6 @@ void Parser::parse(const std::string &filepath) {
   }
 
   while (getline(file, line)) {
-
     if (line == Tokens::Access::START || line == Tokens::Argument::START ||
         line == Tokens::Expression::START ||
         line == Tokens::PacketDependencies::START ||
