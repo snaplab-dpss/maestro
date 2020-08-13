@@ -36,24 +36,24 @@ bool operator<(const PacketDependenciesExpression &lhs,
 
 std::ostream &operator<<(std::ostream &os,
                          const PacketDependenciesExpression &arg) {
-  os << "expression    ";
+  os << "  expression    ";
   os << R3S::Z3_ast_to_string(arg.ctx, arg.expression);
   os << "\n";
 
-  os << "index         ";
+  os << "  index         ";
   os << arg.index;
   os << "\n";
 
-  os << "chunk id      ";
+  os << "  chunk id      ";
   os << arg.packet_chunks_id;
   os << "\n";
 
-  os << "dependencies: ";
+  os << "  dependencies: ";
   os << "\n";
 
   if (arg.dependencies.size()) {
     for (const auto& dependency : arg.dependencies) {
-      os << *dependency;
+      os << "    " << *dependency;
       os << "\n";
     }
   }
@@ -87,7 +87,7 @@ std::ostream &operator<<(std::ostream &os,
   os << "\n";
 
   if (arg.packet_dependencies_expressions.size()) {
-    os << "dependencies:";
+    os << "expressions:";
     os << "\n";
     for (const auto& packet_dependency_expression : arg.packet_dependencies_expressions) {
       os << packet_dependency_expression;

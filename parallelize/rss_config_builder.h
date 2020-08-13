@@ -51,18 +51,6 @@ public:
     fill_constraints(trimmed_accesses);
     analyse_constraints();
 
-    /*
-    for (const auto& constraint : constraints) {
-      Logger::debug() << "\n";
-      Logger::debug() << "Constraint expr: " << R3S::Z3_ast_to_string(constraint.get_context(), constraint.get_expression());
-      Logger::debug() << "\n";
-      Logger::debug() << "Packet dependencies number: " << constraint.get_packet_fields().size();
-      Logger::debug() << "\n";
-    }
-    */
-
-    // unique_access_pairs.push_back(access);
-
     Logger::log() << "\n";
     Logger::log() << "Packet field dependencies:";
     Logger::log() << "\n";

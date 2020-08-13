@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <memory>
+#include <iostream>
 
 namespace R3S {
 #include <r3s.h>
@@ -88,7 +89,9 @@ public:
     os << layer;
     if (protocol.first) {
       os << " protocol 0x";
-      os << std::hex << protocol.second;
+      os << std::hex;
+      os << protocol.second;
+      os << std::dec;
     }
     os << " offset ";
     os << offset;
