@@ -79,6 +79,10 @@ public:
     return std::shared_ptr<Dependency>(new PacketDependency(*this));
   }
 
+  virtual std::shared_ptr<PacketDependency> clone_packet_dependency() const {
+    return std::shared_ptr<PacketDependency>(new PacketDependency(*this));
+  }
+
   virtual std::ostream &print(std::ostream &os) const override {
     os << "layer ";
     os << layer;
@@ -137,6 +141,10 @@ public:
     return std::shared_ptr<Dependency>(new PacketDependencyIncompatible(*this));
   }
 
+  virtual std::shared_ptr<PacketDependency> clone_packet_dependency() const override {
+    return std::shared_ptr<PacketDependency>(new PacketDependencyIncompatible(*this));
+  }
+
   virtual std::ostream &print(std::ostream &os) const override {
     PacketDependency::print(os);
 
@@ -186,6 +194,10 @@ public:
 
   virtual std::shared_ptr<Dependency> clone() const override {
     return std::shared_ptr<Dependency>(new PacketDependencyProcessed(*this));
+  }
+
+  virtual std::shared_ptr<PacketDependency> clone_packet_dependency() const override {
+    return std::shared_ptr<PacketDependency>(new PacketDependencyProcessed(*this));
   }
 
   virtual std::ostream &print(std::ostream &os) const override {

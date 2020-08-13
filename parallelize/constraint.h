@@ -20,7 +20,7 @@ private:
   unsigned int index;
   unsigned int packet_chunks_id;
 
-  std::vector<PacketDependency> dependencies;
+  std::vector< std::shared_ptr<PacketDependency> > dependencies;
 
 public:
   PacketDependenciesExpression(const R3S::Z3_context &_ctx,
@@ -32,21 +32,23 @@ public:
 
   PacketDependenciesExpression(const PacketDependenciesExpression &pde)
       : ctx(pde.ctx), expression(pde.expression),
-        index(pde.index), packet_chunks_id(pde.packet_chunks_id),
-        dependencies(pde.dependencies) {}
+        index(pde.index), packet_chunks_id(pde.packet_chunks_id) {
+    for (auto dep : pde.dependencies)
+      store_dependency(dep.get());
+  }
 
   const R3S::Z3_context &get_context() const { return ctx; }
   const R3S::Z3_ast &get_expression() const { return expression; }
   const unsigned int &get_index() const { return index; }
   const unsigned int &get_packet_chunks_id() const { return packet_chunks_id; }
 
-  const std::vector<PacketDependency>& get_associated_dependencies() const {
+  const std::vector< std::shared_ptr<PacketDependency> >& get_associated_dependencies() const {
     return dependencies;
   }
 
   void store_dependency(const PacketDependency* dependency) {
     assert(dependency);
-    dependencies.emplace_back(*dependency);
+    dependencies.push_back(std::move(dependency->clone_packet_dependency()));
   }
 
   friend bool operator<(const PacketDependenciesExpression &lhs,

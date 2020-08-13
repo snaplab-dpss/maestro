@@ -68,6 +68,8 @@ void RSSConfigBuilder::load_rss_config_options() {
     rss_config.add_option(opts[iopt]);
     R3S::R3S_cfg_load_opt(cfg, opts[iopt]);
   }
+
+  delete opts;
 }
 
 void RSSConfigBuilder::fill_constraints(const std::vector<LibvigAccess> &accesses) {

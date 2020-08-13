@@ -1,4 +1,4 @@
-CC=clang++ -std=c++11 -stdlib=libstdc++
+CC=clang++ -std=c++11 -stdlib=libstdc++ -g
 
 Z3_INCLUDE=-I$(Z3_DIR)/build/include
 R3S_INCLUDE=-I$(R3S_DIR)/include

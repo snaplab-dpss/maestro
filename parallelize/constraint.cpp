@@ -53,7 +53,7 @@ std::ostream &operator<<(std::ostream &os,
 
   if (arg.dependencies.size()) {
     for (const auto& dependency : arg.dependencies) {
-      os << dependency;
+      os << *dependency;
       os << "\n";
     }
   }
@@ -268,15 +268,17 @@ void Constraint::zip_packet_fields_expression_and_values() {
 
   unsigned int first_counter = 0;
   unsigned int second_counter = 0;
+
   for (auto &pde : packet_dependencies_expressions) {
     const PacketDependency *prev_packet_dependency = nullptr;
-    const PacketDependency *curr_packet_dependency = nullptr;
 
-    do {
+    for (;;) {
+      const PacketDependency *curr_packet_dependency = nullptr;
+
       if (pde.get_packet_chunks_id() == smaller_packet_chunks_id) {
+        if(first_counter >= first_deps.size()) break;
+
         assert(first_deps[first_counter]->is_packet_related());
-        assert(first_counter < first_deps.size() &&
-               "Overflow on first access dependencies.");
 
         curr_packet_dependency = dynamic_cast<const PacketDependency *>(
               first_deps[first_counter].get());
@@ -289,9 +291,9 @@ void Constraint::zip_packet_fields_expression_and_values() {
       }
 
       else {
+        if(second_counter >= second_deps.size()) break;
+
         assert(second_deps[second_counter]->is_packet_related());
-        assert(second_counter < second_deps.size() &&
-               "Overflow on second access dependencies.");
 
         curr_packet_dependency = dynamic_cast<const PacketDependency *>(
               second_deps[second_counter].get());
@@ -303,11 +305,14 @@ void Constraint::zip_packet_fields_expression_and_values() {
         second_counter++;
       }
 
+      assert(curr_packet_dependency);
+
       pde.store_dependency(curr_packet_dependency);
       prev_packet_dependency = curr_packet_dependency;
 
-    } while (first_counter < first_deps.size() && second_counter < second_deps.size());
+    }
   }
+
 }
 
 void Constraint::check_incompatible_dependencies() {
