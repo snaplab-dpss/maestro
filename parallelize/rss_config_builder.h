@@ -39,6 +39,14 @@ private:
   void fill_constraints(const std::vector<LibvigAccess> &accesses);
   void analyse_constraints();
 
+  static std::vector<Constraint> get_constraints_between_devices(std::vector<Constraint> constraints,
+                                                                 unsigned int p1_device, unsigned int p2_device);
+  static R3S::Z3_ast constraint_to_solver_input(R3S::R3S_cfg_t cfg, R3S::R3S_packet_ast_t p1,
+                                                R3S::R3S_packet_ast_t p2, const Constraint& constraint);
+  static R3S::Z3_ast make_solver_constraints(R3S::R3S_cfg_t cfg,
+                                             R3S::R3S_packet_ast_t p1,
+                                             R3S::R3S_packet_ast_t p2);
+
 public:
   RSSConfigBuilder(const std::vector<LibvigAccess> &accesses) {
     R3S::R3S_cfg_init(&cfg);
@@ -75,11 +83,19 @@ public:
     Logger::log() << "\nR3S configuration:\n" << R3S::R3S_cfg_to_string(cfg)
                   << "\n";
 
+    /*
     Logger::debug() << "Constraints:" << "\n";
     for (const auto& constraint : constraints) {
-      Logger::debug() << constraint;
-      Logger::debug() << "\n";
+      if (constraint.get_first_access().get_src_device() != constraint.get_second_access().get_src_device()) {
+        Logger::debug() << "\n";
+        Logger::debug() << "===================================================================";
+        Logger::debug() << constraint;
+        Logger::debug() << "\n";
+        Logger::debug() << constraint.get_first_access() << "\n";
+        Logger::debug() << constraint.get_second_access() << "\n";
+      }
     }
+    */
   }
 
   const R3S::R3S_cfg_t &get_cfg() const { return cfg; }
@@ -88,9 +104,6 @@ public:
 
   static R3S::Z3_ast ast_replace(R3S::Z3_context ctx, R3S::Z3_ast root,
                                  R3S::Z3_ast target, R3S::Z3_ast dst);
-  static R3S::Z3_ast make_solver_constraints(R3S::R3S_cfg_t cfg,
-                                             R3S::R3S_packet_ast_t p1,
-                                             R3S::R3S_packet_ast_t p2);
 
   void build_rss_config();
 

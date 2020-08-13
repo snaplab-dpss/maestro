@@ -46,6 +46,30 @@ public:
     return dependencies;
   }
 
+  const std::shared_ptr<PacketDependency> get_dependency_compatible_with_packet(R3S::R3S_cfg_t cfg, R3S::R3S_packet_ast_t packet) const {
+    std::shared_ptr<PacketDependency> compatible_dependency;
+    R3S::Z3_ast pf_ast;
+
+    for (auto dependency : dependencies) {
+      if (dependency->should_ignore() || !dependency->is_rss_compatible())
+        continue;
+
+      const auto processed = dynamic_cast<PacketDependencyProcessed*>(dependency.get());
+      const auto packet_field = processed->get_packet_field();
+
+      R3S::R3S_status_t status = R3S_packet_extract_pf(cfg, packet, packet_field, &pf_ast);
+
+      assert(status != R3S::R3S_STATUS_SUCCESS || !compatible_dependency);
+
+      if (status == R3S::R3S_STATUS_SUCCESS) {
+        compatible_dependency = dependency;
+        break;
+      }
+    }
+
+    return compatible_dependency;
+  }
+
   void store_dependency(const PacketDependency* dependency) {
     assert(dependency);
     dependencies.push_back(std::move(dependency->clone_packet_dependency()));
@@ -107,7 +131,7 @@ public:
   const R3S::Z3_context &get_context() const { return ctx; }
   const LibvigAccess &get_first_access() const { return first; }
   const LibvigAccess &get_second_access() const { return second; }
-  R3S::Z3_ast get_expression() { return expression; }
+  const R3S::Z3_ast get_expression() const { return expression; }
 
   const std::pair<int, int> &get_packet_chunks_ids() const {
     return packet_chunks_ids;

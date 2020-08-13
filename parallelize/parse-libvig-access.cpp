@@ -31,7 +31,6 @@ int main(int argc, char *argv[]) {
 
   RSSConfigBuilder rss_cfg_builder(parser.get_accesses());
 
-  /*
   rss_cfg_builder.build_rss_config();
   auto config = rss_cfg_builder.get_generated_rss_cfg();
   auto r3s_config = rss_cfg_builder.get_cfg();
@@ -46,7 +45,7 @@ int main(int argc, char *argv[]) {
     Logger::log() << "\n";
   }
 
-
+  /*
   for (unsigned i = 0; i < 50; i++) {
     auto packets = rss_cfg_builder.generate_packets(1, 0);
 
