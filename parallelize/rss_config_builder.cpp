@@ -82,14 +82,14 @@ void RSSConfigBuilder::fill_constraints(const std::vector<LibvigAccess> &accesse
       const auto& first = accesses[first_idx];
       const auto& second = accesses[second_idx];
 
+      if (first.get_object() != second.get_object())
+        continue;
+
       if (!first.has_argument(LibvigAccessArgument::Type::READ) || !second.has_argument(LibvigAccessArgument::Type::READ))
         continue;
 
       auto& first_read_arg = first.get_argument(LibvigAccessArgument::Type::READ);
       auto& second_read_arg = second.get_argument(LibvigAccessArgument::Type::READ);
-
-      if (first.get_object() != second.get_object())
-        continue;
 
       constraints.emplace_back(first, second, ctx);
 
@@ -189,7 +189,7 @@ void RSSConfigBuilder::fill_unique_devices(
   }
 
   if (unique_devices.size() == 0) {
-    Logger::warn() << "No devices. No RSS configuration to generate.";
+    Logger::warn() << "No devices. No RSS configuration to generate." << "\n";
     exit(0);
   }
 }
@@ -318,9 +318,15 @@ R3S::Z3_ast RSSConfigBuilder::constraint_to_solver_input(R3S::R3S_cfg_t cfg, R3S
     auto expression = packet_dependency_expression.get_expression();
     R3S::Z3_ast target_ast;
 
-    R3S::R3S_packet_ast_t target_packet =
-        (packet_dependency_expression.get_packet_chunks_id() == constraint.get_packet_chunks_ids().first)
-        ? p1 : p2;
+    R3S::R3S_packet_ast_t target_packet;
+
+    if (packet_dependency_expression.get_packet_chunks_id() == constraint.get_packet_chunks_ids().first) {
+      target_packet = p1;
+    } else if (packet_dependency_expression.get_packet_chunks_id() == constraint.get_packet_chunks_ids().second) {
+      target_packet = p2;
+    } else {
+      assert(false && "Invalid target packet: chunk id in packet dependency expression wrongly associated with constraint");
+    }
 
     auto compatible_dependency = packet_dependency_expression.get_dependency_compatible_with_packet(cfg, target_packet);
 
@@ -346,10 +352,6 @@ R3S::Z3_ast RSSConfigBuilder::constraint_to_solver_input(R3S::R3S_cfg_t cfg, R3S
     else if (packet_dependency_expression.get_associated_dependencies()[0]->should_ignore()) {
       auto associated_dependencies = packet_dependency_expression.get_associated_dependencies();
       assert(associated_dependencies.size() == 1);
-
-      auto dependency = associated_dependencies[0];
-      assert(dependency->should_ignore() && "TODO");
-
       target_ast = Z3_mk_bvxor(ctx, expression, expression);
     }
 
@@ -365,89 +367,31 @@ R3S::Z3_ast RSSConfigBuilder::constraint_to_solver_input(R3S::R3S_cfg_t cfg, R3S
 
 R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
     R3S::R3S_cfg_t cfg, R3S::R3S_packet_ast_t p1, R3S::R3S_packet_ast_t p2) {
-  std::vector<Constraint> constraints =
-      *((std::vector<Constraint> *)R3S::R3S_cfg_get_user_data(cfg));
+
+  auto constraints = *((std::vector<Constraint> *)R3S::R3S_cfg_get_user_data(cfg));
+  auto ctx = R3S::R3S_cfg_get_z3_context(cfg);
 
   std::vector<R3S::Z3_ast> generated_constraints;
-  R3S::Z3_context ctx = R3S::R3S_cfg_get_z3_context(cfg);
+  R3S::Z3_ast final_constraint;
 
-  bool constraint_incompatible_with_current_opt = false;
 
   auto filtered_constraints = get_constraints_between_devices(constraints, p1.key_id, p2.key_id);
 
   for (auto &constraint : filtered_constraints) {
     auto constraint_expression = constraint_to_solver_input(cfg, p1, p2, constraint);
 
-    if (!constraint_expression) {
-      constraint_incompatible_with_current_opt = false;
+    if (!constraint_expression)
       continue;
-    }
 
     generated_constraints.push_back(constraint_expression);
-
-    /*
-    Logger::debug() << "\n";
-    Logger::debug() << "[Access]"
-                    << "\n";
-    Logger::debug() << "first:  ";
-    Logger::debug() << constraint.get_first_access().get_id() << " (id) ";
-    Logger::debug() << constraint.get_first_access().get_device()
-                    << " (device) ";
-    Logger::debug() << constraint.get_first_access().get_object()
-                    << " (object) ";
-
-    for (const auto &packet_field_expr_value : constraint.get_packet_fields()) {
-      PacketFieldExpression packet_dependency_expr =
-          packet_field_expr_value.first;
-      if (packet_dependency_expr.get_packet_chunks_id() !=
-    constraint.get_packet_chunks_ids_pair().first)
-        continue;
-      PacketDependencyProcessed packet_dependency_value =
-          packet_field_expr_value.second;
-      if (packet_dependency_value.should_ignore()) continue;
-
-      Logger::debug() << " " <<
-    R3S_pf_to_string(packet_dependency_value.get_packet_field());
-    }
-    Logger::debug() << "\n";
-
-    Logger::debug() << "second: ";
-    Logger::debug() << constraint.get_second_access().get_id() << " (id) ";
-    Logger::debug() << constraint.get_second_access().get_device()
-                    << " (device) ";
-    Logger::debug() << constraint.get_second_access().get_object()
-                    << " (object) ";
-
-    for (const auto &packet_field_expr_value : constraint.get_packet_fields()) {
-      PacketFieldExpression packet_dependency_expr =
-          packet_field_expr_value.first;
-      if (packet_dependency_expr.get_packet_chunks_id() !=
-    constraint.get_packet_chunks_ids_pair().second)
-        continue;
-      PacketDependencyProcessed packet_dependency_value =
-          packet_field_expr_value.second;
-      if (packet_dependency_value.should_ignore()) continue;
-
-      Logger::debug() << " " <<
-    R3S_pf_to_string(packet_dependency_value.get_packet_field());
-    }
-    Logger::debug() << "\n";
-    Logger::debug() << "\n";
-    Logger::debug() << "[Constraint]"
-                    << "\n";
-    Logger::debug() << Z3_ast_to_string(ctx, constraint_expression);
-    Logger::debug() << "\n";
-    */
   }
 
   if (generated_constraints.size() == 0)
     return NULL;
 
-  R3S::Z3_ast final_constraint;
-
   if (generated_constraints.size() > 1) {
     final_constraint =
-        Z3_simplify(ctx, Z3_mk_and(ctx, generated_constraints.size(),
+        R3S::Z3_simplify(ctx, R3S::Z3_mk_and(ctx, generated_constraints.size(),
                                    &generated_constraints[0]));
   } else {
     final_constraint = generated_constraints[0];
@@ -460,11 +404,11 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
   Logger::debug() << "\n";
   Logger::debug() << "[Packet info]";
   Logger::debug() << "\n";
-  Logger::debug() << "p1 option: " << R3S_opt_to_string(p1.loaded_opt.opt);
+  Logger::debug() << "p1 option: " << R3S::R3S_opt_to_string(p1.loaded_opt.opt);
   Logger::debug() << "\n";
   Logger::debug() << "p1 device: " << p1.key_id;
   Logger::debug() << "\n";
-  Logger::debug() << "p2 option: " << R3S_opt_to_string(p2.loaded_opt.opt);
+  Logger::debug() << "p2 option: " << R3S::R3S_opt_to_string(p2.loaded_opt.opt);
   Logger::debug() << "\n";
   Logger::debug() << "p2 device: " << p2.key_id;
   Logger::debug() << "\n";
@@ -472,7 +416,7 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
 
   Logger::debug() << "[Final constraint]";
   Logger::debug() << "\n";
-  Logger::debug() << Z3_ast_to_string(ctx, final_constraint) << "\n";
+  Logger::debug() << R3S::Z3_ast_to_string(ctx, final_constraint) << "\n";
 
   return final_constraint;
 }

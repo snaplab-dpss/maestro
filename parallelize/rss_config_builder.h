@@ -82,20 +82,6 @@ public:
 
     Logger::log() << "\nR3S configuration:\n" << R3S::R3S_cfg_to_string(cfg)
                   << "\n";
-
-    /*
-    Logger::debug() << "Constraints:" << "\n";
-    for (const auto& constraint : constraints) {
-      if (constraint.get_first_access().get_src_device() != constraint.get_second_access().get_src_device()) {
-        Logger::debug() << "\n";
-        Logger::debug() << "===================================================================";
-        Logger::debug() << constraint;
-        Logger::debug() << "\n";
-        Logger::debug() << constraint.get_first_access() << "\n";
-        Logger::debug() << constraint.get_second_access() << "\n";
-      }
-    }
-    */
   }
 
   const R3S::R3S_cfg_t &get_cfg() const { return cfg; }
