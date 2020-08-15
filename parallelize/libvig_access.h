@@ -189,6 +189,7 @@ private:
   unsigned int id;
   unsigned int src_device;
   std::pair<bool, unsigned int> dst_device;
+  std::pair<bool, bool> success;
   Operation operation;
   unsigned int object;
 
@@ -198,15 +199,17 @@ private:
 public:
   LibvigAccess(const unsigned int &_id, const unsigned int &_src_device,
                const std::pair<bool, unsigned int> _dst_device,
+               const std::pair<bool, bool> _success,
                const Operation &_operation, const unsigned int &_object)
       : id(_id), src_device(_src_device), dst_device(_dst_device),
+        success(_success),
         operation(_operation), object(_object) {
     metadata.first = false;
   }
 
   LibvigAccess(const LibvigAccess &access)
       : LibvigAccess(access.id, access.src_device, access.dst_device,
-                     access.operation, access.object) {
+                     access.success, access.operation, access.object) {
     arguments = access.arguments;
     metadata = access.metadata;
   }
@@ -216,6 +219,10 @@ public:
   const unsigned int &get_dst_device() const {
     assert(dst_device.first);
     return dst_device.second;
+  }
+  bool get_success() const {
+    assert(success.first);
+    return success.second;
   }
   const Operation &get_operation() const { return operation; }
   const unsigned int &get_object() const { return object; }
@@ -227,8 +234,9 @@ public:
     return metadata.second;
   }
 
-  const bool is_dst_device_set() const { return dst_device.first; }
-  const bool is_metadata_set() const { return metadata.first; }
+  bool is_dst_device_set() const { return dst_device.first; }
+  bool is_success_set() const { return success.first; }
+  bool is_metadata_set() const { return metadata.first; }
 
   bool has_argument(const LibvigAccessArgument::Type &type) const;
   const LibvigAccessArgument& get_argument(const LibvigAccessArgument::Type &type) const;

@@ -246,6 +246,12 @@ std::ostream &operator<<(std::ostream &os, const LibvigAccess &access) {
     os << "\n";
   }
 
+  if (access.success.first) {
+    os << "successs   ";
+    os << access.success.second;
+    os << "\n";
+  }
+
   os << "operation  ";
   switch (access.operation) {
     case LibvigAccess::INIT:

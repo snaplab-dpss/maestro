@@ -72,6 +72,7 @@ void Parser::parse_access() {
   unsigned int id;
   unsigned int src_device;
   std::pair<bool, unsigned int> dst_device;
+  std::pair<bool, bool> success;
   LibvigAccess::Operation operation;
   unsigned int object;
 
@@ -89,6 +90,10 @@ void Parser::parse_access() {
   if (dst_device.first)
     iss >> std::ws >> dst_device.second;
 
+  success.first = consume_token(Tokens::Access::SUCCESS, iss, true);
+  if (success.first)
+    iss >> std::ws >> success.second;
+
   {
     std::string operation_str;
     consume_token(Tokens::Access::OPERATION, iss);
@@ -100,7 +105,7 @@ void Parser::parse_access() {
   iss >> std::ws >> object;
 
   LibvigAccess &access = get_or_push_unique_access(
-      LibvigAccess(id, src_device, dst_device, operation, object));
+      LibvigAccess(id, src_device, dst_device, success, operation, object));
 
   if (consume_token(Tokens::Access::END, iss, true)) {
     states.pop();

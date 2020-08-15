@@ -36,6 +36,9 @@ private:
       const std::pair<LibvigAccess, LibvigAccess> &pair);
 
   void fill_unique_devices(const std::vector<LibvigAccess> &accesses);
+  std::vector<LibvigAccess> filter_reads_without_writes_on_objects(const std::vector<LibvigAccess> &accesses);
+  void analyse_dchain_interpretations(const std::vector<LibvigAccess>& accesses);
+  void verify_dchain_correctness(const std::vector<LibvigAccess>& accesses, const LibvigAccess& dchain_verify);
   void fill_constraints(const std::vector<LibvigAccess> &accesses);
   void analyse_constraints();
 
@@ -54,8 +57,9 @@ public:
 
     fill_unique_devices(accesses);
 
-    const auto trimmed_accesses = analyse_operations_on_objects(accesses);
+    auto trimmed_accesses = filter_reads_without_writes_on_objects(accesses);
 
+    analyse_dchain_interpretations(trimmed_accesses);
     fill_constraints(trimmed_accesses);
     analyse_constraints();
 
@@ -92,9 +96,6 @@ public:
                                  R3S::Z3_ast target, R3S::Z3_ast dst);
 
   void build_rss_config();
-
-  const std::vector<LibvigAccess>
-  analyse_operations_on_objects(const std::vector<LibvigAccess> &accesses);
 
   std::pair<R3S::R3S_packet_t, R3S::R3S_packet_t>
   generate_packets(unsigned device1, unsigned device2);

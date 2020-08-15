@@ -11,6 +11,7 @@ const std::string END = "END ACCESS";
 const std::string ID = "id";
 const std::string SRC_DEVICE = "src_device";
 const std::string DST_DEVICE = "dst_device";
+const std::string SUCCESS = "success";
 const std::string OPERATION = "operation";
 const std::string OBJECT = "object";
 }
