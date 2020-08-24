@@ -33,6 +33,12 @@ public:
   const std::string &get_interface() const { return interface; }
   const std::string &get_file() const { return file; }
 
+  std::string get_data_structure() const {
+    auto delim = interface.find("_");
+    assert(delim != std::string::npos);
+    return interface.substr(0, delim);
+  }
+
   friend std::ostream &operator<<(std::ostream &os,
                                   const LibvigAccessMetadata &arg);
 };
@@ -63,114 +69,37 @@ public:
 private:
   Type type;
   std::string expression;
-
-  bool are_dependencies_sorted;
-
-  /*
-   * There should never be repeating elements inside this vector.
-   *
-   * I considered using an unordered_set, but it involved more work
-   * than I expected. So, in order to contain my over-engineering
-   * tendencies, and because this will not have many elements, I
-   * decided to just use a vector.
-   */
-  std::vector< std::shared_ptr<Dependency> > dependencies;
+  DependencyManager dependencies;
 
 public:
   LibvigAccessArgument(const Type &_type, std::string _expr)
-      : type(_type), expression(_expr), are_dependencies_sorted(false) {}
+      : type(_type), expression(_expr) {}
 
   LibvigAccessArgument(const LibvigAccessArgument &argument)
       : LibvigAccessArgument(argument.type, argument.expression) {
-    for (auto& dependency : argument.dependencies) {
-      auto copy = dependency->clone();
-      dependencies.push_back(copy);
-    }
+    dependencies = argument.dependencies;
   }
 
   LibvigAccessArgument::Type get_type() const { return type; }
   const std::string &get_expression() const { return expression; }
 
-  const std::vector<std::shared_ptr<Dependency> > &
-  get_dependencies() const {
+  const DependencyManager& get_dependencies() const {
     return dependencies;
   }
 
   void sort_dependencies() {
-    if (are_dependencies_sorted)
-      return;
-
-    auto dependency_comparator = [](
-        const std::shared_ptr<Dependency> & d1,
-        const std::shared_ptr<Dependency> & d2)->bool {
-
-      if (d1->should_ignore())
-        return true;
-      if (!d1->is_processed())
-        return true;
-      if (!d1->is_rss_compatible())
-        return true;
-
-      if (d2->should_ignore())
-        return false;
-      if (!d2->is_processed())
-        return false;
-      if (!d2->is_rss_compatible())
-        return false;
-
-      const auto &processed1 =
-          dynamic_cast<PacketDependencyProcessed *>(d1.get());
-
-      const auto &processed2 =
-          dynamic_cast<PacketDependencyProcessed *>(d2.get());
-
-      return (*processed1) < (*processed2);
-    };
-
-    std::sort(dependencies.begin(), dependencies.end(), dependency_comparator);
-
-    are_dependencies_sorted = true;
+    dependencies.sort();
   }
 
-  std::vector<R3S::R3S_pf_t> get_unique_packet_fields() const {
-    std::vector<R3S::R3S_pf_t> packet_fields;
-
-    for (const auto &dependency : dependencies) {
-      if (dependency->should_ignore())
-        continue;
-
-      if (!dependency->is_processed())
-        continue;
-
-      if (!dependency->is_rss_compatible())
-        continue;
-
-      const auto packet_dependency_processed =
-          dynamic_cast<PacketDependencyProcessed *>(dependency.get());
-
-      auto packet_field = packet_dependency_processed->get_packet_field();
-
-      auto found_it =
-          std::find(packet_fields.begin(), packet_fields.end(), packet_field);
-
-      if (found_it != packet_fields.end())
-        continue;
-
-      packet_fields.push_back(packet_field);
-    }
-
-    return packet_fields;
+  void add_dependency(const Dependency *dependency) {
+    dependencies.add_dependency(dependency);
   }
-
-  void add_dependency(const Dependency *dependency);
 
   friend std::ostream &operator<<(std::ostream &os,
                                   const LibvigAccessArgument &arg);
+
   friend bool operator==(const LibvigAccessArgument &lhs,
                          const LibvigAccessArgument &rhs);
-
-private:
-  void process_packet_dependency(const PacketDependency *dependency);
 };
 
 class LibvigAccess {
@@ -237,6 +166,10 @@ public:
   bool is_dst_device_set() const { return dst_device.first; }
   bool is_success_set() const { return success.first; }
   bool is_metadata_set() const { return metadata.first; }
+
+  bool are_dst_devices_equal(const LibvigAccess& other) const {
+    return dst_device == other.dst_device;
+  }
 
   bool has_argument(const LibvigAccessArgument::Type &type) const;
   const LibvigAccessArgument& get_argument(const LibvigAccessArgument::Type &type) const;

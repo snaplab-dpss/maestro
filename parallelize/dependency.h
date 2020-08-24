@@ -3,6 +3,8 @@
 #include <assert.h>
 #include <memory>
 #include <iostream>
+#include <vector>
+#include <algorithm>
 
 namespace R3S {
 #include <r3s.h>
@@ -219,6 +221,112 @@ public:
 
   friend bool operator==(const PacketDependencyProcessed &lhs,
                          const PacketDependencyProcessed &rhs);
+};
+
+class DependencyManager {
+private:
+  bool are_dependencies_sorted;
+
+  /*
+   * There should never be repeating elements inside this vector.
+   *
+   * I considered using an unordered_set, but it involved more work
+   * than I expected. So, in order to contain my over-engineering
+   * tendencies, and because this will not have many elements, I
+   * decided to just use a vector.
+   */
+  std::vector< std::shared_ptr<Dependency> > dependencies;
+
+public:
+  DependencyManager() : are_dependencies_sorted(false) {}
+
+  DependencyManager(const DependencyManager& manager) : DependencyManager() {
+    for (auto& dependency : manager.dependencies) {
+      auto copy = dependency->clone();
+      dependencies.push_back(copy);
+    }
+  }
+
+  const std::vector<std::shared_ptr<Dependency> >& get() const {
+    return dependencies;
+  }
+
+  void sort() {
+    if (are_dependencies_sorted)
+      return;
+
+    auto dependency_comparator = [](
+        const std::shared_ptr<Dependency> & d1,
+        const std::shared_ptr<Dependency> & d2)->bool {
+
+      if (d1->should_ignore())
+        return true;
+      if (!d1->is_processed())
+        return true;
+      if (!d1->is_rss_compatible())
+        return true;
+
+      if (d2->should_ignore())
+        return false;
+      if (!d2->is_processed())
+        return false;
+      if (!d2->is_rss_compatible())
+        return false;
+
+      const auto &processed1 =
+          dynamic_cast<PacketDependencyProcessed *>(d1.get());
+
+      const auto &processed2 =
+          dynamic_cast<PacketDependencyProcessed *>(d2.get());
+
+      return (*processed1) < (*processed2);
+    };
+
+    std::sort(dependencies.begin(), dependencies.end(), dependency_comparator);
+
+    are_dependencies_sorted = true;
+  }
+
+  std::vector<R3S::R3S_pf_t> get_unique_packet_fields() const {
+    std::vector<R3S::R3S_pf_t> packet_fields;
+
+    for (const auto &dependency : dependencies) {
+      if (dependency->should_ignore())
+        continue;
+
+      if (!dependency->is_processed())
+        continue;
+
+      if (!dependency->is_rss_compatible())
+        continue;
+
+      const auto packet_dependency_processed =
+          dynamic_cast<PacketDependencyProcessed *>(dependency.get());
+
+      auto packet_field = packet_dependency_processed->get_packet_field();
+
+      auto found_it =
+          std::find(packet_fields.begin(), packet_fields.end(), packet_field);
+
+      if (found_it != packet_fields.end())
+        continue;
+
+      packet_fields.push_back(packet_field);
+    }
+
+    return packet_fields;
+  }
+
+  void add_dependency(const Dependency *dependency);
+
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const DependencyManager &manager);
+
+  friend bool operator==(const DependencyManager &lhs,
+                         const DependencyManager &rhs);
+
+private:
+  void process_packet_dependency(const PacketDependency *dependency);
 };
 
 } // namespace ParallelSynthesizer

@@ -6,7 +6,7 @@
 
 namespace ParallelSynthesizer {
 
-R3S::Z3_ast parse_expr(R3S::Z3_context ctx, const std::string& expr_str) {
+R3S::Z3_ast Constraint::parse_expr(R3S::Z3_context ctx, const std::string& expr_str) {
   auto expr = R3S::Z3_parse_smtlib2_string(ctx, expr_str.c_str(), 0, 0, 0, 0, 0, 0);
 
   assert(R3S::Z3_get_ast_kind(ctx, expr) == R3S::Z3_APP_AST);
@@ -114,8 +114,8 @@ void Constraint::generate_expression_from_read_args() {
   auto first_expr_str = first_read_arg.get_expression();
   auto second_expr_str = second_read_arg.get_expression();
 
-  auto first_expr = parse_expr(ctx, first_expr_str);
-  auto second_expr = parse_expr(ctx, second_expr_str);
+  auto first_expr = Constraint::parse_expr(ctx, first_expr_str);
+  auto second_expr = Constraint::parse_expr(ctx, second_expr_str);
 
   expression = R3S::Z3_simplify(ctx, R3S::Z3_mk_eq(ctx, first_expr, second_expr));
 }
@@ -206,8 +206,8 @@ void Constraint::zip_packet_fields_expression_and_values() {
   first_read_arg_copy.sort_dependencies();
   second_read_arg_copy.sort_dependencies();
 
-  const auto &first_deps = first_read_arg_copy.get_dependencies();
-  const auto &second_deps = second_read_arg_copy.get_dependencies();
+  const auto &first_deps = first_read_arg_copy.get_dependencies().get();
+  const auto &second_deps = second_read_arg_copy.get_dependencies().get();
 
   int smaller_packet_chunks_id = -1;
 
@@ -312,7 +312,6 @@ void Constraint::zip_packet_fields_expression_and_values() {
 
     }
   }
-
 }
 
 void Constraint::check_incompatible_dependencies() {
@@ -322,8 +321,8 @@ void Constraint::check_incompatible_dependencies() {
   auto first_read_arg = first.get_argument(LibvigAccessArgument::Type::READ);
   auto second_read_arg = first.get_argument(LibvigAccessArgument::Type::READ);
 
-  const auto &first_dependencies = first_read_arg.get_dependencies();
-  const auto &second_dependencies = second_read_arg.get_dependencies();
+  const auto &first_dependencies = first_read_arg.get_dependencies().get();
+  const auto &second_dependencies = second_read_arg.get_dependencies().get();
 
   auto incompatible_dependency_filter = [](
       const std::shared_ptr<const Dependency> & dependency)->bool {
@@ -345,6 +344,48 @@ void Constraint::check_incompatible_dependencies() {
                     << "\n";
     exit(0);
   }
+}
+
+std::ostream &operator<<(std::ostream &os,
+                         const CallPathInfo &arg) {
+  os << "call path info";
+  os << "\n";
+
+  os << "  call path ";
+  os << arg.call_path;
+  os << "\n";
+
+  os << "  symbol    ";
+  os << arg.symbol;
+  os << "\n";
+
+  os << "  type      ";
+  if (arg.type == CallPathInfo::Type::SOURCE)
+    os << "source";
+  else if (arg.type == CallPathInfo::Type::PAIR)
+    os << "pair";
+  os << "\n";
+
+  os << arg.dependencies;
+
+  return os;
+}
+
+std::ostream &operator<<(std::ostream &os,
+                         const CallPathsConstraint &arg) {
+  os << "================ CALL PATHS CONSTRAINT ================";
+  os << "\n";
+
+  os << "expression  " << arg.expression_str;
+  os << "\n";
+
+  os << arg.first;
+  os << arg.second;
+
+  os << "=======================================================";
+  os << "\n";
+
+  return os;
 }
 
 }

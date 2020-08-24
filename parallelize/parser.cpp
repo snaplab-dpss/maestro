@@ -267,6 +267,73 @@ void Parser::parse_metadata() {
   states.top().content.emplace_back(metadata);
 }
 
+void Parser::parse_call_paths_constraint() {
+  std::istringstream iss;
+  std::string expression;
+
+  consume_token(Tokens::CallPathConstraint::START, iss);
+
+  assert(last_loaded_content_type() == LoadedContentType::EXPRESSION);
+
+  expression = last_loaded_content().expression.value;
+  consume_content();
+
+  assert(last_loaded_content_type() == LoadedContentType::CALL_PATH_INFO);
+
+  auto first_call_path_info = last_loaded_content().call_path_info.value;
+  consume_content();
+
+  assert(last_loaded_content_type() == LoadedContentType::CALL_PATH_INFO);
+
+  auto second_call_path_info = last_loaded_content().call_path_info.value;
+  consume_content();
+
+  call_paths_constraints.emplace_back(expression, first_call_path_info, second_call_path_info);
+
+  consume_token(Tokens::CallPathConstraint::END, iss);
+
+  states.pop();
+}
+
+void Parser::parse_call_path_info() {
+  std::istringstream iss;
+  std::string call_path;
+  CallPathInfo::Type type;
+  std::string symbol;
+
+  consume_token(Tokens::CallPathInfo::START, iss);
+
+  consume_token(Tokens::CallPathInfo::CALL_PATH, iss);
+  iss >> std::ws >> call_path;
+
+  {
+    std::string type_str;
+    consume_token(Tokens::CallPathInfo::TYPE, iss);
+    iss >> std::ws >> type_str;
+    type = CallPathInfo::parse_call_path_info_type_token(type_str);
+  }
+
+  consume_token(Tokens::CallPathInfo::SYMBOL, iss);
+  iss >> std::ws >> symbol;
+
+  CallPathInfo call_path_info(call_path, type, symbol);
+
+  if (states.top().content.size() &&
+      last_loaded_content_type() == LoadedContentType::PACKET_DEPENDENCIES) {
+    auto dependencies = last_loaded_content().dependencies.value;
+
+    for (const auto &dependency : dependencies)
+      call_path_info.add_dependency(dependency.get());
+
+    consume_content();
+  }
+
+  consume_token(Tokens::CallPathInfo::END, iss);
+
+  states.pop();
+  states.top().content.emplace_back(call_path_info);
+}
+
 void Parser::parse(const std::string &filepath) {
   // TODO: deal with errors
   std::fstream file;
@@ -281,11 +348,21 @@ void Parser::parse(const std::string &filepath) {
   }
 
   while (getline(file, line)) {
-    if (line == Tokens::Access::START || line == Tokens::Argument::START ||
+
+    if (line == Tokens::Access::START ||
+        line == Tokens::Argument::START ||
         line == Tokens::Expression::START ||
         line == Tokens::PacketDependencies::START ||
-        line == Tokens::Chunk::START || line == Tokens::Metadata::START) {
+        line == Tokens::Chunk::START ||
+        line == Tokens::Metadata::START ||
+        line == Tokens::CallPathConstraint::START ||
+        line == Tokens::CallPathInfo::START) {
       states.emplace();
+    }
+
+    if (states.size() == 0) {
+      Logger::error() << "Error while parsing \"" << line << "\" (no loaded state)" << "\n";
+      exit(1);
     }
 
     states.top().content.emplace_back(line);
@@ -307,48 +384,14 @@ void Parser::parse(const std::string &filepath) {
 
     else if (line == Tokens::Metadata::END)
       parse_metadata();
+
+    else if (line == Tokens::CallPathInfo::END)
+      parse_call_path_info();
+
+    else if (line == Tokens::CallPathConstraint::END)
+      parse_call_paths_constraint();
   }
 
   file.close();
-
-  report();
-}
-
-void Parser::report() {
-  /*
-  std::vector< std::pair<unsigned int, PacketDependencyIncompatible> >
-  incompatible_dependency_id_pairs;
-
-  for (const auto& access : accesses) {
-    for (const auto& dependency : access.get_dependencies()) {
-
-      if (dependency->is_rss_compatible() || dependency->should_ignore())
-        continue;
-
-      const auto& incompatible = dynamic_cast<const
-  PacketDependencyIncompatible&>(*dependency);
-
-      std::pair<unsigned int, PacketDependencyIncompatible>
-  pair(access.get_id(), incompatible);
-      auto found_it = std::find(incompatible_dependency_id_pairs.begin(),
-  incompatible_dependency_id_pairs.end(), pair);
-      if (found_it != incompatible_dependency_id_pairs.end()) continue;
-
-      Logger::error() << "=============== Incompatible dependency in access
-  ===============";
-      Logger::error() << "\n";
-      Logger::error() << "Access:";
-      Logger::error() << "\n";
-      Logger::error() << access;
-      Logger::error() << "\n";
-      Logger::error() <<
-  "=================================================================";
-      Logger::error() << "\n";
-      Logger::error() << "\n";
-
-      incompatible_dependency_id_pairs.push_back(pair);
-    }
-  }
-  */
 }
 }

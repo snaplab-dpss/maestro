@@ -29,7 +29,10 @@ int main(int argc, char *argv[]) {
   for (const auto &access : parser.get_accesses())
     Logger::log() << access << "\n";
 
-  RSSConfigBuilder rss_cfg_builder(parser.get_accesses());
+  for (const auto &cpc : parser.get_call_paths_constraints())
+    Logger::log() << cpc << "\n";
+
+  RSSConfigBuilder rss_cfg_builder(parser.get_accesses(), parser.get_call_paths_constraints());
 
   rss_cfg_builder.build_rss_config();
   auto config = rss_cfg_builder.get_generated_rss_cfg();

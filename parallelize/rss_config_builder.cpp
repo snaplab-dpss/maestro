@@ -93,8 +93,14 @@ void RSSConfigBuilder::fill_constraints(const std::vector<LibvigAccess> &accesse
 
       constraints.emplace_back(first, second, ctx);
 
-      merge_unique_packet_field_dependencies(first_read_arg.get_unique_packet_fields());
-      merge_unique_packet_field_dependencies(second_read_arg.get_unique_packet_fields());
+      auto first_dependencies = first_read_arg.get_dependencies();
+      auto second_dependencies = second_read_arg.get_dependencies();
+
+      auto first_unique_packet_fields = first_dependencies.get_unique_packet_fields();
+      auto second_unique_packet_fields = second_dependencies.get_unique_packet_fields();
+
+      merge_unique_packet_field_dependencies(first_unique_packet_fields);
+      merge_unique_packet_field_dependencies(second_unique_packet_fields);
     }
   }
 }
@@ -248,21 +254,295 @@ std::vector<LibvigAccess> RSSConfigBuilder::filter_reads_without_writes_on_objec
   return trimmed_accesses;
 }
 
-void RSSConfigBuilder::verify_dchain_correctness(const std::vector<LibvigAccess>& accesses, const LibvigAccess& dchain_verify) {
-  assert(dchain_verify.has_argument(LibvigAccessArgument::Type::READ));
+bool RSSConfigBuilder::is_write_modifying(const std::vector<LibvigAccess>&cp, LibvigAccess write) {
+  assert(write.has_argument(LibvigAccessArgument::Type::WRITE));
 
-  auto read_arg = dchain_verify.get_argument(LibvigAccessArgument::Type::READ);
-  auto dependencies = read_arg.get_dependencies();
+  auto is_read_access_in_same_data_structure = [&](const LibvigAccess& access) -> bool {
+    auto write_data_structure = write.get_metadata().get_data_structure();
+    auto access_data_structure = access.get_metadata().get_data_structure();
 
-  std::vector<R3S::R3S_pf_t> packet_fields;
-  for (const auto& dependency : dependencies) {
-    if (dependency->is_packet_related() && dependency->is_processed() && dependency->is_rss_compatible()) {
-      auto packet_dependency = dynamic_cast<PacketDependencyProcessed*>(dependency.get());
-      packet_fields.push_back(packet_dependency->get_packet_field());
+    if (write_data_structure != access_data_structure)
+      return false;
+
+    return access.get_operation() == LibvigAccess::Operation::READ;
+  };
+
+  auto read_it = std::find_if(cp.begin(), cp.end(), is_read_access_in_same_data_structure);
+
+  if (read_it == cp.end())
+    return true;
+
+  R3S::Z3_context ctx = R3S::R3S_cfg_get_z3_context(cfg);
+
+  auto read_arg = read_it->get_argument(LibvigAccessArgument::Type::RESULT);
+  auto write_arg = write.get_argument(LibvigAccessArgument::Type::WRITE);
+
+  auto result_expr = Constraint::parse_expr(ctx, read_arg.get_expression());
+  auto write_expr = Constraint::parse_expr(ctx, write_arg.get_expression());
+
+  return !R3S::Z3_is_eq_ast(ctx, write_expr, result_expr);
+}
+
+bool RSSConfigBuilder::are_call_paths_equivalent(const std::vector<LibvigAccess>& cp1, const std::vector<LibvigAccess>& cp2) {
+  assert(cp1.size() && cp2.size());
+
+  // Compare destination devices,
+  // i.e., is the packet always dropped
+  // or always sent to the same device?
+
+  auto& access = cp1[0];
+  for (unsigned int i = 0; i < std::max(cp1.size(), cp2.size()); i++) {
+    if (i < cp1.size() && !access.are_dst_devices_equal(cp1[i])) {
+      return false;
+    }
+
+    if (i < cp2.size() && !access.are_dst_devices_equal(cp2[i])) {
+      return false;
     }
   }
 
-  if (packet_fields.size() == 0) {
+  auto write_accesses_1 = cp1;
+  auto write_accesses_2 = cp2;
+
+  auto is_not_write_access = [](const LibvigAccess& access) -> bool {
+    return access.get_operation() != LibvigAccess::Operation::WRITE;
+  };
+
+  write_accesses_1.erase(std::remove_if(write_accesses_1.begin(), write_accesses_1.end(), is_not_write_access), write_accesses_1.end());
+  write_accesses_2.erase(std::remove_if(write_accesses_2.begin(), write_accesses_2.end(), is_not_write_access), write_accesses_2.end());
+
+  for (const auto& access : write_accesses_1) {
+    if (is_write_modifying(cp1, access))
+      return false;
+  }
+
+  for (const auto& access : write_accesses_2) {
+    if (is_write_modifying(cp2, access))
+      return false;
+  }
+
+  return true;
+}
+
+void RSSConfigBuilder::poison_packet_fields(std::map< unsigned int, std::vector<R3S::R3S_pf_t> >& poisoned_packet_fields) {
+  bool changed = false;
+
+  auto get_prohibited_packet_dependent_pdes = [&](const Constraint& constraint) -> std::vector<const PacketDependenciesExpression*> {
+    std::vector<const PacketDependenciesExpression*> pdes;
+
+    for (const auto& device_prohibited_packet_fields_pair : poisoned_packet_fields) {
+      const auto& poisoned_device = device_prohibited_packet_fields_pair.first;
+      const auto& poisoned_packet_fields = device_prohibited_packet_fields_pair.second;
+
+      if (constraint.get_first_access().get_src_device() != poisoned_device &&
+          constraint.get_second_access().get_src_device() != poisoned_device) {
+        return pdes;
+      }
+
+      for (const auto& prohibited_packet_field : poisoned_packet_fields) {
+        const auto pde = constraint.get_packet_dependency_expression(poisoned_device, prohibited_packet_field);
+
+        if (pde) {
+          pdes.push_back(pde);
+        }
+      }
+    }
+
+    return pdes;
+  };
+
+  for (const auto& constraint : constraints) {
+    auto prohibited_packet_dependent_pdes = get_prohibited_packet_dependent_pdes(constraint);
+    if (constraint.get_first_access().get_src_device() == 0 && constraint.get_first_access().get_src_device() == constraint.get_second_access().get_src_device()) {
+      Logger::debug() << constraint << "\n";
+    }
+
+    for (const auto& prohibited_packet_dependent_pde : prohibited_packet_dependent_pdes) {
+      R3S::Z3_ast associated_expression = RSSConfigBuilder::ast_equal_association(
+            constraint.get_context(),
+            constraint.get_expression(), prohibited_packet_dependent_pde->get_expression());
+
+      const auto associated_packet_dependency_expression = constraint.get_packet_dependencies_expression(associated_expression);
+
+      if (associated_packet_dependency_expression == nullptr) {
+        continue;
+      }
+
+      Logger::warn() << *associated_packet_dependency_expression << "\n";
+
+      const auto& associated_packet_chunk_id = associated_packet_dependency_expression->get_packet_chunks_id();
+      const auto& constraint_packet_chunks_ids = constraint.get_packet_chunks_ids();
+
+      unsigned int associated_device;
+
+      if (associated_packet_chunk_id == constraint_packet_chunks_ids.first) {
+        associated_device = constraint.get_first_access().get_src_device();
+      }
+
+      else if (associated_packet_chunk_id == constraint_packet_chunks_ids.second) {
+        associated_device = constraint.get_second_access().get_src_device();
+      }
+
+      else {
+        assert(false && "this should not happen");
+      }
+
+      auto packet_fields = associated_packet_dependency_expression->get_associated_dependencies_packet_fields();
+      auto stored = poisoned_packet_fields[associated_device];
+
+      for (const auto& packet_field : packet_fields) {
+        auto found_it = std::find(stored.begin(), stored.end(), packet_field);
+        if (found_it == stored.end()) {
+          stored.push_back(packet_field);
+          changed = true;
+        }
+
+        poisoned_packet_fields[associated_device] = stored;
+      }
+    }
+  }
+
+
+  if (changed) {
+    poison_packet_fields(poisoned_packet_fields);
+  }
+}
+
+void RSSConfigBuilder::remove_constraints_with_prohibited_packet_fields(unsigned int device, std::vector<R3S::R3S_pf_t> prohibited_packet_fields) {
+
+  std::map< unsigned int, std::vector<R3S::R3S_pf_t> > poisoned_packet_fields_per_device;
+  poisoned_packet_fields_per_device[device] = prohibited_packet_fields;
+
+  poison_packet_fields(poisoned_packet_fields_per_device);
+
+  for (const auto& device_prohibited_packet_fields_pair : poisoned_packet_fields_per_device) {
+    Logger::warn() << "\n";
+    Logger::warn() << "In device " << device_prohibited_packet_fields_pair.first << ":" << "\n";
+    for (const auto& pf : device_prohibited_packet_fields_pair.second) {
+      Logger::warn() << "  -> prohibited packet fields " << R3S::R3S_pf_to_string(pf) << "\n";
+    }
+  }
+
+  exit(0);
+
+  auto prohibited_packet_dependent = [&](const Constraint& constraint) -> bool {
+    for (const auto& device_prohibited_packet_fields_pair : poisoned_packet_fields_per_device) {
+      const auto& poisoned_device = device_prohibited_packet_fields_pair.first;
+      const auto& poisoned_packet_fields = device_prohibited_packet_fields_pair.second;
+
+      if (constraint.get_first_access().get_src_device() != poisoned_device &&
+          constraint.get_second_access().get_src_device() != poisoned_device) {
+        return false;
+      }
+
+      for (const auto& prohibited_packet_field : poisoned_packet_fields) {
+        if (constraint.has_packet_field(prohibited_packet_field, poisoned_device)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  };
+
+  Logger::debug () << "before " << constraints.size() << "\n";
+  constraints.erase(std::remove_if(constraints.begin(), constraints.end(), prohibited_packet_dependent), constraints.end());
+  Logger::debug () << "after " << constraints.size() << "\n";
+
+  for (const auto& constraint : constraints) {
+    Logger::debug() << constraint << "\n";
+  }
+
+  exit(0);
+
+
+}
+
+void RSSConfigBuilder::verify_dchain_correctness(const std::vector<LibvigAccess>& accesses, const LibvigAccess& dchain_verify) {
+  assert(dchain_verify.get_operation() == LibvigAccess::Operation::VERIFY);
+
+  auto read_arg = dchain_verify.get_argument(LibvigAccessArgument::Type::READ);
+  auto dependencies = read_arg.get_dependencies();
+  auto packet_fields = dependencies.get_unique_packet_fields();
+
+  if (packet_fields.size() == 0)
+    return;
+
+  std::map< std::string, std::vector<LibvigAccess> > call_paths;
+  for (const auto& access : accesses) {
+    auto call_path = access.get_metadata().get_file();
+    call_paths[call_path].push_back(access);
+  }
+
+  std::map< std::string, std::vector<LibvigAccess> > failed_verifications_call_paths;
+  std::map< std::string, std::vector<LibvigAccess> > successful_verifications_call_paths;
+  std::map< std::string, std::vector<LibvigAccess> > successful_verifications_failed_constraints_call_paths;
+
+  auto is_failed_verification = [](const LibvigAccess& access) -> bool {
+    return access.get_metadata().get_interface() == "dchain_is_index_allocated" &&
+        access.is_success_set() && access.get_success() == 0;
+  };
+
+  auto is_successful_verification = [](const LibvigAccess& access) -> bool {
+    return access.get_metadata().get_interface() == "dchain_is_index_allocated" &&
+        access.is_success_set() && access.get_success() != 0;
+  };
+
+  auto has_constraints_with_other_call_path = [&](const LibvigAccess& access) -> bool {
+    const auto& metadata = access.get_metadata();
+    const auto& call_path_fname = metadata.get_file();
+
+    auto found_it = std::find_if(
+          call_paths_constraints.begin(),
+          call_paths_constraints.end(),
+          [&](const CallPathsConstraint& call_path_constraint) -> bool {
+            return call_path_fname == call_path_constraint.get_call_path_info(CallPathInfo::Type::SOURCE).get_call_path();
+          });
+
+    return found_it != call_paths_constraints.end();
+  };
+
+  for (auto call_path : call_paths) {
+    auto has_failed_verification_it = std::find_if(call_path.second.begin(), call_path.second.end(), is_failed_verification);
+    auto has_failed_verification = has_failed_verification_it != call_path.second.end();
+
+    if (has_failed_verification) {
+      failed_verifications_call_paths[call_path.first] = call_path.second;
+      continue;
+    }
+
+    auto has_successful_verification_it = std::find_if(call_path.second.begin(), call_path.second.end(), is_successful_verification);
+    auto has_successful_verification = has_successful_verification_it != call_path.second.end();
+
+    auto has_constraints_it = std::find_if(call_path.second.begin(), call_path.second.end(), has_constraints_with_other_call_path);
+    auto has_constraints = has_constraints_it != call_path.second.end();
+
+    if (has_successful_verification && has_constraints) {
+      successful_verifications_call_paths[call_path.first] = call_path.second;
+    }
+
+    else if (has_successful_verification) {
+      successful_verifications_failed_constraints_call_paths[call_path.first] = call_path.second;
+    }
+  }
+
+  auto equivalent_failures = true;
+  for (const auto& failed_verification_pair : failed_verifications_call_paths) {
+    for (const auto& successful_verifications_failed_constraints_pair : successful_verifications_failed_constraints_call_paths) {
+      equivalent_failures = equivalent_failures && are_call_paths_equivalent(
+            failed_verification_pair.second,
+            successful_verifications_failed_constraints_pair.second);
+
+      if (!equivalent_failures)
+        break;
+    }
+
+    if (!equivalent_failures)
+      break;
+  }
+
+  if (equivalent_failures) {
+    remove_constraints_with_prohibited_packet_fields(dchain_verify.get_src_device(), packet_fields);
     return;
   }
 
@@ -312,6 +592,34 @@ RSSConfigBuilder::generate_packets(unsigned device1, unsigned device2) {
   }
 
   return std::make_pair(p1, p2);
+}
+
+// should ask the solver
+R3S::Z3_ast RSSConfigBuilder::ast_equal_association(R3S::Z3_context ctx, R3S::Z3_ast root,
+                                                    R3S::Z3_ast target) {
+  R3S::Z3_ast associated;
+
+  if (Z3_get_ast_kind(ctx, root) != R3S::Z3_APP_AST)
+    return nullptr;
+
+  R3S::Z3_app app = Z3_to_app(ctx, root);
+  unsigned num_fields = Z3_get_app_num_args(ctx, app);
+
+  for (unsigned i = 0; i < num_fields; i++) {
+    if (Z3_is_eq_ast(ctx, Z3_get_app_arg(ctx, app, i), target)) {
+      assert(num_fields == 2);
+      associated = Z3_get_app_arg(ctx, app, num_fields - i - 1);
+      return associated;
+    }
+
+    associated = ast_equal_association(ctx, Z3_get_app_arg(ctx, app, i), target);
+
+    if (associated) {
+      return associated;
+    }
+  }
+
+  return nullptr;
 }
 
 R3S::Z3_ast RSSConfigBuilder::ast_replace(R3S::Z3_context ctx, R3S::Z3_ast root,

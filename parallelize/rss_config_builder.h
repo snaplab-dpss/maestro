@@ -5,6 +5,7 @@
 #include "libvig_access.h"
 
 #include <vector>
+#include <map>
 
 namespace R3S {
 #include <r3s.h>
@@ -16,7 +17,9 @@ class RSSConfigBuilder {
 
 private:
   R3S::R3S_cfg_t cfg;
+
   std::vector<Constraint> constraints;
+  std::vector<CallPathsConstraint> call_paths_constraints;
 
   std::vector<unsigned int> unique_devices;
   std::vector<std::pair<LibvigAccess, LibvigAccess> > unique_access_pairs;
@@ -37,8 +40,14 @@ private:
 
   void fill_unique_devices(const std::vector<LibvigAccess> &accesses);
   std::vector<LibvigAccess> filter_reads_without_writes_on_objects(const std::vector<LibvigAccess> &accesses);
+
+  void poison_packet_fields(std::map< unsigned int, std::vector<R3S::R3S_pf_t> >& poisoned_packet_fields);
+  void remove_constraints_with_prohibited_packet_fields(unsigned int device, std::vector<R3S::R3S_pf_t> prohibited_packet_fields);
   void analyse_dchain_interpretations(const std::vector<LibvigAccess>& accesses);
+  bool is_write_modifying(const std::vector<LibvigAccess>&cp, LibvigAccess write);
+  bool are_call_paths_equivalent(const std::vector<LibvigAccess>& cp1, const std::vector<LibvigAccess>& cp2);
   void verify_dchain_correctness(const std::vector<LibvigAccess>& accesses, const LibvigAccess& dchain_verify);
+
   void fill_constraints(const std::vector<LibvigAccess> &accesses);
   void analyse_constraints();
 
@@ -51,7 +60,9 @@ private:
                                              R3S::R3S_packet_ast_t p2);
 
 public:
-  RSSConfigBuilder(const std::vector<LibvigAccess> &accesses) {
+  RSSConfigBuilder(const std::vector<LibvigAccess> &accesses, const std::vector<CallPathsConstraint>& _call_paths_constraints)
+   : call_paths_constraints(_call_paths_constraints) {
+
     R3S::R3S_cfg_init(&cfg);
     R3S::R3S_cfg_set_skew_analysis(cfg, false);
 
@@ -59,8 +70,8 @@ public:
 
     auto trimmed_accesses = filter_reads_without_writes_on_objects(accesses);
 
-    analyse_dchain_interpretations(trimmed_accesses);
     fill_constraints(trimmed_accesses);
+    analyse_dchain_interpretations(trimmed_accesses);
     analyse_constraints();
 
     Logger::log() << "\n";
@@ -94,6 +105,9 @@ public:
 
   static R3S::Z3_ast ast_replace(R3S::Z3_context ctx, R3S::Z3_ast root,
                                  R3S::Z3_ast target, R3S::Z3_ast dst);
+
+  static R3S::Z3_ast ast_equal_association(R3S::Z3_context ctx, R3S::Z3_ast root,
+                                                             R3S::Z3_ast target);
 
   void build_rss_config();
 

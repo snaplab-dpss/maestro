@@ -65,5 +65,24 @@ const std::string END = "END METADATA";
 const std::string INTERFACE = "interface";
 const std::string FILE = "file";
 }
+
+namespace CallPathConstraint {
+const std::string START = "BEGIN CALL PATHS CONSTRAINT";
+const std::string END = "END CALL PATHS CONSTRAINT";
+}
+
+namespace CallPathInfo {
+const std::string START = "BEGIN CALL PATH INFO";
+const std::string END = "END CALL PATH INFO";
+const std::string CALL_PATH = "call_path";
+const std::string TYPE = "type";
+const std::string SYMBOL = "symbol";
+}
+
+namespace CallPathInfoType {
+const std::string SOURCE = "source";
+const std::string PAIR = "pair";
+}
+
 }
 }

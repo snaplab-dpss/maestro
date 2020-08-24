@@ -20,38 +20,57 @@ public:
     PACKET_DEPENDENCIES,
     CHUNK,
     METADATA,
-    EXPRESSION
+    EXPRESSION,
+    CALL_PATHS_CONSTRAINT,
+    CALL_PATH_INFO
   };
 
   union LoadedContent {
+
     struct unparsed_t {
       LoadedContentType type;
       std::string value;
     } unparsed;
+
     struct access_t {
       LoadedContentType type;
       LibvigAccess value;
     } access;
+
     struct argument_t {
       LoadedContentType type;
       LibvigAccessArgument value;
     } argument;
+
     struct expression_t {
       LoadedContentType type;
       std::string value;
     } expression;
+
     struct chunk_t {
       LoadedContentType type;
       std::shared_ptr<const Dependency> value;
     } chunk;
+
     struct dependencies_t {
       LoadedContentType type;
       std::vector<std::shared_ptr<const Dependency> > value;
     } dependencies;
+
     struct metadata_t {
       LoadedContentType type;
       LibvigAccessMetadata value;
     } metadata;
+
+    struct call_paths_constraint_t {
+      LoadedContentType type;
+      CallPathsConstraint value;
+    } call_paths_constraint;
+
+    struct call_path_info_t {
+      LoadedContentType type;
+      CallPathInfo value;
+    } call_path_info;
 
     LoadedContent(const std::string &_unparsed)
         : unparsed{ UNPARSED, std::move(_unparsed) } {}
@@ -91,6 +110,12 @@ public:
     LoadedContent(const LibvigAccessMetadata &_metadata)
         : metadata{ METADATA, _metadata } {}
 
+    LoadedContent(const CallPathsConstraint &_call_paths_constraint)
+        : call_paths_constraint{ CALL_PATHS_CONSTRAINT, _call_paths_constraint } {}
+
+    LoadedContent(const CallPathInfo &_call_path_info)
+        : call_path_info{ CALL_PATH_INFO, _call_path_info } {}
+
     LoadedContent(const LoadedContent &other) {
       switch (unparsed.type) {
         case UNPARSED:
@@ -113,6 +138,12 @@ public:
           break;
         case METADATA:
           ::new (&metadata) auto(other.metadata);
+          break;
+        case CALL_PATHS_CONSTRAINT:
+          ::new (&call_paths_constraint) auto(other.call_paths_constraint);
+          break;
+        case CALL_PATH_INFO:
+          ::new (&call_path_info) auto(other.call_path_info);
           break;
       }
     }
@@ -147,6 +178,14 @@ public:
           metadata.type = other.metadata.type;
           metadata.value = other.metadata.value;
           break;
+        case CALL_PATHS_CONSTRAINT:
+          call_paths_constraint.type = other.call_paths_constraint.type;
+          call_paths_constraint.value = other.call_paths_constraint.value;
+          break;
+        case CALL_PATH_INFO:
+          call_path_info.type = other.call_path_info.type;
+          call_path_info.value = other.call_path_info.value;
+          break;
       }
       return *this;
     }
@@ -174,6 +213,12 @@ public:
         case METADATA:
           metadata.~metadata_t();
           break;
+        case CALL_PATHS_CONSTRAINT:
+          call_paths_constraint.~call_paths_constraint_t();
+          break;
+        case CALL_PATH_INFO:
+          call_path_info.~call_path_info_t();
+          break;
       }
     }
   };
@@ -199,6 +244,10 @@ public:
     Content(std::shared_ptr<const Dependency> _chunk) : content(_chunk) {}
 
     Content(const LibvigAccessMetadata &_metadata) : content(_metadata) {}
+
+    Content(const CallPathsConstraint &_call_paths_constraint) : content(_call_paths_constraint) {}
+
+    Content(const CallPathInfo &_call_path_info) : content(_call_path_info) {}
 
     Content(const Content &_content) : content(_content.content) {}
 
@@ -244,6 +293,12 @@ public:
           case METADATA:
             Logger::debug() << "METADATA";
             break;
+          case CALL_PATHS_CONSTRAINT:
+            Logger::debug() << "CALL_PATHS_CONSTRAINT";
+            break;
+          case CALL_PATH_INFO:
+            Logger::debug() << "CALL_PATH_INFO";
+            break;
         }
         Logger::debug() << "\n";
       }
@@ -257,21 +312,28 @@ private:
   unsigned line_counter;
 
   std::vector<LibvigAccess> accesses;
+  std::vector<CallPathsConstraint> call_paths_constraints;
 
 private:
   LibvigAccess &get_or_push_unique_access(const LibvigAccess &access);
-  // void push_unique_raw_constraint(const RawConstraint& raw_constraint);
 
   bool consume_token(const std::string &token, std::istringstream &iss,
                      bool optional = false);
-  void consume_content() { states.top().content.pop_front(); }
+
+  void consume_content() {
+    assert(states.size());
+    assert(states.top().content.size());
+    states.top().content.pop_front();
+  }
 
   const LoadedContentType &last_loaded_content_type() const {
+    assert(states.size());
     assert(states.top().content.size());
     return states.top().content[0].get_loaded_type();
   }
 
   const LoadedContent &last_loaded_content() const {
+    assert(states.size());
     assert(states.top().content.size());
     return states.top().content[0].get_content();
   }
@@ -282,13 +344,15 @@ private:
   void parse_packet_dependencies();
   void parse_chunk();
   void parse_metadata();
+  void parse_call_paths_constraint();
+  void parse_call_path_info();
 
 public:
   Parser(const std::string &filepath) : line_counter(0) { parse(filepath); }
 
   const std::vector<LibvigAccess> &get_accesses() const { return accesses; }
+  const std::vector<CallPathsConstraint> &get_call_paths_constraints() const { return call_paths_constraints; }
 
   void parse(const std::string &filepath);
-  void report();
 };
 }

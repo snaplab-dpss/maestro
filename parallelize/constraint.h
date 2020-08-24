@@ -46,13 +46,51 @@ public:
     return dependencies;
   }
 
+  std::vector<R3S::R3S_pf_t> get_associated_dependencies_packet_fields() const {
+    std::vector<R3S::R3S_pf_t> packet_fields;
+
+    for (auto dependency : dependencies) {
+      if (dependency->should_ignore()) {
+        continue;
+      }
+
+      if (!dependency->is_rss_compatible()) {
+        continue;
+      }
+
+      if (!dependency->is_processed()) {
+        continue;
+      }
+
+      const auto processed = dynamic_cast<PacketDependencyProcessed*>(dependency.get());
+      const auto packet_field = processed->get_packet_field();
+
+      auto found_it = std::find(packet_fields.begin(), packet_fields.end(), packet_field);
+
+      if (found_it == packet_fields.end()) {
+        packet_fields.push_back(packet_field);
+      }
+    }
+
+    return packet_fields;
+  }
+
   const std::shared_ptr<PacketDependency> get_dependency_compatible_with_packet(R3S::R3S_cfg_t cfg, R3S::R3S_packet_ast_t packet) const {
     std::shared_ptr<PacketDependency> compatible_dependency;
     R3S::Z3_ast pf_ast;
 
     for (auto dependency : dependencies) {
-      if (dependency->should_ignore() || !dependency->is_rss_compatible())
+      if (dependency->should_ignore()) {
         continue;
+      }
+
+      if (!dependency->is_rss_compatible()) {
+        continue;
+      }
+
+      if (!dependency->is_processed()) {
+        continue;
+      }
 
       const auto processed = dynamic_cast<PacketDependencyProcessed*>(dependency.get());
       const auto packet_field = processed->get_packet_field();
@@ -141,7 +179,171 @@ public:
     return packet_dependencies_expressions;
   }
 
+  bool has_packet_field(R3S::R3S_pf_t packet_field) const {
+    return has_packet_field(packet_field, first.get_src_device()) ||
+           has_packet_field(packet_field, second.get_src_device());
+  }
+
+  bool has_packet_field(R3S::R3S_pf_t packet_field, unsigned int device) const {
+    return get_packet_dependency_expression(device, packet_field) != nullptr;
+  }
+
+  const PacketDependenciesExpression* get_packet_dependencies_expression(R3S::Z3_ast expression) const {
+    if (expression == nullptr) {
+      return nullptr;
+    }
+
+    for (const auto& packet_dependencies_expression : packet_dependencies_expressions) {
+      auto context = packet_dependencies_expression.get_context();
+      auto current_expr = packet_dependencies_expression.get_expression();
+
+      if (R3S::Z3_is_eq_ast(context, expression, current_expr)) {
+        return &packet_dependencies_expression;
+      }
+    }
+
+    return nullptr;
+  }
+
+  const PacketDependenciesExpression* get_packet_dependency_expression(unsigned int device, R3S::R3S_pf_t packet_field) const {
+    int target_packet_chunk_id;
+
+    if (device == first.get_src_device()) {
+      target_packet_chunk_id = packet_chunks_ids.first;
+    }
+
+    else if (device == second.get_src_device()) {
+      target_packet_chunk_id = packet_chunks_ids.second;
+    }
+
+    else {
+      return nullptr;
+    }
+
+    for (const auto& packet_dependencies_expression : packet_dependencies_expressions) {
+      if (target_packet_chunk_id < 0) {
+        continue;
+      }
+
+      if (packet_dependencies_expression.get_packet_chunks_id() != target_packet_chunk_id) {
+        continue;
+      }
+
+      auto associated_dependencies = packet_dependencies_expression.get_associated_dependencies();
+
+      for (const auto& dependency : associated_dependencies) {
+        if (!dependency->is_processed())
+          continue;
+
+        if (!dependency->is_rss_compatible())
+          continue;
+
+        if (dependency->should_ignore())
+          continue;
+
+        const auto processed = dynamic_cast<PacketDependencyProcessed *>(dependency.get());
+        auto pf = processed->get_packet_field();
+
+        if (pf == packet_field) {
+          return &packet_dependencies_expression;
+        }
+      }
+    }
+
+    return nullptr;
+  }
+
   friend std::ostream &operator<<(std::ostream &os,
                                   const Constraint &arg);
+
+  static R3S::Z3_ast parse_expr(R3S::Z3_context ctx, const std::string& expr_str);
 };
+
+class CallPathInfo {
+public:
+  enum Type {
+    SOURCE, PAIR
+  };
+
+  static Type parse_call_path_info_type_token(const std::string& call_path_info_type) {
+    if (call_path_info_type == Tokens::CallPathInfoType::SOURCE)
+      return SOURCE;
+
+    if (call_path_info_type == Tokens::CallPathInfoType::PAIR)
+      return PAIR;
+
+    Logger::error() << "Invalid argument type token \"";
+    Logger::error() << call_path_info_type;
+    Logger::error() << "\n";
+
+    exit(1);
+  }
+
+private:
+  std::string call_path;
+  Type type;
+  std::string symbol;
+
+  DependencyManager dependencies;
+
+public:
+  CallPathInfo(const std::string& _call_path, const Type& _type, const std::string& _symbol)
+    : call_path(_call_path), type(_type), symbol(_symbol) {}
+
+  CallPathInfo(const CallPathInfo& other)
+    : call_path(other.call_path), type(other.type), symbol(other.symbol) {
+    dependencies = other.dependencies;
+  }
+
+  const std::string& get_call_path() const { return call_path; }
+  const Type& get_type() const { return type; }
+  const std::string& get_symbol() const { return symbol; }
+
+  const DependencyManager& get_dependencies() const {
+    return dependencies;
+  }
+
+  void sort_dependencies() {
+    dependencies.sort();
+  }
+
+  void add_dependency(const Dependency *dependency) {
+    dependencies.add_dependency(dependency);
+  }
+
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const CallPathInfo &arg);
+};
+
+class CallPathsConstraint {
+private:
+  std::string expression_str;
+
+  CallPathInfo first;
+  CallPathInfo second;
+
+public:
+  CallPathsConstraint(const std::string& _expression_str, const CallPathInfo& _first, const CallPathInfo& _second)
+    : expression_str(_expression_str), first(_first), second(_second) {}
+
+  CallPathsConstraint(const CallPathsConstraint& other)
+    : expression_str(other.expression_str), first(other.first), second(other.second) {}
+
+  const std::string& get_expression_str() const { return expression_str; }
+
+  const CallPathInfo& get_call_path_info(CallPathInfo::Type type) const {
+    if (first.get_type() == type)
+      return first;
+
+    if (second.get_type() == type)
+      return second;
+
+    assert(false && "Call path info type not found");
+  }
+
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const CallPathsConstraint &arg);
+};
+
+
 }
