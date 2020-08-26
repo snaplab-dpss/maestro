@@ -20,7 +20,9 @@ private:
 
   std::vector<Constraint> constraints;
   std::vector<CallPathsConstraint> call_paths_constraints;
+  std::vector<CallPathsTranslation> call_paths_translations;
 
+  std::map<std::string, unsigned int> device_per_call_path;
   std::vector<unsigned int> unique_devices;
   std::vector<std::pair<LibvigAccess, LibvigAccess> > unique_access_pairs;
   std::vector<R3S::R3S_pf_t> unique_packet_fields_dependencies;
@@ -60,8 +62,12 @@ private:
                                              R3S::R3S_packet_ast_t p2);
 
 public:
-  RSSConfigBuilder(const std::vector<LibvigAccess> &accesses, const std::vector<CallPathsConstraint>& _call_paths_constraints)
-   : call_paths_constraints(_call_paths_constraints) {
+  RSSConfigBuilder(
+      const std::vector<LibvigAccess> &accesses,
+      const std::vector<CallPathsConstraint>& _call_paths_constraints,
+      const std::vector<CallPathsTranslation>& _call_path_translations)
+   : call_paths_constraints(_call_paths_constraints),
+     call_paths_translations(_call_path_translations) {
 
     R3S::R3S_cfg_init(&cfg);
     R3S::R3S_cfg_set_skew_analysis(cfg, false);

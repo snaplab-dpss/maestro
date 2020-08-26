@@ -22,6 +22,7 @@ public:
     METADATA,
     EXPRESSION,
     CALL_PATHS_CONSTRAINT,
+    CALL_PATHS_TRANSLATION,
     CALL_PATH_INFO
   };
 
@@ -66,6 +67,11 @@ public:
       LoadedContentType type;
       CallPathsConstraint value;
     } call_paths_constraint;
+
+    struct call_paths_translation_t {
+      LoadedContentType type;
+      CallPathsTranslation value;
+    } call_paths_translation;
 
     struct call_path_info_t {
       LoadedContentType type;
@@ -113,6 +119,9 @@ public:
     LoadedContent(const CallPathsConstraint &_call_paths_constraint)
         : call_paths_constraint{ CALL_PATHS_CONSTRAINT, _call_paths_constraint } {}
 
+    LoadedContent(const CallPathsTranslation &_call_paths_translation)
+        : call_paths_translation{ CALL_PATHS_TRANSLATION, _call_paths_translation } {}
+
     LoadedContent(const CallPathInfo &_call_path_info)
         : call_path_info{ CALL_PATH_INFO, _call_path_info } {}
 
@@ -141,6 +150,9 @@ public:
           break;
         case CALL_PATHS_CONSTRAINT:
           ::new (&call_paths_constraint) auto(other.call_paths_constraint);
+          break;
+        case CALL_PATHS_TRANSLATION:
+          ::new (&call_paths_translation) auto(other.call_paths_translation);
           break;
         case CALL_PATH_INFO:
           ::new (&call_path_info) auto(other.call_path_info);
@@ -182,6 +194,10 @@ public:
           call_paths_constraint.type = other.call_paths_constraint.type;
           call_paths_constraint.value = other.call_paths_constraint.value;
           break;
+        case CALL_PATHS_TRANSLATION:
+          call_paths_translation.type = other.call_paths_translation.type;
+          call_paths_translation.value = other.call_paths_translation.value;
+          break;
         case CALL_PATH_INFO:
           call_path_info.type = other.call_path_info.type;
           call_path_info.value = other.call_path_info.value;
@@ -216,6 +232,9 @@ public:
         case CALL_PATHS_CONSTRAINT:
           call_paths_constraint.~call_paths_constraint_t();
           break;
+        case CALL_PATHS_TRANSLATION:
+          call_paths_translation.~call_paths_translation_t();
+          break;
         case CALL_PATH_INFO:
           call_path_info.~call_path_info_t();
           break;
@@ -246,6 +265,8 @@ public:
     Content(const LibvigAccessMetadata &_metadata) : content(_metadata) {}
 
     Content(const CallPathsConstraint &_call_paths_constraint) : content(_call_paths_constraint) {}
+
+    Content(const CallPathsTranslation &_call_paths_translation) : content(_call_paths_translation) {}
 
     Content(const CallPathInfo &_call_path_info) : content(_call_path_info) {}
 
@@ -296,6 +317,9 @@ public:
           case CALL_PATHS_CONSTRAINT:
             Logger::debug() << "CALL_PATHS_CONSTRAINT";
             break;
+          case CALL_PATHS_TRANSLATION:
+            Logger::debug() << "CALL_PATHS_TRANSLATION";
+            break;
           case CALL_PATH_INFO:
             Logger::debug() << "CALL_PATH_INFO";
             break;
@@ -313,6 +337,7 @@ private:
 
   std::vector<LibvigAccess> accesses;
   std::vector<CallPathsConstraint> call_paths_constraints;
+  std::vector<CallPathsTranslation> call_paths_translations;
 
 private:
   LibvigAccess &get_or_push_unique_access(const LibvigAccess &access);
@@ -345,6 +370,7 @@ private:
   void parse_chunk();
   void parse_metadata();
   void parse_call_paths_constraint();
+  void parse_call_paths_translation();
   void parse_call_path_info();
 
 public:
@@ -352,6 +378,7 @@ public:
 
   const std::vector<LibvigAccess> &get_accesses() const { return accesses; }
   const std::vector<CallPathsConstraint> &get_call_paths_constraints() const { return call_paths_constraints; }
+  const std::vector<CallPathsTranslation> &get_call_paths_translations() const { return call_paths_translations; }
 
   void parse(const std::string &filepath);
 };

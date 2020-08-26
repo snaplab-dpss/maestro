@@ -282,13 +282,18 @@ public:
 private:
   std::string call_path;
   Type type;
-  std::string symbol;
+  std::pair<bool, std::string> symbol;
 
   DependencyManager dependencies;
 
 public:
-  CallPathInfo(const std::string& _call_path, const Type& _type, const std::string& _symbol)
+  CallPathInfo(const std::string& _call_path, const Type& _type, const std::pair<bool, std::string>& _symbol)
     : call_path(_call_path), type(_type), symbol(_symbol) {}
+
+  CallPathInfo(const std::string& _call_path, const Type& _type, const std::string& _symbol)
+    : call_path(_call_path), type(_type) {
+    symbol = std::make_pair(true, _symbol);
+  }
 
   CallPathInfo(const CallPathInfo& other)
     : call_path(other.call_path), type(other.type), symbol(other.symbol) {
@@ -297,7 +302,12 @@ public:
 
   const std::string& get_call_path() const { return call_path; }
   const Type& get_type() const { return type; }
-  const std::string& get_symbol() const { return symbol; }
+  const std::string& get_symbol() const {
+    assert(symbol.first);
+    return symbol.second;
+  }
+
+  bool has_symbol() const { return symbol.first; }
 
   const DependencyManager& get_dependencies() const {
     return dependencies;
@@ -345,5 +355,30 @@ public:
                                   const CallPathsConstraint &arg);
 };
 
+class CallPathsTranslation {
+private:
+  CallPathInfo first;
+  CallPathInfo second;
+
+public:
+  CallPathsTranslation(const CallPathInfo& _first, const CallPathInfo& _second)
+    : first(_first), second(_second) {}
+
+  CallPathsTranslation(const CallPathsTranslation& other)
+    : first(other.first), second(other.second) {}
+
+  const CallPathInfo& get_call_path_info(CallPathInfo::Type type) const {
+    if (first.get_type() == type)
+      return first;
+
+    if (second.get_type() == type)
+      return second;
+
+    assert(false && "Call path info type not found");
+  }
+
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const CallPathsTranslation &arg);
+};
 
 }

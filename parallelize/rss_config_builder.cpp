@@ -175,6 +175,9 @@ void RSSConfigBuilder::fill_unique_devices(
     const std::vector<LibvigAccess> &accesses) {
   for (const auto &access : accesses) {
     auto src_device = access.get_src_device();
+
+    device_per_call_path[access.get_metadata().get_file()] = src_device;
+
     auto src_it =
         std::find(unique_devices.begin(), unique_devices.end(), src_device);
 
@@ -408,12 +411,45 @@ void RSSConfigBuilder::poison_packet_fields(std::map< unsigned int, std::vector<
   }
 }
 
-void RSSConfigBuilder::remove_constraints_with_prohibited_packet_fields(unsigned int device, std::vector<R3S::R3S_pf_t> prohibited_packet_fields) {
+void RSSConfigBuilder::remove_constraints_with_prohibited_packet_fields(unsigned int device,
+                                                                        std::vector<R3S::R3S_pf_t> prohibited_packet_fields) {
 
   std::map< unsigned int, std::vector<R3S::R3S_pf_t> > poisoned_packet_fields_per_device;
   poisoned_packet_fields_per_device[device] = prohibited_packet_fields;
 
-  poison_packet_fields(poisoned_packet_fields_per_device);
+  // poison_packet_fields(poisoned_packet_fields_per_device);
+
+  for (const auto& translation : call_paths_translations) {
+    const auto& source_cpi = translation.get_call_path_info(CallPathInfo::Type::SOURCE);
+    const auto& pair_cpi = translation.get_call_path_info(CallPathInfo::Type::PAIR);
+
+    for (const auto& prohibited_packet_field : prohibited_packet_fields) {
+      std::vector<R3S::R3S_pf_t> source_pfs;
+      std::vector<R3S::R3S_pf_t> pair_pfs;
+
+      unsigned int source_device;
+      unsigned int pair_device;
+
+      source_pfs = source_cpi.get_dependencies().get_unique_packet_fields();
+      source_device = device_per_call_path[source_cpi.get_call_path()];
+
+      pair_pfs = pair_cpi.get_dependencies().get_unique_packet_fields();
+      pair_device = device_per_call_path[pair_cpi.get_call_path()];
+
+      assert(source_pfs.size() == pair_pfs.size());
+
+      for (unsigned int i = 0; i < source_pfs.size(); i++) {
+        if (device == source_device && prohibited_packet_field == source_pfs[i]) {
+          poisoned_packet_fields_per_device[pair_device].push_back(pair_pfs[i]);
+        }
+
+        if (device == pair_device && prohibited_packet_field == pair_pfs[i]) {
+          poisoned_packet_fields_per_device[source_device].push_back(source_pfs[i]);
+        }
+      }
+
+    }
+  }
 
   for (const auto& device_prohibited_packet_fields_pair : poisoned_packet_fields_per_device) {
     Logger::warn() << "\n";
@@ -458,7 +494,8 @@ void RSSConfigBuilder::remove_constraints_with_prohibited_packet_fields(unsigned
 
 }
 
-void RSSConfigBuilder::verify_dchain_correctness(const std::vector<LibvigAccess>& accesses, const LibvigAccess& dchain_verify) {
+void RSSConfigBuilder::verify_dchain_correctness(const std::vector<LibvigAccess>& accesses,
+                                                 const LibvigAccess& dchain_verify) {
   assert(dchain_verify.get_operation() == LibvigAccess::Operation::VERIFY);
 
   auto read_arg = dchain_verify.get_argument(LibvigAccessArgument::Type::READ);
@@ -503,7 +540,10 @@ void RSSConfigBuilder::verify_dchain_correctness(const std::vector<LibvigAccess>
   };
 
   for (auto call_path : call_paths) {
-    auto has_failed_verification_it = std::find_if(call_path.second.begin(), call_path.second.end(), is_failed_verification);
+    auto has_failed_verification_it = std::find_if(call_path.second.begin(),
+                                                   call_path.second.end(),
+                                                   is_failed_verification);
+
     auto has_failed_verification = has_failed_verification_it != call_path.second.end();
 
     if (has_failed_verification) {
@@ -511,10 +551,16 @@ void RSSConfigBuilder::verify_dchain_correctness(const std::vector<LibvigAccess>
       continue;
     }
 
-    auto has_successful_verification_it = std::find_if(call_path.second.begin(), call_path.second.end(), is_successful_verification);
+    auto has_successful_verification_it = std::find_if(call_path.second.begin(),
+                                                       call_path.second.end(),
+                                                       is_successful_verification);
+
     auto has_successful_verification = has_successful_verification_it != call_path.second.end();
 
-    auto has_constraints_it = std::find_if(call_path.second.begin(), call_path.second.end(), has_constraints_with_other_call_path);
+    auto has_constraints_it = std::find_if(call_path.second.begin(),
+                                           call_path.second.end(),
+                                           has_constraints_with_other_call_path);
+
     auto has_constraints = has_constraints_it != call_path.second.end();
 
     if (has_successful_verification && has_constraints) {
@@ -542,7 +588,8 @@ void RSSConfigBuilder::verify_dchain_correctness(const std::vector<LibvigAccess>
   }
 
   if (equivalent_failures) {
-    remove_constraints_with_prohibited_packet_fields(dchain_verify.get_src_device(), packet_fields);
+    remove_constraints_with_prohibited_packet_fields(dchain_verify.get_src_device(),
+                                                     packet_fields);
     return;
   }
 

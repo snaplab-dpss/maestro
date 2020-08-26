@@ -71,6 +71,11 @@ const std::string START = "BEGIN CALL PATHS CONSTRAINT";
 const std::string END = "END CALL PATHS CONSTRAINT";
 }
 
+namespace CallPathTranslation {
+const std::string START = "BEGIN CALL PATHS TRANSLATION";
+const std::string END = "END CALL PATHS TRANSLATION";
+}
+
 namespace CallPathInfo {
 const std::string START = "BEGIN CALL PATH INFO";
 const std::string END = "END CALL PATH INFO";

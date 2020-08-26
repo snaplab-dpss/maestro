@@ -355,9 +355,11 @@ std::ostream &operator<<(std::ostream &os,
   os << arg.call_path;
   os << "\n";
 
-  os << "  symbol    ";
-  os << arg.symbol;
-  os << "\n";
+  if (arg.symbol.first) {
+    os << "  symbol    ";
+    os << arg.symbol.second;
+    os << "\n";
+  }
 
   os << "  type      ";
   if (arg.type == CallPathInfo::Type::SOURCE)
@@ -377,6 +379,20 @@ std::ostream &operator<<(std::ostream &os,
   os << "\n";
 
   os << "expression  " << arg.expression_str;
+  os << "\n";
+
+  os << arg.first;
+  os << arg.second;
+
+  os << "=======================================================";
+  os << "\n";
+
+  return os;
+}
+
+std::ostream &operator<<(std::ostream &os,
+                         const CallPathsTranslation &arg) {
+  os << "================ CALL PATHS TRANSLATION ================";
   os << "\n";
 
   os << arg.first;
