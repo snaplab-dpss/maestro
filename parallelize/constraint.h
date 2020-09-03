@@ -12,6 +12,32 @@ namespace R3S {
 
 namespace ParallelSynthesizer {
 
+class NonPacketDependencyExpression {
+private:
+  R3S::Z3_context ctx;
+  R3S::Z3_ast expression;
+  std::string symbol;
+
+public:
+  NonPacketDependencyExpression(const R3S::Z3_context& _ctx,
+                                const R3S::Z3_ast& _expression,
+                                const std::string& _symbol)
+    : ctx(_ctx), expression(_expression), symbol(_symbol) {}
+
+  NonPacketDependencyExpression(const NonPacketDependencyExpression& npde)
+    : NonPacketDependencyExpression(npde.ctx, npde.expression, npde.symbol) {}
+
+  const R3S::Z3_context &get_context() const { return ctx; }
+  const R3S::Z3_ast &get_expression() const { return expression; }
+  const std::string& get_symbol() const { return symbol; }
+
+  friend bool operator==(const NonPacketDependencyExpression &lhs,
+                         const NonPacketDependencyExpression& rhs);
+
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const NonPacketDependencyExpression &arg);
+};
+
 class PacketDependenciesExpression {
 
 private:
@@ -135,13 +161,16 @@ private:
   R3S::Z3_ast expression;
   std::pair<int, int> packet_chunks_ids;
   std::vector<PacketDependenciesExpression> packet_dependencies_expressions;
+  std::vector<NonPacketDependencyExpression> non_packet_dependencies_expressions;
 
 private:
-  void store_unique_packet_dependencies_expression(const PacketDependenciesExpression& pde);
+  void store_unique_dependencies_expression(const PacketDependenciesExpression& pde);
+  void store_unique_dependencies_expression(const NonPacketDependencyExpression& npde);
 
   void check_incompatible_dependencies();
   void generate_expression_from_read_args();
-  void fill_packet_fields(R3S::Z3_ast &expression);
+  void fill_dependencies(R3S::Z3_ast &expression);
+  void fill_non_packet_dependencies_expressions(R3S::Z3_ast &expression);
   void zip_packet_fields_expression_and_values();
 
 public:
@@ -153,7 +182,7 @@ public:
 
     packet_chunks_ids = std::make_pair(-1, -1);
 
-    fill_packet_fields(expression);
+    fill_dependencies(expression);
     zip_packet_fields_expression_and_values();
   }
 
@@ -164,6 +193,7 @@ public:
         expression(constraint.expression),
         packet_chunks_ids(constraint.packet_chunks_ids) {
     packet_dependencies_expressions = constraint.packet_dependencies_expressions;
+    non_packet_dependencies_expressions = constraint.non_packet_dependencies_expressions;
   }
 
   const R3S::Z3_context &get_context() const { return ctx; }
@@ -179,9 +209,26 @@ public:
     return packet_dependencies_expressions;
   }
 
+  const std::vector<NonPacketDependencyExpression>& get_non_packet_dependencies_expressions() const {
+    return non_packet_dependencies_expressions;
+  }
+
   bool has_packet_field(R3S::R3S_pf_t packet_field) const {
     return has_packet_field(packet_field, first.get_src_device()) ||
            has_packet_field(packet_field, second.get_src_device());
+  }
+
+  bool has_non_packet_field_dependency(const std::string& symbol_name) const {
+    for (const auto& npde : non_packet_dependencies_expressions) {
+      auto npde_symbol = npde.get_symbol();
+      auto delim = npde_symbol.find(symbol_name);
+
+      if (delim != std::string::npos) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   bool has_packet_field(R3S::R3S_pf_t packet_field, unsigned int device) const {
@@ -353,32 +400,6 @@ public:
 
   friend std::ostream &operator<<(std::ostream &os,
                                   const CallPathsConstraint &arg);
-};
-
-class CallPathsTranslation {
-private:
-  CallPathInfo first;
-  CallPathInfo second;
-
-public:
-  CallPathsTranslation(const CallPathInfo& _first, const CallPathInfo& _second)
-    : first(_first), second(_second) {}
-
-  CallPathsTranslation(const CallPathsTranslation& other)
-    : first(other.first), second(other.second) {}
-
-  const CallPathInfo& get_call_path_info(CallPathInfo::Type type) const {
-    if (first.get_type() == type)
-      return first;
-
-    if (second.get_type() == type)
-      return second;
-
-    assert(false && "Call path info type not found");
-  }
-
-  friend std::ostream &operator<<(std::ostream &os,
-                                  const CallPathsTranslation &arg);
 };
 
 }

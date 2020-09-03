@@ -295,28 +295,6 @@ void Parser::parse_call_paths_constraint() {
   states.pop();
 }
 
-void Parser::parse_call_paths_translation() {
-  std::istringstream iss;
-
-  consume_token(Tokens::CallPathTranslation::START, iss);
-
-  assert(last_loaded_content_type() == LoadedContentType::CALL_PATH_INFO);
-
-  auto first_call_path_info = last_loaded_content().call_path_info.value;
-  consume_content();
-
-  assert(last_loaded_content_type() == LoadedContentType::CALL_PATH_INFO);
-
-  auto second_call_path_info = last_loaded_content().call_path_info.value;
-  consume_content();
-
-  call_paths_translations.emplace_back(first_call_path_info, second_call_path_info);
-
-  consume_token(Tokens::CallPathTranslation::END, iss);
-
-  states.pop();
-}
-
 void Parser::parse_call_path_info() {
   std::istringstream iss;
   std::string call_path;
@@ -381,7 +359,6 @@ void Parser::parse(const std::string &filepath) {
         line == Tokens::Chunk::START ||
         line == Tokens::Metadata::START ||
         line == Tokens::CallPathConstraint::START ||
-        line == Tokens::CallPathTranslation::START ||
         line == Tokens::CallPathInfo::START) {
       states.emplace();
     }
@@ -416,9 +393,6 @@ void Parser::parse(const std::string &filepath) {
 
     else if (line == Tokens::CallPathConstraint::END)
       parse_call_paths_constraint();
-
-    else if (line == Tokens::CallPathTranslation::END)
-      parse_call_paths_translation();
   }
 
   file.close();

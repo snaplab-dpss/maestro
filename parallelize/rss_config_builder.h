@@ -20,7 +20,6 @@ private:
 
   std::vector<Constraint> constraints;
   std::vector<CallPathsConstraint> call_paths_constraints;
-  std::vector<CallPathsTranslation> call_paths_translations;
 
   std::map<std::string, unsigned int> device_per_call_path;
   std::vector<unsigned int> unique_devices;
@@ -43,8 +42,8 @@ private:
   void fill_unique_devices(const std::vector<LibvigAccess> &accesses);
   std::vector<LibvigAccess> filter_reads_without_writes_on_objects(const std::vector<LibvigAccess> &accesses);
 
-  void poison_packet_fields(std::map< unsigned int, std::vector<R3S::R3S_pf_t> >& poisoned_packet_fields);
-  void remove_constraints_with_prohibited_packet_fields(unsigned int device, std::vector<R3S::R3S_pf_t> prohibited_packet_fields);
+  void remove_constraints_from_object(unsigned int obj);
+  void remove_equivalent_index_dchain_constraints(unsigned int device, const std::vector<R3S::R3S_pf_t> packet_fields);
   void analyse_dchain_interpretations(const std::vector<LibvigAccess>& accesses);
   bool is_write_modifying(const std::vector<LibvigAccess>&cp, LibvigAccess write);
   bool are_call_paths_equivalent(const std::vector<LibvigAccess>& cp1, const std::vector<LibvigAccess>& cp2);
@@ -64,10 +63,8 @@ private:
 public:
   RSSConfigBuilder(
       const std::vector<LibvigAccess> &accesses,
-      const std::vector<CallPathsConstraint>& _call_paths_constraints,
-      const std::vector<CallPathsTranslation>& _call_path_translations)
-   : call_paths_constraints(_call_paths_constraints),
-     call_paths_translations(_call_path_translations) {
+      const std::vector<CallPathsConstraint>& _call_paths_constraints)
+   : call_paths_constraints(_call_paths_constraints) {
 
     R3S::R3S_cfg_init(&cfg);
     R3S::R3S_cfg_set_skew_analysis(cfg, false);

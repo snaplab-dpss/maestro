@@ -27,8 +27,8 @@ int main(int argc, char *argv[]) {
   Parser parser(libvig_access_out);
 
   RSSConfigBuilder rss_cfg_builder(parser.get_accesses(),
-                                   parser.get_call_paths_constraints(),
-                                   parser.get_call_paths_translations());
+                                   parser.get_call_paths_constraints());
+
 
   rss_cfg_builder.build_rss_config();
   auto config = rss_cfg_builder.get_generated_rss_cfg();

@@ -109,8 +109,20 @@ void RSSConfigBuilder::analyse_constraints() {
   std::vector<Constraint> filtered_constraints;
 
   for (const auto& constraint : constraints) {
-    if (constraint.get_packet_dependencies_expressions().size())
+
+    if (constraint.get_non_packet_dependencies_expressions().size()) {
+      Logger::error() << "Constraint with unknown dependency." << "\n";
+      Logger::error() << constraint << "\n";
+
+      Logger::error() << constraint.get_first_access() << "\n";
+      Logger::error() << constraint.get_second_access() << "\n";
+
+      exit(0);
+    }
+
+    if (constraint.get_packet_dependencies_expressions().size()) {
       filtered_constraints.push_back(constraint);
+    }
   }
 
   constraints = filtered_constraints;
@@ -327,171 +339,35 @@ bool RSSConfigBuilder::are_call_paths_equivalent(const std::vector<LibvigAccess>
   return true;
 }
 
-void RSSConfigBuilder::poison_packet_fields(std::map< unsigned int, std::vector<R3S::R3S_pf_t> >& poisoned_packet_fields) {
-  bool changed = false;
+void RSSConfigBuilder::remove_constraints_from_object(unsigned int obj) {
+  auto constraint_from_object = [&](const Constraint& constraint) -> bool {
+    const LibvigAccess& a1 = constraint.get_first_access();
+    const LibvigAccess& a2 = constraint.get_second_access();
 
-  auto get_prohibited_packet_dependent_pdes = [&](const Constraint& constraint) -> std::vector<const PacketDependenciesExpression*> {
-    std::vector<const PacketDependenciesExpression*> pdes;
-
-    for (const auto& device_prohibited_packet_fields_pair : poisoned_packet_fields) {
-      const auto& poisoned_device = device_prohibited_packet_fields_pair.first;
-      const auto& poisoned_packet_fields = device_prohibited_packet_fields_pair.second;
-
-      if (constraint.get_first_access().get_src_device() != poisoned_device &&
-          constraint.get_second_access().get_src_device() != poisoned_device) {
-        return pdes;
-      }
-
-      for (const auto& prohibited_packet_field : poisoned_packet_fields) {
-        const auto pde = constraint.get_packet_dependency_expression(poisoned_device, prohibited_packet_field);
-
-        if (pde) {
-          pdes.push_back(pde);
-        }
-      }
-    }
-
-    return pdes;
+    assert(a1.get_object() == a2.get_object());
+    return a1.get_object() == obj;
   };
 
-  for (const auto& constraint : constraints) {
-    auto prohibited_packet_dependent_pdes = get_prohibited_packet_dependent_pdes(constraint);
-    if (constraint.get_first_access().get_src_device() == 0 && constraint.get_first_access().get_src_device() == constraint.get_second_access().get_src_device()) {
-      Logger::debug() << constraint << "\n";
-    }
-
-    for (const auto& prohibited_packet_dependent_pde : prohibited_packet_dependent_pdes) {
-      R3S::Z3_ast associated_expression = RSSConfigBuilder::ast_equal_association(
-            constraint.get_context(),
-            constraint.get_expression(), prohibited_packet_dependent_pde->get_expression());
-
-      const auto associated_packet_dependency_expression = constraint.get_packet_dependencies_expression(associated_expression);
-
-      if (associated_packet_dependency_expression == nullptr) {
-        continue;
-      }
-
-      Logger::warn() << *associated_packet_dependency_expression << "\n";
-
-      const auto& associated_packet_chunk_id = associated_packet_dependency_expression->get_packet_chunks_id();
-      const auto& constraint_packet_chunks_ids = constraint.get_packet_chunks_ids();
-
-      unsigned int associated_device;
-
-      if (associated_packet_chunk_id == constraint_packet_chunks_ids.first) {
-        associated_device = constraint.get_first_access().get_src_device();
-      }
-
-      else if (associated_packet_chunk_id == constraint_packet_chunks_ids.second) {
-        associated_device = constraint.get_second_access().get_src_device();
-      }
-
-      else {
-        assert(false && "this should not happen");
-      }
-
-      auto packet_fields = associated_packet_dependency_expression->get_associated_dependencies_packet_fields();
-      auto stored = poisoned_packet_fields[associated_device];
-
-      for (const auto& packet_field : packet_fields) {
-        auto found_it = std::find(stored.begin(), stored.end(), packet_field);
-        if (found_it == stored.end()) {
-          stored.push_back(packet_field);
-          changed = true;
-        }
-
-        poisoned_packet_fields[associated_device] = stored;
-      }
-    }
-  }
-
-
-  if (changed) {
-    poison_packet_fields(poisoned_packet_fields);
-  }
+  constraints.erase(std::remove_if(constraints.begin(), constraints.end(), constraint_from_object), constraints.end());
 }
 
-void RSSConfigBuilder::remove_constraints_with_prohibited_packet_fields(unsigned int device,
-                                                                        std::vector<R3S::R3S_pf_t> prohibited_packet_fields) {
-
-  std::map< unsigned int, std::vector<R3S::R3S_pf_t> > poisoned_packet_fields_per_device;
-  poisoned_packet_fields_per_device[device] = prohibited_packet_fields;
-
-  // poison_packet_fields(poisoned_packet_fields_per_device);
-
-  for (const auto& translation : call_paths_translations) {
-    const auto& source_cpi = translation.get_call_path_info(CallPathInfo::Type::SOURCE);
-    const auto& pair_cpi = translation.get_call_path_info(CallPathInfo::Type::PAIR);
-
-    for (const auto& prohibited_packet_field : prohibited_packet_fields) {
-      std::vector<R3S::R3S_pf_t> source_pfs;
-      std::vector<R3S::R3S_pf_t> pair_pfs;
-
-      unsigned int source_device;
-      unsigned int pair_device;
-
-      source_pfs = source_cpi.get_dependencies().get_unique_packet_fields();
-      source_device = device_per_call_path[source_cpi.get_call_path()];
-
-      pair_pfs = pair_cpi.get_dependencies().get_unique_packet_fields();
-      pair_device = device_per_call_path[pair_cpi.get_call_path()];
-
-      assert(source_pfs.size() == pair_pfs.size());
-
-      for (unsigned int i = 0; i < source_pfs.size(); i++) {
-        if (device == source_device && prohibited_packet_field == source_pfs[i]) {
-          poisoned_packet_fields_per_device[pair_device].push_back(pair_pfs[i]);
-        }
-
-        if (device == pair_device && prohibited_packet_field == pair_pfs[i]) {
-          poisoned_packet_fields_per_device[source_device].push_back(source_pfs[i]);
-        }
-      }
-
+void RSSConfigBuilder::remove_equivalent_index_dchain_constraints(unsigned int device, const std::vector<R3S::R3S_pf_t> comparing_packet_fields) {
+  auto dchain_equivalent_constraint = [&](const Constraint& constraint) -> bool {
+    if (!constraint.has_non_packet_field_dependency("new_index")) {
+      return false;
     }
-  }
 
-  for (const auto& device_prohibited_packet_fields_pair : poisoned_packet_fields_per_device) {
-    Logger::warn() << "\n";
-    Logger::warn() << "In device " << device_prohibited_packet_fields_pair.first << ":" << "\n";
-    for (const auto& pf : device_prohibited_packet_fields_pair.second) {
-      Logger::warn() << "  -> prohibited packet fields " << R3S::R3S_pf_to_string(pf) << "\n";
-    }
-  }
 
-  exit(0);
-
-  auto prohibited_packet_dependent = [&](const Constraint& constraint) -> bool {
-    for (const auto& device_prohibited_packet_fields_pair : poisoned_packet_fields_per_device) {
-      const auto& poisoned_device = device_prohibited_packet_fields_pair.first;
-      const auto& poisoned_packet_fields = device_prohibited_packet_fields_pair.second;
-
-      if (constraint.get_first_access().get_src_device() != poisoned_device &&
-          constraint.get_second_access().get_src_device() != poisoned_device) {
+    for (const auto& packet_field : comparing_packet_fields) {
+      if (!constraint.has_packet_field(packet_field, device)) {
         return false;
       }
-
-      for (const auto& prohibited_packet_field : poisoned_packet_fields) {
-        if (constraint.has_packet_field(prohibited_packet_field, poisoned_device)) {
-          return true;
-        }
-      }
     }
 
-    return false;
+    return true;
   };
 
-  Logger::debug () << "before " << constraints.size() << "\n";
-  constraints.erase(std::remove_if(constraints.begin(), constraints.end(), prohibited_packet_dependent), constraints.end());
-  Logger::debug () << "after " << constraints.size() << "\n";
-
-  for (const auto& constraint : constraints) {
-    Logger::debug() << constraint << "\n";
-  }
-
-  exit(0);
-
-
+  constraints.erase(std::remove_if(constraints.begin(), constraints.end(), dchain_equivalent_constraint), constraints.end());
 }
 
 void RSSConfigBuilder::verify_dchain_correctness(const std::vector<LibvigAccess>& accesses,
@@ -588,8 +464,9 @@ void RSSConfigBuilder::verify_dchain_correctness(const std::vector<LibvigAccess>
   }
 
   if (equivalent_failures) {
-    remove_constraints_with_prohibited_packet_fields(dchain_verify.get_src_device(),
-                                                     packet_fields);
+    remove_constraints_from_object(dchain_verify.get_object());
+    remove_equivalent_index_dchain_constraints(dchain_verify.get_src_device(), packet_fields);
+
     return;
   }
 

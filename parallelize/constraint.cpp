@@ -61,6 +61,24 @@ std::ostream &operator<<(std::ostream &os,
   return os;
 }
 
+bool operator==(const NonPacketDependencyExpression &lhs,
+                       const NonPacketDependencyExpression& rhs) {
+  return R3S::Z3_is_eq_ast(lhs.ctx, lhs.expression, rhs.expression);
+}
+
+std::ostream &operator<<(std::ostream &os,
+                                const NonPacketDependencyExpression &arg) {
+  os << "  expression    ";
+  os << R3S::Z3_ast_to_string(arg.ctx, arg.expression);
+  os << "\n";
+
+  os << "  symbol        ";
+  os << arg.symbol;
+  os << "\n";
+
+  return os;
+}
+
 std::ostream &operator<<(std::ostream &os,
                          const Constraint &arg) {
   os << "================ CONSTRAINT ================";
@@ -95,6 +113,15 @@ std::ostream &operator<<(std::ostream &os,
     }
   }
 
+  if (arg.non_packet_dependencies_expressions.size()) {
+    os << "non packet dependency expressions:";
+    os << "\n";
+    for (const auto& npde : arg.non_packet_dependencies_expressions) {
+      os << npde;
+      os << "\n";
+    }
+  }
+
   os << "===========================================";
   os << "\n";
 
@@ -120,11 +147,18 @@ void Constraint::generate_expression_from_read_args() {
   expression = R3S::Z3_simplify(ctx, R3S::Z3_mk_eq(ctx, first_expr, second_expr));
 }
 
-void Constraint::store_unique_packet_dependencies_expression(const PacketDependenciesExpression& pde) {
+void Constraint::store_unique_dependencies_expression(const PacketDependenciesExpression& pde) {
   auto found_it = std::find(packet_dependencies_expressions.begin(), packet_dependencies_expressions.end(), pde);
 
   if (found_it == packet_dependencies_expressions.end())
     packet_dependencies_expressions.push_back(pde);
+}
+
+void Constraint::store_unique_dependencies_expression(const NonPacketDependencyExpression& npde) {
+  auto found_it = std::find(non_packet_dependencies_expressions.begin(), non_packet_dependencies_expressions.end(), npde);
+
+  if (found_it == non_packet_dependencies_expressions.end())
+    non_packet_dependencies_expressions.push_back(npde);
 }
 
 bool is_select_from_chunk(R3S::Z3_context &ctx, R3S::Z3_app &app,
@@ -151,13 +185,42 @@ bool is_select_from_chunk(R3S::Z3_context &ctx, R3S::Z3_app &app,
   return found != std::string::npos;
 }
 
-void Constraint::fill_packet_fields(R3S::Z3_ast &expr) {
+bool is_not_chunk_symbol(R3S::Z3_context &ctx, R3S::Z3_ast &expr, std::string &symbol_name) {
+  R3S::Z3_ast_kind kind = R3S::Z3_get_ast_kind(ctx, expr);
+
+  if (kind != R3S::Z3_APP_AST) {
+    return false;
+  }
+
+  R3S::Z3_app app = R3S::Z3_to_app(ctx, expr);
+
+  if (R3S::Z3_get_app_num_args(ctx, app) > 0) {
+    return false;
+  }
+
+  R3S::Z3_func_decl decl = R3S::Z3_get_app_decl(ctx, app);
+  R3S::Z3_symbol symbol = R3S::Z3_get_decl_name(ctx, decl);
+
+  symbol_name = R3S::Z3_get_symbol_string(ctx, symbol);
+
+  if (symbol_name == "true" || symbol_name == "false") {
+    return false;
+  }
+
+  auto found =
+      symbol_name.find(PacketDependenciesExpression::PACKET_CHUNKS_NAME_PATTERN);
+
+  return found == std::string::npos;
+}
+
+void Constraint::fill_dependencies(R3S::Z3_ast &expr) {
   if (R3S::Z3_get_ast_kind(ctx, expr) != R3S::Z3_APP_AST)
     return;
 
   R3S::Z3_app app = R3S::Z3_to_app(ctx, expr);
 
   std::string symbol_name;
+
   if (is_select_from_chunk(ctx, app, symbol_name)) {
     R3S::Z3_ast index_ast = R3S::Z3_get_app_arg(ctx, app, 1);
     // TODO: assert(Z3_get_ast_kind(ctx, index_ast) == Z3_NUMERAL_AST);
@@ -172,24 +235,26 @@ void Constraint::fill_packet_fields(R3S::Z3_ast &expr) {
     unsigned int packet_chunks_id = std::stoi(packet_chunks_id_str);
 
     PacketDependenciesExpression pde(ctx, expr, index, packet_chunks_id);
-    store_unique_packet_dependencies_expression(pde);
+    store_unique_dependencies_expression(pde);
 
-    if (packet_chunks_ids.first == -1) {
+    if (packet_chunks_ids.first == -1 && packet_chunks_id == first.get_id()) {
       packet_chunks_ids = std::make_pair(packet_chunks_id, packet_chunks_ids.second);
     }
 
-    else if (packet_chunks_ids.second == -1 &&
-               packet_chunks_id != packet_chunks_ids.first) {
+    else if (packet_chunks_ids.second == -1 && packet_chunks_id == second.get_id()) {
       packet_chunks_ids = std::make_pair(packet_chunks_ids.first, packet_chunks_id);
     }
+  }
 
-    return;
+  else if (is_not_chunk_symbol(ctx, expr, symbol_name)) {
+    NonPacketDependencyExpression npde(ctx, expr, symbol_name);
+    store_unique_dependencies_expression(npde);
   }
 
   unsigned int num_fields = R3S::Z3_get_app_num_args(ctx, app);
   for (unsigned int i = 0; i < num_fields; i++) {
     R3S::Z3_ast app_arg = R3S::Z3_get_app_arg(ctx, app, i);
-    fill_packet_fields(app_arg);
+    fill_dependencies(app_arg);
   }
 }
 
@@ -208,19 +273,6 @@ void Constraint::zip_packet_fields_expression_and_values() {
 
   const auto &first_deps = first_read_arg_copy.get_dependencies().get();
   const auto &second_deps = second_read_arg_copy.get_dependencies().get();
-
-  int smaller_packet_chunks_id = -1;
-
-  for (const auto &pde : packet_dependencies_expressions) {
-    const auto &id = pde.get_packet_chunks_id();
-    if (id == smaller_packet_chunks_id)
-      continue;
-
-    if (smaller_packet_chunks_id == -1 || smaller_packet_chunks_id > id)
-      smaller_packet_chunks_id = id;
-
-    break;
-  }
 
   std::sort(packet_dependencies_expressions.begin(), packet_dependencies_expressions.end());
 
@@ -275,7 +327,7 @@ void Constraint::zip_packet_fields_expression_and_values() {
     for (;;) {
       const PacketDependency *curr_packet_dependency = nullptr;
 
-      if (pde.get_packet_chunks_id() == smaller_packet_chunks_id) {
+      if (pde.get_packet_chunks_id() == first.get_id()) {
         if(first_counter >= first_deps.size()) break;
 
         assert(first_deps[first_counter]->is_packet_related());
@@ -290,7 +342,7 @@ void Constraint::zip_packet_fields_expression_and_values() {
         first_counter++;
       }
 
-      else {
+      else if (pde.get_packet_chunks_id() == second.get_id()) {
         if(second_counter >= second_deps.size()) break;
 
         assert(second_deps[second_counter]->is_packet_related());
@@ -379,20 +431,6 @@ std::ostream &operator<<(std::ostream &os,
   os << "\n";
 
   os << "expression  " << arg.expression_str;
-  os << "\n";
-
-  os << arg.first;
-  os << arg.second;
-
-  os << "=======================================================";
-  os << "\n";
-
-  return os;
-}
-
-std::ostream &operator<<(std::ostream &os,
-                         const CallPathsTranslation &arg) {
-  os << "================ CALL PATHS TRANSLATION ================";
   os << "\n";
 
   os << arg.first;
