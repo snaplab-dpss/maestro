@@ -76,7 +76,7 @@ const std::string START = "BEGIN CALL PATH INFO";
 const std::string END = "END CALL PATH INFO";
 const std::string CALL_PATH = "call_path";
 const std::string TYPE = "type";
-const std::string SYMBOL = "symbol";
+const std::string ID = "id";
 }
 
 namespace CallPathInfoType {

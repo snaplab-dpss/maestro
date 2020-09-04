@@ -17,8 +17,9 @@ class RSSConfigBuilder {
 
 private:
   R3S::R3S_cfg_t cfg;
-
   std::vector<Constraint> constraints;
+
+  std::vector<LibvigAccessConstraint> libvig_access_constraints;
   std::vector<CallPathsConstraint> call_paths_constraints;
 
   std::map<std::string, unsigned int> device_per_call_path;
@@ -36,6 +37,7 @@ private:
 
   void merge_unique_packet_field_dependencies(
       const std::vector<R3S::R3S_pf_t> &packet_fields);
+
   bool is_access_pair_already_stored(
       const std::pair<LibvigAccess, LibvigAccess> &pair);
 
@@ -49,7 +51,8 @@ private:
   bool are_call_paths_equivalent(const std::vector<LibvigAccess>& cp1, const std::vector<LibvigAccess>& cp2);
   void verify_dchain_correctness(const std::vector<LibvigAccess>& accesses, const LibvigAccess& dchain_verify);
 
-  void fill_constraints(const std::vector<LibvigAccess> &accesses);
+  void fill_libvig_access_constraints(const std::vector<LibvigAccess> &accesses);
+  void generate_solver_constraints();
   void analyse_constraints();
 
   static std::vector<Constraint> get_constraints_between_devices(std::vector<Constraint> constraints,
@@ -73,9 +76,8 @@ public:
 
     auto trimmed_accesses = filter_reads_without_writes_on_objects(accesses);
 
-    fill_constraints(trimmed_accesses);
+    fill_libvig_access_constraints(trimmed_accesses);
     analyse_dchain_interpretations(trimmed_accesses);
-    analyse_constraints();
 
     Logger::log() << "\n";
     Logger::log() << "Packet field dependencies:";
@@ -93,17 +95,14 @@ public:
       Logger::log() << "\n";
     }
 
-    R3S::R3S_cfg_set_number_of_keys(cfg, unique_devices.size());
     load_rss_config_options();
-
-    R3S::R3S_cfg_set_user_data(cfg, (void *)&constraints);
 
     Logger::log() << "\nR3S configuration:\n" << R3S::R3S_cfg_to_string(cfg)
                   << "\n";
   }
 
   const R3S::R3S_cfg_t &get_cfg() const { return cfg; }
-  const std::vector<Constraint> &get_constraints() const { return constraints; }
+  const std::vector<LibvigAccessConstraint> &get_libvig_access_constraints() const { return libvig_access_constraints; }
   const RSSConfig &get_generated_rss_cfg() const { return rss_config; }
 
   static R3S::Z3_ast ast_replace(R3S::Z3_context ctx, R3S::Z3_ast root,

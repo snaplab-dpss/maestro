@@ -36,7 +36,9 @@ bool RSSConfigBuilder::is_access_pair_already_stored(
 }
 
 void RSSConfigBuilder::load_rss_config_options() {
-  if (constraints.size() == 0) {
+  R3S::R3S_cfg_set_number_of_keys(cfg, unique_devices.size());
+
+  if (libvig_access_constraints.size() == 0) {
     Logger::log() << "No constraints. Configuring RSS with every possible "
                      "option available.";
     Logger::log() << "\n";
@@ -70,9 +72,11 @@ void RSSConfigBuilder::load_rss_config_options() {
   }
 
   delete opts;
+
+  generate_solver_constraints();
 }
 
-void RSSConfigBuilder::fill_constraints(const std::vector<LibvigAccess> &accesses) {
+void RSSConfigBuilder::fill_libvig_access_constraints(const std::vector<LibvigAccess> &accesses) {
   R3S::Z3_context ctx = R3S::R3S_cfg_get_z3_context(cfg);
 
   auto size = accesses.size();
@@ -91,7 +95,7 @@ void RSSConfigBuilder::fill_constraints(const std::vector<LibvigAccess> &accesse
       auto& first_read_arg = first.get_argument(LibvigAccessArgument::Type::READ);
       auto& second_read_arg = second.get_argument(LibvigAccessArgument::Type::READ);
 
-      constraints.emplace_back(first, second, ctx);
+      libvig_access_constraints.emplace_back(first, second, ctx);
 
       auto first_dependencies = first_read_arg.get_dependencies();
       auto second_dependencies = second_read_arg.get_dependencies();
@@ -105,6 +109,32 @@ void RSSConfigBuilder::fill_constraints(const std::vector<LibvigAccess> &accesse
   }
 }
 
+void RSSConfigBuilder::generate_solver_constraints() {
+  for (const auto& libvig_access_constraint : libvig_access_constraints) {
+    constraints.emplace_back(libvig_access_constraint);
+  }
+
+  analyse_constraints();
+
+  for (const auto& call_path_constraint : call_paths_constraints) {
+    const auto& source = call_path_constraint.get_call_path_info(CallPathInfo::Type::SOURCE);
+    const auto& pair = call_path_constraint.get_call_path_info(CallPathInfo::Type::PAIR);
+
+    const auto& source_call_path = source.get_call_path();
+    const auto& pair_call_path = pair.get_call_path();
+
+    assert(device_per_call_path.find(source_call_path) != device_per_call_path.end());
+    assert(device_per_call_path.find(pair_call_path) != device_per_call_path.end());
+
+    const auto& source_device = device_per_call_path[source_call_path];
+    const auto& pair_device = device_per_call_path[pair_call_path];
+
+    constraints.emplace_back(R3S::R3S_cfg_get_z3_context(cfg),
+                             call_path_constraint,
+                             source_device, pair_device);
+  }
+}
+
 void RSSConfigBuilder::analyse_constraints() {
   std::vector<Constraint> filtered_constraints;
 
@@ -113,10 +143,6 @@ void RSSConfigBuilder::analyse_constraints() {
     if (constraint.get_non_packet_dependencies_expressions().size()) {
       Logger::error() << "Constraint with unknown dependency." << "\n";
       Logger::error() << constraint << "\n";
-
-      Logger::error() << constraint.get_first_access() << "\n";
-      Logger::error() << constraint.get_second_access() << "\n";
-
       exit(0);
     }
 
@@ -148,6 +174,8 @@ int RSSConfigBuilder::get_device_index(unsigned int device) const {
 void RSSConfigBuilder::build_rss_config() {
   R3S::R3S_key_t *keys = new R3S::R3S_key_t[cfg->n_keys]();
   R3S::R3S_status_t status;
+
+  R3S::R3S_cfg_set_user_data(cfg, (void *)&constraints);
 
   if (constraints.size() == 0) {
     Logger::log() << "No constraints. Generating random keys.";
@@ -340,7 +368,7 @@ bool RSSConfigBuilder::are_call_paths_equivalent(const std::vector<LibvigAccess>
 }
 
 void RSSConfigBuilder::remove_constraints_from_object(unsigned int obj) {
-  auto constraint_from_object = [&](const Constraint& constraint) -> bool {
+  auto constraint_from_object = [&](const LibvigAccessConstraint& constraint) -> bool {
     const LibvigAccess& a1 = constraint.get_first_access();
     const LibvigAccess& a2 = constraint.get_second_access();
 
@@ -348,18 +376,22 @@ void RSSConfigBuilder::remove_constraints_from_object(unsigned int obj) {
     return a1.get_object() == obj;
   };
 
-  constraints.erase(std::remove_if(constraints.begin(), constraints.end(), constraint_from_object), constraints.end());
+  libvig_access_constraints.erase(std::remove_if(libvig_access_constraints.begin(),
+                                                 libvig_access_constraints.end(),
+                                                 constraint_from_object),
+                                  libvig_access_constraints.end());
 }
 
 void RSSConfigBuilder::remove_equivalent_index_dchain_constraints(unsigned int device, const std::vector<R3S::R3S_pf_t> comparing_packet_fields) {
-  auto dchain_equivalent_constraint = [&](const Constraint& constraint) -> bool {
-    if (!constraint.has_non_packet_field_dependency("new_index")) {
+  auto dchain_equivalent_constraint = [&](const LibvigAccessConstraint& constraint) -> bool {
+    Constraint generated_constraint(constraint);
+    if (!generated_constraint.has_non_packet_field_dependency("new_index")) {
       return false;
     }
 
 
     for (const auto& packet_field : comparing_packet_fields) {
-      if (!constraint.has_packet_field(packet_field, device)) {
+      if (!generated_constraint.has_packet_field(packet_field, device)) {
         return false;
       }
     }
@@ -367,7 +399,10 @@ void RSSConfigBuilder::remove_equivalent_index_dchain_constraints(unsigned int d
     return true;
   };
 
-  constraints.erase(std::remove_if(constraints.begin(), constraints.end(), dchain_equivalent_constraint), constraints.end());
+  libvig_access_constraints.erase(std::remove_if(libvig_access_constraints.begin(),
+                                                 libvig_access_constraints.end(),
+                                                 dchain_equivalent_constraint),
+                                  libvig_access_constraints.end());
 }
 
 void RSSConfigBuilder::verify_dchain_correctness(const std::vector<LibvigAccess>& accesses,
@@ -571,8 +606,9 @@ R3S::Z3_ast RSSConfigBuilder::ast_replace(R3S::Z3_context ctx, R3S::Z3_ast root,
 
 std::vector<Constraint> RSSConfigBuilder::get_constraints_between_devices(std::vector<Constraint> constraints, unsigned int p1_device, unsigned int p2_device) {
   auto filter = [&](const Constraint& constraint) -> bool {
-    auto first_device  = constraint.get_first_access().get_src_device();
-    auto second_device = constraint.get_second_access().get_src_device();
+    const auto& devices = constraint.get_devices();
+    auto first_device  = devices.first;
+    auto second_device = devices.second;
 
     return p1_device != first_device || p2_device != second_device;
   };

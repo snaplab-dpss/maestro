@@ -84,16 +84,16 @@ std::ostream &operator<<(std::ostream &os,
   os << "================ CONSTRAINT ================";
   os << "\n";
 
-  os << "first access id  ";
-  os << arg.first.get_id();
+  os << "first device     ";
+  os << arg.devices.first;
   os << "\n";
 
   os << "first chunk id   ";
   os << arg.packet_chunks_ids.first;
   os << "\n";
 
-  os << "second access id ";
-  os << arg.second.get_id();
+  os << "second device    ";
+  os << arg.devices.second;
   os << "\n";
 
   os << "second chunk id  ";
@@ -128,10 +128,33 @@ std::ostream &operator<<(std::ostream &os,
   return os;
 }
 
+std::ostream &operator<<(std::ostream &os,
+                         const LibvigAccessConstraint &arg) {
+  os << "================ CONSTRAINT ================";
+  os << "\n";
+
+  os << "first access id  ";
+  os << arg.first.get_id();
+  os << "\n";
+
+  os << "second access id ";
+  os << arg.second.get_id();
+  os << "\n";
+
+  os << "expression       ";
+  os << R3S::Z3_ast_to_string(arg.ctx, arg.expression);
+  os << "\n";
+
+  os << "===========================================";
+  os << "\n";
+
+  return os;
+}
+
 const std::string PacketDependenciesExpression::PACKET_CHUNKS_NAME_PATTERN =
     "packet_chunks__ref_";
 
-void Constraint::generate_expression_from_read_args() {
+void LibvigAccessConstraint::generate_expression_from_read_args() {
   assert(first.has_argument(LibvigAccessArgument::Type::READ));
   assert(second.has_argument(LibvigAccessArgument::Type::READ));
 
@@ -236,14 +259,6 @@ void Constraint::fill_dependencies(R3S::Z3_ast &expr) {
 
     PacketDependenciesExpression pde(ctx, expr, index, packet_chunks_id);
     store_unique_dependencies_expression(pde);
-
-    if (packet_chunks_ids.first == -1 && packet_chunks_id == first.get_id()) {
-      packet_chunks_ids = std::make_pair(packet_chunks_id, packet_chunks_ids.second);
-    }
-
-    else if (packet_chunks_ids.second == -1 && packet_chunks_id == second.get_id()) {
-      packet_chunks_ids = std::make_pair(packet_chunks_ids.first, packet_chunks_id);
-    }
   }
 
   else if (is_not_chunk_symbol(ctx, expr, symbol_name)) {
@@ -258,21 +273,9 @@ void Constraint::fill_dependencies(R3S::Z3_ast &expr) {
   }
 }
 
-void Constraint::zip_packet_fields_expression_and_values() {
-  assert(first.has_argument(LibvigAccessArgument::Type::READ));
-  assert(second.has_argument(LibvigAccessArgument::Type::READ));
-
-  auto first_read_arg = first.get_argument(LibvigAccessArgument::Type::READ);
-  auto second_read_arg = second.get_argument(LibvigAccessArgument::Type::READ);
-
-  auto first_read_arg_copy = first_read_arg;
-  auto second_read_arg_copy = second_read_arg;
-
-  first_read_arg_copy.sort_dependencies();
-  second_read_arg_copy.sort_dependencies();
-
-  const auto &first_deps = first_read_arg_copy.get_dependencies().get();
-  const auto &second_deps = second_read_arg_copy.get_dependencies().get();
+void Constraint::zip_packet_fields_expression_and_values(const DependencyManager& first, const DependencyManager& second) {
+  const auto &first_deps = first.get();
+  const auto &second_deps = second.get();
 
   std::sort(packet_dependencies_expressions.begin(), packet_dependencies_expressions.end());
 
@@ -327,7 +330,7 @@ void Constraint::zip_packet_fields_expression_and_values() {
     for (;;) {
       const PacketDependency *curr_packet_dependency = nullptr;
 
-      if (pde.get_packet_chunks_id() == first.get_id()) {
+      if (pde.get_packet_chunks_id() == packet_chunks_ids.first) {
         if(first_counter >= first_deps.size()) break;
 
         assert(first_deps[first_counter]->is_packet_related());
@@ -342,7 +345,7 @@ void Constraint::zip_packet_fields_expression_and_values() {
         first_counter++;
       }
 
-      else if (pde.get_packet_chunks_id() == second.get_id()) {
+      else if (pde.get_packet_chunks_id() == packet_chunks_ids.second) {
         if(second_counter >= second_deps.size()) break;
 
         assert(second_deps[second_counter]->is_packet_related());
@@ -366,7 +369,7 @@ void Constraint::zip_packet_fields_expression_and_values() {
   }
 }
 
-void Constraint::check_incompatible_dependencies() {
+void LibvigAccessConstraint::check_incompatible_dependencies() {
   assert(first.has_argument(LibvigAccessArgument::Type::READ));
   assert(second.has_argument(LibvigAccessArgument::Type::READ));
 
@@ -407,9 +410,9 @@ std::ostream &operator<<(std::ostream &os,
   os << arg.call_path;
   os << "\n";
 
-  if (arg.symbol.first) {
-    os << "  symbol    ";
-    os << arg.symbol.second;
+  if (arg.id.first) {
+    os << "  id      ";
+    os << arg.id.second;
     os << "\n";
   }
 

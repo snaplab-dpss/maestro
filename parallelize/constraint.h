@@ -151,159 +151,40 @@ public:
   static const std::string PACKET_CHUNKS_NAME_PATTERN;
 };
 
-class Constraint {
+class LibvigAccessConstraint {
 
 private:
   R3S::Z3_context ctx;
+  R3S::Z3_ast expression;
+
   LibvigAccess first;
   LibvigAccess second;
 
-  R3S::Z3_ast expression;
-  std::pair<int, int> packet_chunks_ids;
-  std::vector<PacketDependenciesExpression> packet_dependencies_expressions;
-  std::vector<NonPacketDependencyExpression> non_packet_dependencies_expressions;
-
 private:
-  void store_unique_dependencies_expression(const PacketDependenciesExpression& pde);
-  void store_unique_dependencies_expression(const NonPacketDependencyExpression& npde);
-
   void check_incompatible_dependencies();
   void generate_expression_from_read_args();
-  void fill_dependencies(R3S::Z3_ast &expression);
-  void fill_non_packet_dependencies_expressions(R3S::Z3_ast &expression);
-  void zip_packet_fields_expression_and_values();
 
 public:
-  Constraint(const LibvigAccess &_first, const LibvigAccess &_second,
+  LibvigAccessConstraint(const LibvigAccess &_first, const LibvigAccess &_second,
              const R3S::Z3_context &_ctx)
       : ctx(_ctx), first(_first), second(_second) {
     check_incompatible_dependencies();
     generate_expression_from_read_args();
-
-    packet_chunks_ids = std::make_pair(-1, -1);
-
-    fill_dependencies(expression);
-    zip_packet_fields_expression_and_values();
   }
 
-  Constraint(const Constraint &constraint)
+  LibvigAccessConstraint(const LibvigAccessConstraint &constraint)
       : ctx(constraint.ctx),
-        first(constraint.first),
-        second(constraint.second),
         expression(constraint.expression),
-        packet_chunks_ids(constraint.packet_chunks_ids) {
-    packet_dependencies_expressions = constraint.packet_dependencies_expressions;
-    non_packet_dependencies_expressions = constraint.non_packet_dependencies_expressions;
-  }
+        first(constraint.first),
+        second(constraint.second) {}
 
   const R3S::Z3_context &get_context() const { return ctx; }
+  const R3S::Z3_ast get_expression() const { return expression; }
   const LibvigAccess &get_first_access() const { return first; }
   const LibvigAccess &get_second_access() const { return second; }
-  const R3S::Z3_ast get_expression() const { return expression; }
-
-  const std::pair<int, int> &get_packet_chunks_ids() const {
-    return packet_chunks_ids;
-  }
-
-  const std::vector<PacketDependenciesExpression>& get_packet_dependencies_expressions() const {
-    return packet_dependencies_expressions;
-  }
-
-  const std::vector<NonPacketDependencyExpression>& get_non_packet_dependencies_expressions() const {
-    return non_packet_dependencies_expressions;
-  }
-
-  bool has_packet_field(R3S::R3S_pf_t packet_field) const {
-    return has_packet_field(packet_field, first.get_src_device()) ||
-           has_packet_field(packet_field, second.get_src_device());
-  }
-
-  bool has_non_packet_field_dependency(const std::string& symbol_name) const {
-    for (const auto& npde : non_packet_dependencies_expressions) {
-      auto npde_symbol = npde.get_symbol();
-      auto delim = npde_symbol.find(symbol_name);
-
-      if (delim != std::string::npos) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  bool has_packet_field(R3S::R3S_pf_t packet_field, unsigned int device) const {
-    return get_packet_dependency_expression(device, packet_field) != nullptr;
-  }
-
-  const PacketDependenciesExpression* get_packet_dependencies_expression(R3S::Z3_ast expression) const {
-    if (expression == nullptr) {
-      return nullptr;
-    }
-
-    for (const auto& packet_dependencies_expression : packet_dependencies_expressions) {
-      auto context = packet_dependencies_expression.get_context();
-      auto current_expr = packet_dependencies_expression.get_expression();
-
-      if (R3S::Z3_is_eq_ast(context, expression, current_expr)) {
-        return &packet_dependencies_expression;
-      }
-    }
-
-    return nullptr;
-  }
-
-  const PacketDependenciesExpression* get_packet_dependency_expression(unsigned int device, R3S::R3S_pf_t packet_field) const {
-    int target_packet_chunk_id;
-
-    if (device == first.get_src_device()) {
-      target_packet_chunk_id = packet_chunks_ids.first;
-    }
-
-    else if (device == second.get_src_device()) {
-      target_packet_chunk_id = packet_chunks_ids.second;
-    }
-
-    else {
-      return nullptr;
-    }
-
-    for (const auto& packet_dependencies_expression : packet_dependencies_expressions) {
-      if (target_packet_chunk_id < 0) {
-        continue;
-      }
-
-      if (packet_dependencies_expression.get_packet_chunks_id() != target_packet_chunk_id) {
-        continue;
-      }
-
-      auto associated_dependencies = packet_dependencies_expression.get_associated_dependencies();
-
-      for (const auto& dependency : associated_dependencies) {
-        if (!dependency->is_processed())
-          continue;
-
-        if (!dependency->is_rss_compatible())
-          continue;
-
-        if (dependency->should_ignore())
-          continue;
-
-        const auto processed = dynamic_cast<PacketDependencyProcessed *>(dependency.get());
-        auto pf = processed->get_packet_field();
-
-        if (pf == packet_field) {
-          return &packet_dependencies_expression;
-        }
-      }
-    }
-
-    return nullptr;
-  }
 
   friend std::ostream &operator<<(std::ostream &os,
-                                  const Constraint &arg);
-
-  static R3S::Z3_ast parse_expr(R3S::Z3_context ctx, const std::string& expr_str);
+                                  const LibvigAccessConstraint &arg);
 };
 
 class CallPathInfo {
@@ -329,32 +210,32 @@ public:
 private:
   std::string call_path;
   Type type;
-  std::pair<bool, std::string> symbol;
+  std::pair<bool, unsigned int> id;
 
   DependencyManager dependencies;
 
 public:
-  CallPathInfo(const std::string& _call_path, const Type& _type, const std::pair<bool, std::string>& _symbol)
-    : call_path(_call_path), type(_type), symbol(_symbol) {}
+  CallPathInfo(const std::string& _call_path, const Type& _type, const std::pair<bool, unsigned int>& _id)
+    : call_path(_call_path), type(_type), id(_id) {}
 
-  CallPathInfo(const std::string& _call_path, const Type& _type, const std::string& _symbol)
+  CallPathInfo(const std::string& _call_path, const Type& _type, unsigned int _id)
     : call_path(_call_path), type(_type) {
-    symbol = std::make_pair(true, _symbol);
+    id = std::make_pair(true, _id);
   }
 
   CallPathInfo(const CallPathInfo& other)
-    : call_path(other.call_path), type(other.type), symbol(other.symbol) {
+    : call_path(other.call_path), type(other.type), id(other.id) {
     dependencies = other.dependencies;
   }
 
   const std::string& get_call_path() const { return call_path; }
   const Type& get_type() const { return type; }
-  const std::string& get_symbol() const {
-    assert(symbol.first);
-    return symbol.second;
+  unsigned int get_id() const {
+    assert(id.first);
+    return id.second;
   }
 
-  bool has_symbol() const { return symbol.first; }
+  bool has_id() const { return id.first; }
 
   const DependencyManager& get_dependencies() const {
     return dependencies;
@@ -400,6 +281,202 @@ public:
 
   friend std::ostream &operator<<(std::ostream &os,
                                   const CallPathsConstraint &arg);
+};
+
+class Constraint {
+private:
+  R3S::Z3_context ctx;
+  R3S::Z3_ast expression;
+
+  std::pair<unsigned int, unsigned int> devices;
+  std::pair<unsigned int, unsigned int> packet_chunks_ids;
+
+  std::vector<PacketDependenciesExpression> packet_dependencies_expressions;
+  std::vector<NonPacketDependencyExpression> non_packet_dependencies_expressions;
+
+private:
+  void store_unique_dependencies_expression(const PacketDependenciesExpression& pde);
+  void store_unique_dependencies_expression(const NonPacketDependencyExpression& npde);
+
+  void fill_dependencies(R3S::Z3_ast &expression);
+  void fill_non_packet_dependencies_expressions(R3S::Z3_ast &expression);
+  void zip_packet_fields_expression_and_values(const DependencyManager& first, const DependencyManager& second);
+
+public:
+  Constraint(const LibvigAccessConstraint& constraint) {
+    const auto& first = constraint.get_first_access();
+    const auto& second = constraint.get_second_access();
+
+    const auto& first_device = first.get_src_device();
+    const auto& second_device = second.get_src_device();
+
+    assert(first.has_argument(LibvigAccessArgument::Type::READ));
+    assert(second.has_argument(LibvigAccessArgument::Type::READ));
+
+    auto first_read_arg = first.get_argument(LibvigAccessArgument::Type::READ);
+    auto second_read_arg = second.get_argument(LibvigAccessArgument::Type::READ);
+
+    auto first_read_arg_copy = first_read_arg;
+    auto second_read_arg_copy = second_read_arg;
+
+    first_read_arg_copy.sort_dependencies();
+    second_read_arg_copy.sort_dependencies();
+
+    const auto &first_deps = first_read_arg_copy.get_dependencies();
+    const auto &second_deps = second_read_arg_copy.get_dependencies();
+
+    ctx = constraint.get_context();
+    expression = constraint.get_expression();
+    devices = std::make_pair(first_device, second_device);
+
+    packet_chunks_ids = std::make_pair(constraint.get_first_access().get_id(),
+                                       constraint.get_second_access().get_id());
+
+    fill_dependencies(expression);
+    zip_packet_fields_expression_and_values(first_deps, second_deps);
+  }
+
+  Constraint(R3S::Z3_context _ctx, const CallPathsConstraint& constraint,
+             unsigned int source_device, unsigned int pair_device) {
+    auto source = constraint.get_call_path_info(CallPathInfo::Type::SOURCE);
+    auto pair = constraint.get_call_path_info(CallPathInfo::Type::PAIR);
+
+    source.sort_dependencies();
+    pair.sort_dependencies();
+
+    const auto& source_deps = source.get_dependencies();
+    const auto& pair_deps = pair.get_dependencies();
+
+    const auto& source_id = source.get_id();
+    const auto& pair_id = pair.get_id();
+
+    ctx = _ctx;
+    expression = Constraint::parse_expr(_ctx, constraint.get_expression_str());
+    devices = std::make_pair(source_device, pair_device);
+
+    packet_chunks_ids = std::make_pair(source_id, pair_id);
+
+    fill_dependencies(expression);
+    zip_packet_fields_expression_and_values(source_deps, pair_deps);
+  }
+
+  Constraint(const Constraint& constraint)
+    : ctx(constraint.ctx), expression(constraint.expression),
+      devices(constraint.devices), packet_chunks_ids(constraint.packet_chunks_ids) {
+    packet_dependencies_expressions = constraint.packet_dependencies_expressions;
+    non_packet_dependencies_expressions = constraint.non_packet_dependencies_expressions;
+  }
+
+  const R3S::Z3_context &get_context() const { return ctx; }
+  const R3S::Z3_ast get_expression() const { return expression; }
+
+  const std::pair<unsigned int, unsigned int> &get_devices() const {
+    return devices;
+  }
+
+  const std::pair<unsigned int, unsigned int> &get_packet_chunks_ids() const {
+    return packet_chunks_ids;
+  }
+
+  const std::vector<PacketDependenciesExpression>& get_packet_dependencies_expressions() const {
+    return packet_dependencies_expressions;
+  }
+
+  const std::vector<NonPacketDependencyExpression>& get_non_packet_dependencies_expressions() const {
+    return non_packet_dependencies_expressions;
+  }
+
+  bool has_packet_field(R3S::R3S_pf_t packet_field) const {
+    return has_packet_field(packet_field, devices.first) ||
+           has_packet_field(packet_field, devices.second);
+  }
+
+  bool has_non_packet_field_dependency(const std::string& symbol_name) const {
+    for (const auto& npde : non_packet_dependencies_expressions) {
+      auto npde_symbol = npde.get_symbol();
+      auto delim = npde_symbol.find(symbol_name);
+
+      if (delim != std::string::npos) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  bool has_packet_field(R3S::R3S_pf_t packet_field, unsigned int device) const {
+    return get_packet_dependency_expression(device, packet_field) != nullptr;
+  }
+
+  const PacketDependenciesExpression* get_packet_dependencies_expression(R3S::Z3_ast expression) const {
+    if (expression == nullptr) {
+      return nullptr;
+    }
+
+    for (const auto& packet_dependencies_expression : packet_dependencies_expressions) {
+      auto context = packet_dependencies_expression.get_context();
+      auto current_expr = packet_dependencies_expression.get_expression();
+
+      if (R3S::Z3_is_eq_ast(context, expression, current_expr)) {
+        return &packet_dependencies_expression;
+      }
+    }
+
+    return nullptr;
+  }
+
+  const PacketDependenciesExpression* get_packet_dependency_expression(unsigned int device, R3S::R3S_pf_t packet_field) const {
+    int target_packet_chunk_id;
+
+    if (device == devices.first) {
+      target_packet_chunk_id = packet_chunks_ids.first;
+    }
+
+    else if (device == devices.second) {
+      target_packet_chunk_id = packet_chunks_ids.second;
+    }
+
+    else {
+      return nullptr;
+    }
+
+    for (const auto& packet_dependencies_expression : packet_dependencies_expressions) {
+      if (target_packet_chunk_id < 0) {
+        continue;
+      }
+
+      if (packet_dependencies_expression.get_packet_chunks_id() != target_packet_chunk_id) {
+        continue;
+      }
+
+      auto associated_dependencies = packet_dependencies_expression.get_associated_dependencies();
+
+      for (const auto& dependency : associated_dependencies) {
+        if (!dependency->is_processed())
+          continue;
+
+        if (!dependency->is_rss_compatible())
+          continue;
+
+        if (dependency->should_ignore())
+          continue;
+
+        const auto processed = dynamic_cast<PacketDependencyProcessed *>(dependency.get());
+        auto pf = processed->get_packet_field();
+
+        if (pf == packet_field) {
+          return &packet_dependencies_expression;
+        }
+      }
+    }
+
+    return nullptr;
+  }
+
+  static R3S::Z3_ast parse_expr(R3S::Z3_context ctx, const std::string& expr_str);
+
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const Constraint &arg);
 };
 
 }

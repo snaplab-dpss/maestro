@@ -299,7 +299,7 @@ void Parser::parse_call_path_info() {
   std::istringstream iss;
   std::string call_path;
   CallPathInfo::Type type;
-  std::pair<bool, std::string> symbol;
+  std::pair<bool, unsigned int> id;
 
   consume_token(Tokens::CallPathInfo::START, iss);
 
@@ -313,13 +313,13 @@ void Parser::parse_call_path_info() {
     type = CallPathInfo::parse_call_path_info_type_token(type_str);
   }
 
-  symbol.first = false;
-  if (consume_token(Tokens::CallPathInfo::SYMBOL, iss, true)) {
-    iss >> std::ws >> symbol.second;
-    symbol.first = true;
+  id.first = false;
+  if (consume_token(Tokens::CallPathInfo::ID, iss, true)) {
+    iss >> std::ws >> id.second;
+    id.first = true;
   }
 
-  CallPathInfo call_path_info(call_path, type, symbol);
+  CallPathInfo call_path_info(call_path, type, id);
 
   if (states.top().content.size() &&
       last_loaded_content_type() == LoadedContentType::PACKET_DEPENDENCIES) {
