@@ -829,27 +829,6 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
     final_constraint = generated_constraints[0];
   }
 
-  Logger::debug() << "\n";
-  Logger::debug() << "=================================================";
-  Logger::debug() << "\n";
-
-  Logger::debug() << "\n";
-  Logger::debug() << "[Packet info]";
-  Logger::debug() << "\n";
-  Logger::debug() << "p1 option: " << R3S::R3S_opt_to_string(p1.loaded_opt.opt);
-  Logger::debug() << "\n";
-  Logger::debug() << "p1 device: " << p1.key_id;
-  Logger::debug() << "\n";
-  Logger::debug() << "p2 option: " << R3S::R3S_opt_to_string(p2.loaded_opt.opt);
-  Logger::debug() << "\n";
-  Logger::debug() << "p2 device: " << p2.key_id;
-  Logger::debug() << "\n";
-  Logger::debug() << "\n";
-
-  Logger::debug() << "[Final constraint]";
-  Logger::debug() << "\n";
-  Logger::debug() << R3S::Z3_ast_to_string(ctx, final_constraint) << "\n";
-
   return final_constraint;
 }
 

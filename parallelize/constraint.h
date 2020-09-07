@@ -166,8 +166,16 @@ private:
 
 public:
   LibvigAccessConstraint(const LibvigAccess &_first, const LibvigAccess &_second,
-             const R3S::Z3_context &_ctx)
-      : ctx(_ctx), first(_first), second(_second) {
+                         const R3S::Z3_context &_ctx)
+      : ctx(_ctx),
+
+        // This is an optimization for the solver (libR3S).
+        // It comes up with a solution faster if the inter-devices constraints
+        // have the bigger device first.
+
+        first(_first.get_src_device() >= _second.get_src_device() ? _first : _second),
+        second(_first.get_src_device() >= _second.get_src_device() ? _second : _first) {
+
     check_incompatible_dependencies();
     generate_expression_from_read_args();
   }
