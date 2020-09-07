@@ -386,6 +386,30 @@ public:
     return non_packet_dependencies_expressions;
   }
 
+  std::vector<R3S::R3S_pf_t> get_packet_fields(unsigned int device) const {
+    assert(device == devices.first || device == devices.second);
+
+    std::vector<R3S::R3S_pf_t> packet_fields;
+    auto packet_chunk_id = devices.first == device ? packet_chunks_ids.first : packet_chunks_ids.second;
+
+    for (const auto& pde : packet_dependencies_expressions) {
+      if (pde.get_packet_chunks_id() != packet_chunk_id)
+        continue;
+
+      auto pde_pfs = pde.get_associated_dependencies_packet_fields();
+
+      for (const auto& pf : pde_pfs) {
+        auto found_it = std::find(packet_fields.begin(), packet_fields.end(), pf);
+
+        if (found_it == packet_fields.end()) {
+          packet_fields.push_back(pf);
+        }
+      }
+    }
+
+    return packet_fields;
+  }
+
   bool has_packet_field(R3S::R3S_pf_t packet_field) const {
     return has_packet_field(packet_field, devices.first) ||
            has_packet_field(packet_field, devices.second);

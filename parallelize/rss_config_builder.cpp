@@ -4,6 +4,7 @@
 #include <iostream>
 #include <algorithm>
 #include <map>
+#include <array>
 
 namespace ParallelSynthesizer {
 
@@ -72,8 +73,6 @@ void RSSConfigBuilder::load_rss_config_options() {
   }
 
   delete opts;
-
-  generate_solver_constraints();
 }
 
 void RSSConfigBuilder::fill_libvig_access_constraints(const std::vector<LibvigAccess> &accesses) {
@@ -109,12 +108,71 @@ void RSSConfigBuilder::fill_libvig_access_constraints(const std::vector<LibvigAc
   }
 }
 
-void RSSConfigBuilder::generate_solver_constraints() {
-  for (const auto& libvig_access_constraint : libvig_access_constraints) {
-    constraints.emplace_back(libvig_access_constraint);
+std::vector<R3S::R3S_pf_t> interset_packet_fields(std::vector<R3S::R3S_pf_t> pf1, std::vector<R3S::R3S_pf_t> pf2) {
+  std::vector<R3S::R3S_pf_t> result;
+
+  std::sort(pf1.begin(), pf1.end());
+  std::sort(pf2.begin(), pf2.end());
+
+  for (const auto& pf : pf1) {
+    auto found_it = std::find(pf2.begin(), pf2.end(), pf);
+
+    if (found_it == pf2.end()) {
+      continue;
+    }
+
+    auto stored_it = std::find(result.begin(), result.end(), pf);
+
+    if (stored_it != result.end()) {
+      continue;
+    }
+
+    result.push_back(pf);
   }
 
-  analyse_constraints();
+  return result;
+}
+
+bool analyse_constraint(Constraint constraint) {
+  auto non_packet_dependencies_expression = constraint.get_non_packet_dependencies_expressions();
+  auto packet_dependencies_expression = constraint.get_packet_dependencies_expressions();
+
+  if (non_packet_dependencies_expression.size() && packet_dependencies_expression.size()) {
+    Logger::error() << "Constraint with unknown dependency." << "\n";
+    Logger::error() << constraint << "\n";
+    exit(0);
+  }
+
+  if (non_packet_dependencies_expression.size()) {
+    for (const auto& npde : non_packet_dependencies_expression) {
+      auto symbol = npde.get_symbol();
+
+      auto is_new_index = symbol.find("new_index");
+      auto is_allocated_index = symbol.find("allocated_index");
+
+      if (is_new_index != std::string::npos) {
+        continue;
+      }
+
+      if (is_allocated_index != std::string::npos) {
+        continue;
+      }
+
+      Logger::error() << "Constraint with unknown dependency." << "\n";
+      Logger::error() << constraint << "\n";
+      exit(0);
+    }
+  }
+
+  if (packet_dependencies_expression.size() == 0) {
+    return false;
+  }
+
+  return true;
+}
+
+void RSSConfigBuilder::generate_solver_constraints() {
+  std::map< unsigned int, std::vector<R3S::R3S_pf_t> > packet_fields_per_device;
 
   for (const auto& call_path_constraint : call_paths_constraints) {
     const auto& source = call_path_constraint.get_call_path_info(CallPathInfo::Type::SOURCE);
@@ -129,29 +187,69 @@ void RSSConfigBuilder::generate_solver_constraints() {
     const auto& source_device = device_per_call_path[source_call_path];
     const auto& pair_device = device_per_call_path[pair_call_path];
 
-    constraints.emplace_back(R3S::R3S_cfg_get_z3_context(cfg),
-                             call_path_constraint,
-                             source_device, pair_device);
+    Constraint constraint(R3S::R3S_cfg_get_z3_context(cfg),
+                          call_path_constraint,
+                          source_device, pair_device);
+
+    auto source_packet_fields = constraint.get_packet_fields(source_device);
+
+    if (packet_fields_per_device.find(source_device) == packet_fields_per_device.end()) {
+      packet_fields_per_device[source_device] = source_packet_fields;
+    }
+
+    else {
+      packet_fields_per_device[source_device] = interset_packet_fields(packet_fields_per_device[source_device],
+                                                                       source_packet_fields);
+    }
+
+    auto pair_packet_fields = constraint.get_packet_fields(pair_device);
+
+    if (packet_fields_per_device.find(pair_device) == packet_fields_per_device.end()) {
+      packet_fields_per_device[pair_device] = pair_packet_fields;
+    }
+
+    else {
+      packet_fields_per_device[pair_device] = interset_packet_fields(packet_fields_per_device[pair_device],
+                                                                       pair_packet_fields);
+    }
+
+    constraints.push_back(constraint);
+  }
+
+  for (const auto& libvig_access_constraint : libvig_access_constraints) {
+    Constraint constraint(libvig_access_constraint);
+
+    auto devices = std::array<unsigned int, 2> { constraint.get_devices().first, constraint.get_devices().second };
+
+    for (auto device : devices) {
+
+      if(!analyse_constraint(constraint)) {
+        continue;
+      }
+
+      auto device_packet_fields = constraint.get_packet_fields(device);
+
+      std::sort(device_packet_fields.begin(), device_packet_fields.end());
+
+      if (packet_fields_per_device.find(device) == packet_fields_per_device.end()) {
+        packet_fields_per_device[device] = device_packet_fields;
+        continue;
+      }
+
+      auto stored_packet_fields = packet_fields_per_device[device];
+      auto intersection = interset_packet_fields(stored_packet_fields, device_packet_fields);
+
+      if (intersection.size() > 0 && intersection != packet_fields_per_device[device]) {
+        packet_fields_per_device[device] = intersection;
+      }
+
+      constraints.push_back(constraint);
+    }
+
   }
 }
 
-void RSSConfigBuilder::analyse_constraints() {
-  std::vector<Constraint> filtered_constraints;
-
-  for (const auto& constraint : constraints) {
-
-    if (constraint.get_non_packet_dependencies_expressions().size()) {
-      Logger::error() << "Constraint with unknown dependency." << "\n";
-      Logger::error() << constraint << "\n";
-      exit(0);
-    }
-
-    if (constraint.get_packet_dependencies_expressions().size()) {
-      filtered_constraints.push_back(constraint);
-    }
-  }
-
-  constraints = filtered_constraints;
+void RSSConfigBuilder::optimize_constraints() {
 }
 
 void RSSConfigBuilder::load_solver_constraints_generators() {
@@ -382,13 +480,38 @@ void RSSConfigBuilder::remove_constraints_from_object(unsigned int obj) {
                                   libvig_access_constraints.end());
 }
 
-void RSSConfigBuilder::remove_equivalent_index_dchain_constraints(unsigned int device, const std::vector<R3S::R3S_pf_t> comparing_packet_fields) {
-  auto dchain_equivalent_constraint = [&](const LibvigAccessConstraint& constraint) -> bool {
-    Constraint generated_constraint(constraint);
-    if (!generated_constraint.has_non_packet_field_dependency("new_index")) {
+void RSSConfigBuilder::remove_constraints_with_pfs(unsigned int device, std::vector<R3S::R3S_pf_t> pfs) {
+  auto constraint_with_pfs = [&](const LibvigAccessConstraint& constraint) -> bool {
+    if (constraint.get_first_access().get_src_device() != device &&
+        constraint.get_second_access().get_src_device() != device) {
       return false;
     }
 
+    Constraint solver_constraint(constraint);
+    auto constraint_pfs = solver_constraint.get_packet_fields(device);
+
+    if (constraint_pfs.size() != pfs.size())
+      return false;
+
+    std::sort(constraint_pfs.begin(), constraint_pfs.end());
+    std::sort(pfs.begin(), pfs.end());
+
+    return std::equal(constraint_pfs.begin(), constraint_pfs.end(), pfs.begin());
+  };
+
+  libvig_access_constraints.erase(std::remove_if(libvig_access_constraints.begin(),
+                                                 libvig_access_constraints.end(),
+                                                 constraint_with_pfs),
+                                  libvig_access_constraints.end());
+}
+
+void RSSConfigBuilder::remove_equivalent_index_dchain_constraints(unsigned int device, const std::vector<R3S::R3S_pf_t> comparing_packet_fields) {
+  auto dchain_equivalent_constraint = [&](const LibvigAccessConstraint& constraint) -> bool {
+    Constraint generated_constraint(constraint);
+
+    if (!generated_constraint.has_non_packet_field_dependency("new_index")) {
+      return false;
+    }
 
     for (const auto& packet_field : comparing_packet_fields) {
       if (!generated_constraint.has_packet_field(packet_field, device)) {
@@ -501,6 +624,7 @@ void RSSConfigBuilder::verify_dchain_correctness(const std::vector<LibvigAccess>
   if (equivalent_failures) {
     remove_constraints_from_object(dchain_verify.get_object());
     remove_equivalent_index_dchain_constraints(dchain_verify.get_src_device(), packet_fields);
+    remove_constraints_with_pfs(dchain_verify.get_src_device(), packet_fields);
 
     return;
   }

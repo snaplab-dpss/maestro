@@ -44,7 +44,9 @@ private:
   void fill_unique_devices(const std::vector<LibvigAccess> &accesses);
   std::vector<LibvigAccess> filter_reads_without_writes_on_objects(const std::vector<LibvigAccess> &accesses);
 
+  void optimize_constraints();
   void remove_constraints_from_object(unsigned int obj);
+  void remove_constraints_with_pfs(unsigned int device, std::vector<R3S::R3S_pf_t> pfs);
   void remove_equivalent_index_dchain_constraints(unsigned int device, const std::vector<R3S::R3S_pf_t> packet_fields);
   void analyse_dchain_interpretations(const std::vector<LibvigAccess>& accesses);
   bool is_write_modifying(const std::vector<LibvigAccess>&cp, LibvigAccess write);
@@ -53,7 +55,6 @@ private:
 
   void fill_libvig_access_constraints(const std::vector<LibvigAccess> &accesses);
   void generate_solver_constraints();
-  void analyse_constraints();
 
   static std::vector<Constraint> get_constraints_between_devices(std::vector<Constraint> constraints,
                                                                  unsigned int p1_device, unsigned int p2_device);
@@ -96,6 +97,8 @@ public:
     }
 
     load_rss_config_options();
+    generate_solver_constraints();
+    optimize_constraints();
 
     Logger::log() << "\nR3S configuration:\n" << R3S::R3S_cfg_to_string(cfg)
                   << "\n";
