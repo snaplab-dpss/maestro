@@ -671,6 +671,8 @@ void RSSConfigBuilder::verify_dchain_correctness(const std::vector<LibvigAccess>
   auto equivalent_failures = true;
   for (const auto& failed_verification_pair : failed_verifications_call_paths) {
     for (const auto& successful_verifications_failed_constraints_pair : successful_verifications_failed_constraints_call_paths) {
+
+      // TODO: maybe compare equivalence only after dchain verification?
       equivalent_failures = equivalent_failures && are_call_paths_equivalent(
             failed_verification_pair.second,
             successful_verifications_failed_constraints_pair.second);
