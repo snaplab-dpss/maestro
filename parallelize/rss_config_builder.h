@@ -46,7 +46,8 @@ private:
 
   void optimize_constraints();
   void remove_constraints_from_object(unsigned int obj);
-  void remove_constraints_with_pfs(unsigned int device, std::vector<R3S::R3S_pf_t> pfs);
+  void remove_constraints_with_access(unsigned int access_id);
+  void remove_constraints_with_pfs(unsigned int device, std::vector<R3S::R3S_pf_t> pfs, std::string call_path);
   void remove_equivalent_index_dchain_constraints(unsigned int device, const std::vector<R3S::R3S_pf_t> packet_fields);
   void analyse_dchain_interpretations(const std::vector<LibvigAccess>& accesses);
   bool is_write_modifying(const std::vector<LibvigAccess>&cp, LibvigAccess write);
