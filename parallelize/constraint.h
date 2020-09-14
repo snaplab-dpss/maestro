@@ -153,6 +153,13 @@ public:
 
 class Constraint {
 protected:
+  enum Type {
+    LibvigAccessType, CallPathType
+  };
+
+protected:
+  Type type;
+
   R3S::Z3_context ctx;
   R3S::Z3_ast expression;
 
@@ -173,17 +180,18 @@ protected:
   virtual void internal_process() = 0;
 
   // only a subclass can have access to these constructors
-  Constraint() {}
-  Constraint(R3S::Z3_context _ctx) : ctx(_ctx) {}
+  Constraint(Type _type) : type(_type) {}
+  Constraint(Type _type, R3S::Z3_context _ctx) : type(_type), ctx(_ctx) {}
 
 public:
   Constraint(const Constraint& constraint)
-    : ctx(constraint.ctx), expression(constraint.expression),
+    : type(constraint.type), ctx(constraint.ctx), expression(constraint.expression),
       devices(constraint.devices), packet_chunks_ids(constraint.packet_chunks_ids) {
     packet_dependencies_expressions = constraint.packet_dependencies_expressions;
     non_packet_dependencies_expressions = constraint.non_packet_dependencies_expressions;
   }
 
+  Type get_type() const { return type; }
   const R3S::Z3_context &get_context() const { return ctx; }
   const R3S::Z3_ast get_expression() const { return expression; }
 
@@ -318,6 +326,8 @@ public:
 
   friend std::ostream &operator<<(std::ostream &os,
                                   const Constraint &arg);
+
+  friend std::ostream &operator<<(std::ostream &os, Constraint *arg);
 };
 
 class LibvigAccessConstraint : public Constraint {
@@ -362,7 +372,7 @@ protected:
 public:
   LibvigAccessConstraint(const LibvigAccess &_first, const LibvigAccess &_second,
                          const R3S::Z3_context &_ctx)
-      : Constraint(_ctx),
+      : Constraint(LibvigAccessType, _ctx),
 
         // This is an optimization for the solver (libR3S).
         // It comes up with a solution faster if the inter-devices constraints
@@ -491,7 +501,7 @@ protected:
 public:
   CallPathsConstraint(const std::string& _expression_str,
                       const CallPathInfo& _first, const CallPathInfo& _second)
-    : Constraint(),
+    : Constraint(CallPathType),
       expression_str(_expression_str), first(_first), second(_second) {}
 
   CallPathsConstraint(const CallPathsConstraint& other)
@@ -520,7 +530,5 @@ public:
   friend std::ostream &operator<<(std::ostream &os,
                                   const CallPathsConstraint &arg);
 };
-
-std::ostream &operator<<(std::ostream &os, Constraint *arg);
 
 }

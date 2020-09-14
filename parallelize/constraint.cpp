@@ -80,17 +80,32 @@ std::ostream &operator<<(std::ostream &os,
 }
 
 std::ostream &operator<<(std::ostream &os, Constraint *arg) {
-    os << "HELLO";
-    os << "\n";
+  os << "================ CONSTRAINT ================";
+  os << "\n";
 
-    return os;
+  os << *arg;
+  os << "\n";
+
+  auto type = arg->get_type();
+
+  if (type == Constraint::Type::LibvigAccessType) {
+    LibvigAccessConstraint *constraint = dynamic_cast<LibvigAccessConstraint*>(arg);
+    os << *constraint;
+  }
+
+  else if (type == Constraint::Type::CallPathType) {
+    CallPathsConstraint *constraint = dynamic_cast<CallPathsConstraint*>(arg);
+    os << *constraint;
+  }
+
+  os << "===========================================";
+  os << "\n";
+
+  return os;
 }
 
 std::ostream &operator<<(std::ostream &os,
                          const Constraint &arg) {
-  os << "================ CONSTRAINT ================";
-  os << "\n";
-
   os << "first device     ";
   os << arg.devices.first;
   os << "\n";
@@ -129,30 +144,21 @@ std::ostream &operator<<(std::ostream &os,
     }
   }
 
-  os << "===========================================";
-  os << "\n";
-
   return os;
 }
 
 std::ostream &operator<<(std::ostream &os,
                          const LibvigAccessConstraint &arg) {
-  os << "================ CONSTRAINT ================";
+  os << "first access:";
+  os << "\n";
+  os << "\n";
+  os << arg.first;
   os << "\n";
 
-  os << "first access id  ";
-  os << arg.first.get_id();
+  os << "second access:";
   os << "\n";
-
-  os << "second access id ";
-  os << arg.second.get_id();
   os << "\n";
-
-  os << "expression       ";
-  os << R3S::Z3_ast_to_string(arg.ctx, arg.expression);
-  os << "\n";
-
-  os << "===========================================";
+  os << arg.second;
   os << "\n";
 
   return os;
@@ -437,17 +443,11 @@ std::ostream &operator<<(std::ostream &os,
 
 std::ostream &operator<<(std::ostream &os,
                          const CallPathsConstraint &arg) {
-  os << "================ CALL PATHS CONSTRAINT ================";
-  os << "\n";
-
   os << "expression  " << arg.expression_str;
   os << "\n";
 
   os << arg.first;
   os << arg.second;
-
-  os << "=======================================================";
-  os << "\n";
 
   return os;
 }
