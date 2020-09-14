@@ -151,148 +151,8 @@ public:
   static const std::string PACKET_CHUNKS_NAME_PATTERN;
 };
 
-class LibvigAccessConstraint {
-
-private:
-  R3S::Z3_context ctx;
-  R3S::Z3_ast expression;
-
-  LibvigAccess first;
-  LibvigAccess second;
-
-private:
-  void check_incompatible_dependencies();
-  void generate_expression_from_read_args();
-
-public:
-  LibvigAccessConstraint(const LibvigAccess &_first, const LibvigAccess &_second,
-                         const R3S::Z3_context &_ctx)
-      : ctx(_ctx),
-
-        // This is an optimization for the solver (libR3S).
-        // It comes up with a solution faster if the inter-devices constraints
-        // have the bigger device first.
-
-        first(_first.get_src_device() >= _second.get_src_device() ? _first : _second),
-        second(_first.get_src_device() >= _second.get_src_device() ? _second : _first) {
-
-    check_incompatible_dependencies();
-    generate_expression_from_read_args();
-  }
-
-  LibvigAccessConstraint(const LibvigAccessConstraint &constraint)
-      : ctx(constraint.ctx),
-        expression(constraint.expression),
-        first(constraint.first),
-        second(constraint.second) {}
-
-  const R3S::Z3_context &get_context() const { return ctx; }
-  const R3S::Z3_ast get_expression() const { return expression; }
-  const LibvigAccess &get_first_access() const { return first; }
-  const LibvigAccess &get_second_access() const { return second; }
-
-  friend std::ostream &operator<<(std::ostream &os,
-                                  const LibvigAccessConstraint &arg);
-};
-
-class CallPathInfo {
-public:
-  enum Type {
-    SOURCE, PAIR
-  };
-
-  static Type parse_call_path_info_type_token(const std::string& call_path_info_type) {
-    if (call_path_info_type == Tokens::CallPathInfoType::SOURCE)
-      return SOURCE;
-
-    if (call_path_info_type == Tokens::CallPathInfoType::PAIR)
-      return PAIR;
-
-    Logger::error() << "Invalid argument type token \"";
-    Logger::error() << call_path_info_type;
-    Logger::error() << "\n";
-
-    exit(1);
-  }
-
-private:
-  std::string call_path;
-  Type type;
-  std::pair<bool, unsigned int> id;
-
-  DependencyManager dependencies;
-
-public:
-  CallPathInfo(const std::string& _call_path, const Type& _type, const std::pair<bool, unsigned int>& _id)
-    : call_path(_call_path), type(_type), id(_id) {}
-
-  CallPathInfo(const std::string& _call_path, const Type& _type, unsigned int _id)
-    : call_path(_call_path), type(_type) {
-    id = std::make_pair(true, _id);
-  }
-
-  CallPathInfo(const CallPathInfo& other)
-    : call_path(other.call_path), type(other.type), id(other.id) {
-    dependencies = other.dependencies;
-  }
-
-  const std::string& get_call_path() const { return call_path; }
-  const Type& get_type() const { return type; }
-  unsigned int get_id() const {
-    assert(id.first);
-    return id.second;
-  }
-
-  bool has_id() const { return id.first; }
-
-  const DependencyManager& get_dependencies() const {
-    return dependencies;
-  }
-
-  void sort_dependencies() {
-    dependencies.sort();
-  }
-
-  void add_dependency(const Dependency *dependency) {
-    dependencies.add_dependency(dependency);
-  }
-
-  friend std::ostream &operator<<(std::ostream &os,
-                                  const CallPathInfo &arg);
-};
-
-class CallPathsConstraint {
-private:
-  std::string expression_str;
-
-  CallPathInfo first;
-  CallPathInfo second;
-
-public:
-  CallPathsConstraint(const std::string& _expression_str, const CallPathInfo& _first, const CallPathInfo& _second)
-    : expression_str(_expression_str), first(_first), second(_second) {}
-
-  CallPathsConstraint(const CallPathsConstraint& other)
-    : expression_str(other.expression_str), first(other.first), second(other.second) {}
-
-  const std::string& get_expression_str() const { return expression_str; }
-
-  const CallPathInfo& get_call_path_info(CallPathInfo::Type type) const {
-    if (first.get_type() == type)
-      return first;
-
-    if (second.get_type() == type)
-      return second;
-
-    assert(false && "Call path info type not found");
-  }
-
-  friend std::ostream &operator<<(std::ostream &os,
-                                  const CallPathsConstraint &arg);
-};
-
 class Constraint {
-private:
+protected:
   R3S::Z3_context ctx;
   R3S::Z3_ast expression;
 
@@ -302,7 +162,7 @@ private:
   std::vector<PacketDependenciesExpression> packet_dependencies_expressions;
   std::vector<NonPacketDependencyExpression> non_packet_dependencies_expressions;
 
-private:
+protected:
   void store_unique_dependencies_expression(const PacketDependenciesExpression& pde);
   void store_unique_dependencies_expression(const NonPacketDependencyExpression& npde);
 
@@ -310,64 +170,13 @@ private:
   void fill_non_packet_dependencies_expressions(R3S::Z3_ast &expression);
   void zip_packet_fields_expression_and_values(const DependencyManager& first, const DependencyManager& second);
 
+  virtual void internal_process() = 0;
+
+  // only a subclass can have access to these constructors
+  Constraint() {}
+  Constraint(R3S::Z3_context _ctx) : ctx(_ctx) {}
+
 public:
-  Constraint(const LibvigAccessConstraint& constraint) {
-    const auto& first = constraint.get_first_access();
-    const auto& second = constraint.get_second_access();
-
-    const auto& first_device = first.get_src_device();
-    const auto& second_device = second.get_src_device();
-
-    assert(first.has_argument(LibvigAccessArgument::Type::READ));
-    assert(second.has_argument(LibvigAccessArgument::Type::READ));
-
-    auto first_read_arg = first.get_argument(LibvigAccessArgument::Type::READ);
-    auto second_read_arg = second.get_argument(LibvigAccessArgument::Type::READ);
-
-    auto first_read_arg_copy = first_read_arg;
-    auto second_read_arg_copy = second_read_arg;
-
-    first_read_arg_copy.sort_dependencies();
-    second_read_arg_copy.sort_dependencies();
-
-    const auto &first_deps = first_read_arg_copy.get_dependencies();
-    const auto &second_deps = second_read_arg_copy.get_dependencies();
-
-    ctx = constraint.get_context();
-    expression = constraint.get_expression();
-    devices = std::make_pair(first_device, second_device);
-
-    packet_chunks_ids = std::make_pair(constraint.get_first_access().get_id(),
-                                       constraint.get_second_access().get_id());
-
-    fill_dependencies(expression);
-    zip_packet_fields_expression_and_values(first_deps, second_deps);
-  }
-
-  Constraint(R3S::Z3_context _ctx, const CallPathsConstraint& constraint,
-             unsigned int source_device, unsigned int pair_device) {
-    auto source = constraint.get_call_path_info(CallPathInfo::Type::SOURCE);
-    auto pair = constraint.get_call_path_info(CallPathInfo::Type::PAIR);
-
-    source.sort_dependencies();
-    pair.sort_dependencies();
-
-    const auto& source_deps = source.get_dependencies();
-    const auto& pair_deps = pair.get_dependencies();
-
-    const auto& source_id = source.get_id();
-    const auto& pair_id = pair.get_id();
-
-    ctx = _ctx;
-    expression = Constraint::parse_expr(_ctx, constraint.get_expression_str());
-    devices = std::make_pair(source_device, pair_device);
-
-    packet_chunks_ids = std::make_pair(source_id, pair_id);
-
-    fill_dependencies(expression);
-    zip_packet_fields_expression_and_values(source_deps, pair_deps);
-  }
-
   Constraint(const Constraint& constraint)
     : ctx(constraint.ctx), expression(constraint.expression),
       devices(constraint.devices), packet_chunks_ids(constraint.packet_chunks_ids) {
@@ -510,5 +319,208 @@ public:
   friend std::ostream &operator<<(std::ostream &os,
                                   const Constraint &arg);
 };
+
+class LibvigAccessConstraint : public Constraint {
+
+private:
+  LibvigAccess first;
+  LibvigAccess second;
+
+private:
+  void check_incompatible_dependencies();
+  void generate_expression_from_read_args();
+
+protected:
+  void internal_process() override {
+    const auto& first_device = first.get_src_device();
+    const auto& second_device = second.get_src_device();
+
+    assert(first.has_argument(LibvigAccessArgument::Type::READ));
+    assert(second.has_argument(LibvigAccessArgument::Type::READ));
+
+    auto first_read_arg = first.get_argument(LibvigAccessArgument::Type::READ);
+    auto second_read_arg = second.get_argument(LibvigAccessArgument::Type::READ);
+
+    auto first_read_arg_copy = first_read_arg;
+    auto second_read_arg_copy = second_read_arg;
+
+    first_read_arg_copy.sort_dependencies();
+    second_read_arg_copy.sort_dependencies();
+
+    const auto &first_deps = first_read_arg_copy.get_dependencies();
+    const auto &second_deps = second_read_arg_copy.get_dependencies();
+
+    devices = std::make_pair(first_device, second_device);
+
+    packet_chunks_ids = std::make_pair(first.get_id(),
+                                       second.get_id());
+
+    fill_dependencies(expression);
+    zip_packet_fields_expression_and_values(first_deps, second_deps);
+  }
+
+public:
+  LibvigAccessConstraint(const LibvigAccess &_first, const LibvigAccess &_second,
+                         const R3S::Z3_context &_ctx)
+      : Constraint(_ctx),
+
+        // This is an optimization for the solver (libR3S).
+        // It comes up with a solution faster if the inter-devices constraints
+        // have the bigger device first.
+
+        first(_first.get_src_device() >= _second.get_src_device() ? _first : _second),
+        second(_first.get_src_device() >= _second.get_src_device() ? _second : _first) {
+
+    check_incompatible_dependencies();
+    generate_expression_from_read_args();
+  }
+
+  LibvigAccessConstraint(const LibvigAccessConstraint &constraint)
+      : Constraint(constraint),
+        first(constraint.first),
+        second(constraint.second) {}
+
+  void process() { internal_process(); }
+
+  const LibvigAccess &get_first_access() const { return first; }
+  const LibvigAccess &get_second_access() const { return second; }
+
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const LibvigAccessConstraint &arg);
+};
+
+class CallPathInfo {
+public:
+  enum Type {
+    SOURCE, PAIR
+  };
+
+  static Type parse_call_path_info_type_token(const std::string& call_path_info_type) {
+    if (call_path_info_type == Tokens::CallPathInfoType::SOURCE)
+      return SOURCE;
+
+    if (call_path_info_type == Tokens::CallPathInfoType::PAIR)
+      return PAIR;
+
+    Logger::error() << "Invalid argument type token \"";
+    Logger::error() << call_path_info_type;
+    Logger::error() << "\n";
+
+    exit(1);
+  }
+
+private:
+  std::string call_path;
+  Type type;
+  std::pair<bool, unsigned int> id;
+
+  DependencyManager dependencies;
+
+public:
+  CallPathInfo(const std::string& _call_path, const Type& _type, const std::pair<bool, unsigned int>& _id)
+    : call_path(_call_path), type(_type), id(_id) {}
+
+  CallPathInfo(const std::string& _call_path, const Type& _type, unsigned int _id)
+    : call_path(_call_path), type(_type) {
+    id = std::make_pair(true, _id);
+  }
+
+  CallPathInfo(const CallPathInfo& other)
+    : call_path(other.call_path), type(other.type), id(other.id) {
+    dependencies = other.dependencies;
+  }
+
+  const std::string& get_call_path() const { return call_path; }
+  const Type& get_type() const { return type; }
+  unsigned int get_id() const {
+    assert(id.first);
+    return id.second;
+  }
+
+  bool has_id() const { return id.first; }
+
+  const DependencyManager& get_dependencies() const {
+    return dependencies;
+  }
+
+  void sort_dependencies() {
+    dependencies.sort();
+  }
+
+  void add_dependency(const Dependency *dependency) {
+    dependencies.add_dependency(dependency);
+  }
+
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const CallPathInfo &arg);
+};
+
+class CallPathsConstraint : public Constraint {
+private:
+  std::string expression_str;
+
+  CallPathInfo first;
+  CallPathInfo second;
+
+  unsigned int source_device;
+  unsigned int pair_device;
+
+protected:
+  void internal_process() override {
+      auto source = get_call_path_info(CallPathInfo::Type::SOURCE);
+      auto pair = get_call_path_info(CallPathInfo::Type::PAIR);
+
+      source.sort_dependencies();
+      pair.sort_dependencies();
+
+      const auto& source_deps = source.get_dependencies();
+      const auto& pair_deps = pair.get_dependencies();
+
+      const auto& source_id = source.get_id();
+      const auto& pair_id = pair.get_id();
+
+      expression = Constraint::parse_expr(ctx, expression_str);
+      devices = std::make_pair(source_device, pair_device);
+
+      packet_chunks_ids = std::make_pair(source_id, pair_id);
+
+      fill_dependencies(expression);
+      zip_packet_fields_expression_and_values(source_deps, pair_deps);
+  }
+
+public:
+  CallPathsConstraint(const std::string& _expression_str,
+                      const CallPathInfo& _first, const CallPathInfo& _second)
+    : Constraint(),
+      expression_str(_expression_str), first(_first), second(_second) {}
+
+  CallPathsConstraint(const CallPathsConstraint& other)
+    : Constraint(other),
+      expression_str(other.expression_str), first(other.first), second(other.second) {}
+
+  void process(R3S::Z3_context _ctx, unsigned int _source_device, unsigned int _pair_device) {
+    ctx = _ctx;
+    source_device = _source_device;
+    pair_device = _pair_device;
+    internal_process();
+  }
+
+  const std::string& get_expression_str() const { return expression_str; }
+
+  const CallPathInfo& get_call_path_info(CallPathInfo::Type type) const {
+    if (first.get_type() == type)
+      return first;
+
+    if (second.get_type() == type)
+      return second;
+
+    assert(false && "Call path info type not found");
+  }
+
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const CallPathsConstraint &arg);
+};
+
+std::ostream &operator<<(std::ostream &os, Constraint *arg);
 
 }

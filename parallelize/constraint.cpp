@@ -79,6 +79,13 @@ std::ostream &operator<<(std::ostream &os,
   return os;
 }
 
+std::ostream &operator<<(std::ostream &os, Constraint *arg) {
+    os << "HELLO";
+    os << "\n";
+
+    return os;
+}
+
 std::ostream &operator<<(std::ostream &os,
                          const Constraint &arg) {
   os << "================ CONSTRAINT ================";

@@ -17,7 +17,7 @@ class RSSConfigBuilder {
 
 private:
   R3S::R3S_cfg_t cfg;
-  std::vector<Constraint> constraints;
+  std::vector< std::shared_ptr<Constraint> > constraints;
 
   std::vector<LibvigAccessConstraint> libvig_access_constraints;
   std::vector<CallPathsConstraint> call_paths_constraints;
@@ -57,10 +57,12 @@ private:
   void fill_libvig_access_constraints(const std::vector<LibvigAccess> &accesses);
   void generate_solver_constraints();
 
-  static std::vector<Constraint> get_constraints_between_devices(std::vector<Constraint> constraints,
-                                                                 unsigned int p1_device, unsigned int p2_device);
-  static R3S::Z3_ast constraint_to_solver_input(R3S::R3S_cfg_t cfg, R3S::R3S_packet_ast_t p1,
-                                                R3S::R3S_packet_ast_t p2, const Constraint& constraint);
+  static std::vector< std::shared_ptr<Constraint> > get_constraints_between_devices(std::vector< std::shared_ptr<Constraint> > constraints,
+                                                                                    unsigned int p1_device, unsigned int p2_device);
+
+  static R3S::Z3_ast constraint_to_solver_input(R3S::R3S_cfg_t cfg, R3S::R3S_packet_ast_t p1, R3S::R3S_packet_ast_t p2,
+                                                std::shared_ptr<Constraint> constraint);
+
   static R3S::Z3_ast make_solver_constraints(R3S::R3S_cfg_t cfg,
                                              R3S::R3S_packet_ast_t p1,
                                              R3S::R3S_packet_ast_t p2);
