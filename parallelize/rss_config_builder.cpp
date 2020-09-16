@@ -420,7 +420,8 @@ std::vector<LibvigAccess> RSSConfigBuilder::filter_reads_without_writes_on_objec
         return false;
 
       return access.get_operation() == LibvigAccess::Operation::WRITE ||
-             access.get_operation() == LibvigAccess::Operation::CREATE;
+             access.get_operation() == LibvigAccess::Operation::CREATE ||
+             access.get_operation() == LibvigAccess::Operation::UPDATE;
     };
 
     auto found_write = std::find_if(accesses.begin(), accesses.end(),
@@ -443,7 +444,12 @@ std::vector<LibvigAccess> RSSConfigBuilder::filter_reads_without_writes_on_objec
 }
 
 bool RSSConfigBuilder::is_write_modifying(const std::vector<LibvigAccess>&cp, LibvigAccess write) {
-  assert(write.has_argument(LibvigAccessArgument::Type::WRITE));
+  assert(write.get_operation() == LibvigAccess::Operation::WRITE ||
+         write.get_operation() == LibvigAccess::Operation::UPDATE);
+
+  if (write.get_operation() == LibvigAccess::Operation::UPDATE) {
+    return true;
+  }
 
   auto is_read_access_in_same_data_structure = [&](const LibvigAccess& access) -> bool {
     auto write_data_structure = write.get_metadata().get_data_structure();
@@ -493,20 +499,31 @@ bool RSSConfigBuilder::are_call_paths_equivalent(const std::vector<LibvigAccess>
   auto write_accesses_2 = cp2;
 
   auto is_not_write_access = [](const LibvigAccess& access) -> bool {
-    return access.get_operation() != LibvigAccess::Operation::WRITE;
+    return access.get_operation() != LibvigAccess::Operation::WRITE &&
+           access.get_operation() != LibvigAccess::Operation::UPDATE;
   };
 
   write_accesses_1.erase(std::remove_if(write_accesses_1.begin(), write_accesses_1.end(), is_not_write_access), write_accesses_1.end());
   write_accesses_2.erase(std::remove_if(write_accesses_2.begin(), write_accesses_2.end(), is_not_write_access), write_accesses_2.end());
 
   for (const auto& access : write_accesses_1) {
-    if (is_write_modifying(cp1, access))
+    if (is_write_modifying(cp1, access)) {
+      Logger::error() << "Incompatible call paths: unable to bypass dchain interpretation." << "\n";
+      Logger::error() << "Access leading to incompatibility of call paths:" << "\n";
+      Logger::error() << access << "\n";
+      Logger::error() << "\n";
       return false;
+    }
   }
 
   for (const auto& access : write_accesses_2) {
-    if (is_write_modifying(cp2, access))
+    if (is_write_modifying(cp2, access)) {
+      Logger::error() << "Incompatible call paths: unable to bypass dchain interpretation." << "\n";
+      Logger::error() << "Access leading to incompatibility of call paths:" << "\n";
+      Logger::error() << access << "\n";
+      Logger::error() << "\n";
       return false;
+    }
   }
 
   return true;

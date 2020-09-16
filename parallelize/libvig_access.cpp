@@ -113,6 +113,9 @@ std::ostream &operator<<(std::ostream &os, const LibvigAccess &access) {
     case LibvigAccess::VERIFY:
       os << "verify";
       break;
+    case LibvigAccess::UPDATE:
+      os << "update";
+      break;
     case LibvigAccess::DESTROY:
       os << "delete";
       break;

@@ -111,6 +111,7 @@ public:
     INIT,
     CREATE,
     VERIFY,
+    UPDATE,
     DESTROY
   };
 
@@ -213,13 +214,17 @@ public:
       return Operation::VERIFY;
     }
 
+    if (operation == Tokens::Operations::UPDATE) {
+      return Operation::UPDATE;
+    }
+
     if (operation == Tokens::Operations::DESTROY) {
       return Operation::DESTROY;
     }
 
     Logger::error() << "Invalid operation token \"";
     Logger::error() << operation;
-    Logger::error() << "\n";
+    Logger::error() << "\"\n";
 
     exit(1);
   }

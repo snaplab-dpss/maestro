@@ -21,6 +21,7 @@ const std::string READ = "READ";
 const std::string WRITE = "WRITE";
 const std::string CREATE = "CREATE";
 const std::string VERIFY = "VERIFY";
+const std::string UPDATE = "UPDATE";
 const std::string DESTROY = "DESTROY";
 const std::string NOP = "NOP";
 const std::string INIT = "INIT";
