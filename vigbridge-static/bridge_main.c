@@ -51,16 +51,6 @@ int bridge_get_device(struct ether_addr *dst, uint16_t src_device) {
 #ifdef KLEE_VERIFICATION
   map_reset(mac_tables->dyn_map); // simplify the traces for easy validation
 #endif                            // KLEE_VERIFICATION
-  /*
-  int index = -1;
-  present = map_get(mac_tables->dyn_map, dst, &index);
-  if (present) {
-    struct DynamicValue *value = 0;
-    vector_borrow(mac_tables->dyn_vals, index, (void **)&value);
-    device = value->device;
-    vector_return(mac_tables->dyn_vals, index, value);
-    return device;
-  }*/
   return -1;
 }
 
