@@ -620,8 +620,9 @@ void RSSConfigBuilder::verify_dchain_correctness(const std::vector<LibvigAccess>
   auto dependencies = read_arg.get_dependencies();
   auto packet_fields = dependencies.get_unique_packet_fields();
 
-  if (packet_fields.size() == 0)
+  if (packet_fields.size() == 0) {
     return;
+  }
 
   std::map< std::string, std::vector<LibvigAccess> > call_paths;
   for (const auto& access : accesses) {
