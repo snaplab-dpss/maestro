@@ -393,7 +393,7 @@ std::vector<LibvigAccess> RSSConfigBuilder::filter_reads_without_writes_on_objec
   std::vector<LibvigAccess> trimmed_accesses;
   std::map<unsigned int, bool> access_by_object;
 
-  for (const auto &access : accesses) {
+  for (const auto &access : accesses) {    
     const auto &object = access.get_object();
     auto store_access = access_by_object.find(object);
 
@@ -730,11 +730,26 @@ void RSSConfigBuilder::verify_dchain_correctness(const std::vector<LibvigAccess>
   Logger::error() << "Parallel incompatible access:" << "\n";
   Logger::error() << dchain_verify << "\n";
 
-  exit(0);
+  exit(1);
 }
 
 void RSSConfigBuilder::analyse_dchain_interpretations(const std::vector<LibvigAccess>& accesses) {
   for (const auto &access : accesses) {
+
+    // Special case: this function loops over a dchain looking for an available index.
+    // This is not parallel correct.
+    if (access.get_metadata().get_interface() == "cht_find_preferred_available_backend") {
+      Logger::error() << "dchain correctness violated: ";
+      Logger::error() << "use of 'cht_find_preferred_available_backend' prohibits the existence"
+                      << " of a lock-free parallel implementation." << "\n";
+      Logger::error() << "\n";
+
+      Logger::error() << "Parallel incompatible access:" << "\n";
+      Logger::error() << access << "\n";
+
+      exit(1);
+    }
+
     if (access.get_operation() != LibvigAccess::Operation::VERIFY)
       continue;
 
