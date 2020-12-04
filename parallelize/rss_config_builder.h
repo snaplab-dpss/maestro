@@ -74,7 +74,7 @@ public:
    : call_paths_constraints(_call_paths_constraints) {
 
     R3S::R3S_cfg_init(&cfg);
-    R3S::R3S_cfg_set_skew_analysis(cfg, false);
+    R3S::R3S_cfg_set_skew_analysis(cfg, true);
 
     fill_unique_devices(accesses);
 
