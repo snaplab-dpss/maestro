@@ -40,10 +40,3 @@ todo:
 # Built-in DPDK default target, make it aware of autogen,
 # and make it clean every time because our dependency tracking is nonexistent...
 all: clean todo
-
-# ==============
-# Parallelize NF
-# ==============
-
-parallelize:
-	$(info $(SELF_DIR))
