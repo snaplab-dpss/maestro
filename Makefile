@@ -66,7 +66,6 @@ endif
 # note that DPDK's weird makefiles call this twice,
 # once in the proper dir and once in build/, we only care about the former
 autogen:
-	@echo "autogen..."
 	@if [ '$(NF_DIR)' == '.' ]; then \
 	  if [ -e dataspec.ml ]; then \
 	    cp dataspec.ml fspec_gen.ml ; \
@@ -76,8 +75,6 @@ autogen:
 	  $(SELF_DIR)/codegen/gen-loop-boilerplate.sh fspec_gen.ml; \
 	  fi; \
 	fi
-	@echo "done"
-
 
 
 # ============
