@@ -151,8 +151,6 @@ clean: clean-vigor
 # and make it clean every time because our dependency tracking is nonexistent...
 all: clean autogen
 
-
-
 # =======================
 # Symbex with DPDK models
 # =======================
@@ -237,6 +235,7 @@ VERIF_WITHDPDK_FILES := $(DPDK_FILES) $(IXGBE_FILES) \
 VERIF_WITHDPDK_FILES += $(SELF_DIR)/libvig/models/dpdk-low-level.c
 
 symbex-withdpdk: clean autogen
+	@echo "symbex with dpdk"
 	@$(COMPILE_COMMAND) $(VERIF_DEFS) $(VERIF_WITHDPDK_DEFS) $(VERIF_INCLUDES) \
 	                    $(VERIF_WITHDPDK_INCLUDES) $(VERIF_FILES) \
 	                    $(VERIF_WITHDPDK_FILES) $(VERIF_FLAGS)
@@ -244,6 +243,7 @@ symbex-withdpdk: clean autogen
 	@$(OPT_COMMAND)
 	@$(VERIF_COMMAND) $(NF_ARGS)
 	@$(CLEAN_BUILD_ARTIFACTS_COMMAND)
+	@echo "symbex with dpdk DONE"
 
 
 
@@ -350,5 +350,13 @@ new-nf:
 # Parallelize NF
 # ==============
 
-parallelize:
-	@../parallelize/parallelize-nf.sh
+change-srcs:
+	@echo "before..."
+	SRCS-y   = $(shell echo $(SELF_DIR)/libvig/verified/*.c)
+	NF_FILES = vignop/build/parallelize/boilerplate.c
+	$(info $(NF_FILES))
+	SRCS-y   += $(NF_FILES)
+	$(info $(SRCS-y))
+	@echo "after"
+
+parallelize: change-srcs all

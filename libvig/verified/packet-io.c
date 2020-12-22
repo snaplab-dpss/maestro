@@ -5,8 +5,13 @@
 
 #include "packet-io.h"
 
-size_t global_total_length;
-size_t global_read_length = 0;
+RTE_DEFINE_PER_LCORE(size_t, global_total_length);
+RTE_DEFINE_PER_LCORE(size_t, global_read_length);
+
+void packet_io_init() {
+  size_t *global_read_length_ptr = &RTE_PER_LCORE(global_read_length);
+  (*global_read_length_ptr) = 0;
+}
 
 /*@
   fixpoint bool missing_chunks(list<pair<int8_t*, int> > missing_chunks, int8_t*
@@ -45,7 +50,8 @@ void packet_state_total_length(void *p, uint32_t *len)
 {
   //@ open packetp(p, unread, nil);
   // IGNORE(p);
-  global_total_length = *len;
+  size_t *global_total_length_ptr = &RTE_PER_LCORE(global_total_length);
+  (*global_total_length_ptr) = *len;
   //@ close packetp(p, unread, nil);
 }
 
@@ -83,9 +89,10 @@ void packet_borrow_next_chunk(void *p, size_t length, void **chunk)
   //@ assert p > 0;
   //@ assert p + global_read_length > 0;
   // TODO: support mbuf chains.
-  *chunk = (char *)p + global_read_length;
+  size_t *global_read_length_ptr = &RTE_PER_LCORE(global_read_length);
+  *chunk = (char *)p + (*global_read_length_ptr);
   //@ chars_split(*chunk, length);
-  global_read_length += length;
+  (*global_read_length_ptr) += length;
   //@ assert *chunk |-> ?ptr;
   //@ close packetp(p, drop(length, unread), cons(pair(ptr, length), mc));
 }
@@ -96,7 +103,8 @@ void packet_return_chunk(void *p, void *chunk)
 /*@ ensures packetp(p, append(chnk, unread), mc); @*/
 {
   //@ open packetp(p, unread, cons(pair(chunk, len), mc));
-  global_read_length = (uint32_t)((int8_t *)chunk - (int8_t *)p);
+  size_t *global_read_length_ptr = &RTE_PER_LCORE(global_read_length);
+  (*global_read_length_ptr) = (uint32_t)((int8_t *)chunk - (int8_t *)p);
   //@ close packetp(p, append(chnk, unread), mc);
 }
 
@@ -106,6 +114,8 @@ uint32_t packet_get_unread_length(void *p)
             result == length(unread); @*/
 {
   //@ open packetp(p, unread, mc);
-  return global_total_length - global_read_length;
+  size_t *global_total_length_ptr = &RTE_PER_LCORE(global_total_length);
+  size_t *global_read_length_ptr = &RTE_PER_LCORE(global_read_length);
+  return (*global_total_length_ptr) - (*global_read_length_ptr);
   //@ close packetp(p, unread, mc);
 }
