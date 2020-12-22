@@ -288,8 +288,8 @@ char *nf_ipv4_to_str(uint32_t addr) {
   return buffer;
 }
 
-RTE_DECLARE_PER_LCORE(void **, chunks_borrowed);
-RTE_DECLARE_PER_LCORE(size_t, chunks_borrowed_num);
+RTE_DEFINE_PER_LCORE(void **, chunks_borrowed);
+RTE_DEFINE_PER_LCORE(size_t, chunks_borrowed_num);
 
 static inline void *nf_borrow_next_chunk(void *p, size_t length) {
   size_t *chunks_borrowed_num_ptr = &RTE_PER_LCORE(chunks_borrowed_num);
