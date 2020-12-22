@@ -35,7 +35,6 @@ clean: clean-vigor
 
 todo:
 	@echo "todo"
-	$(info $(SRCS-y))
 
 # Built-in DPDK default target, make it aware of autogen,
 # and make it clean every time because our dependency tracking is nonexistent...
