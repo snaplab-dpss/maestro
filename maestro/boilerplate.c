@@ -26,6 +26,9 @@
 #include "libvig/verified/boilerplate-util.h"
 #include "libvig/verified/packet-io.h"
 #include "libvig/verified/tcpudp_hdr.h"
+#include "libvig/verified/expirator.h"
+
+#include "vigpol/loop.h"
 
 #ifdef KLEE_VERIFICATION
 #  include "libvig/models/hardware.h"

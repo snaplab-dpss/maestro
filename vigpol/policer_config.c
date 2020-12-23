@@ -18,7 +18,7 @@
 
 const uint32_t DEFAULT_LAN = 1;
 const uint32_t DEFAULT_WAN = 0;
-const uint32_t DEFAULT_RATE = 1000000; // 1MB/s
+const uint64_t DEFAULT_RATE = 1000000; // 1MB/s
 const uint32_t DEFAULT_BURST = 100000; // 100kB
 const uint32_t DEFAULT_CAPACITY = 128; // IPs
 
@@ -99,7 +99,7 @@ void nf_config_usage(void) {
           "\t--wan <device>: WAN device,"
           " default: %" PRIu16 ".\n"
           "\t--rate <rate>: policer rate in bytes/s,"
-          " default: %" PRIu32 ".\n"
+          " default: %" PRIu64 ".\n"
           "\t--burst <size>: policer burst size in bytes,"
           " default: %" PRIu32 ".\n"
           "\t--capacity <n>: policer table capacity,"
@@ -113,7 +113,7 @@ void nf_config_print(void) {
 
   NF_INFO("LAN Device: %" PRIu32, config.lan_device);
   NF_INFO("WAN Device: %" PRIu32, config.wan_device);
-  NF_INFO("Rate: %" PRIu32, config.rate);
+  NF_INFO("Rate: %" PRIu64, config.rate);
   NF_INFO("Burst: %" PRIu32, config.burst);
   NF_INFO("Capacity: %" PRIu16, config.dyn_capacity);
 
