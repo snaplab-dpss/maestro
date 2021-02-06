@@ -77,11 +77,7 @@ unsigned rte_ether_addr_hash(void* obj)
   //@ produce_limits(addr_bytes_4);
   uint8_t addr_bytes_5 = id->addr_bytes[5];
   //@ produce_limits(addr_bytes_5);
-<<<<<<< HEAD
-  //@ close [f]ether_addrp(obj, v);
-=======
   //@ close [f]rte_ether_addrp(obj, v);
->>>>>>> upstream/master
 
   unsigned hash = 0;
   hash = __builtin_ia32_crc32si(hash, addr_bytes_0);

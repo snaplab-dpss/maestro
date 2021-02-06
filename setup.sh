@@ -372,8 +372,7 @@ if [ ! -e "$BUILDDIR/z3" ]; then
       make -k -j$(nproc) || true
       # -jN here may break the make (hidden deps or something)
       make
-      make install
-
+      sudo make install
       # Weird, but required sometimes
       # Remove the outdated libz3.so
       sudo apt-get remove -y libz3-dev || true
