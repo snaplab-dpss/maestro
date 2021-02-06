@@ -29,89 +29,6 @@
 #  define MAIN main
 #endif // NFOS
 
-<<<<<<< HEAD
-#ifdef KLEE_VERIFICATION
-#  define VIGOR_LOOP_BEGIN                                                     \
-    unsigned _vigor_lcore_id = rte_lcore_id();                                 \
-    vigor_time_t _vigor_start_time = start_time();                             \
-    int _vigor_loop_termination = klee_int("loop_termination");                \
-    unsigned VIGOR_DEVICES_COUNT;                                              \
-    klee_possibly_havoc(&VIGOR_DEVICES_COUNT, sizeof(VIGOR_DEVICES_COUNT),     \
-                        "VIGOR_DEVICES_COUNT");                                \
-    vigor_time_t VIGOR_NOW;                                                    \
-    klee_possibly_havoc(&VIGOR_NOW, sizeof(VIGOR_NOW), "VIGOR_NOW");           \
-    unsigned VIGOR_DEVICE;                                                     \
-    klee_possibly_havoc(&VIGOR_DEVICE, sizeof(VIGOR_DEVICE), "VIGOR_DEVICE");  \
-    unsigned _d;                                                               \
-    klee_possibly_havoc(&_d, sizeof(_d), "_d");                                \
-    while (klee_induce_invariants() & _vigor_loop_termination) {               \
-      nf_loop_iteration_border(_vigor_lcore_id, _vigor_start_time);            \
-      VIGOR_NOW = current_time();                                              \
-      /* concretize the device to avoid leaking symbols into DPDK */           \
-      VIGOR_DEVICES_COUNT = rte_eth_dev_count();                               \
-      VIGOR_DEVICE = klee_range(0, VIGOR_DEVICES_COUNT, "VIGOR_DEVICE");       \
-      for (_d = 0; _d < VIGOR_DEVICES_COUNT; _d++)                             \
-        if (VIGOR_DEVICE == _d) {                                              \
-          VIGOR_DEVICE = _d;                                                   \
-          break;                                                               \
-        }                                                                      \
-      stub_hardware_receive_packet(VIGOR_DEVICE);
-#  define VIGOR_LOOP_END                                                       \
-    stub_hardware_reset_receive(VIGOR_DEVICE);                                 \
-    nf_loop_iteration_border(_vigor_lcore_id, VIGOR_NOW);                      \
-    }
-#else // KLEE_VERIFICATION
-#  define VIGOR_LOOP_BEGIN                                                     \
-    while (1) {                                                                \
-      vigor_time_t VIGOR_NOW = current_time();                                 \
-      unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count();                      \
-      for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT;      \
-           VIGOR_DEVICE++) {
-#  define VIGOR_LOOP_END                                                       \
-    }                                                                          \
-    }
-#endif // KLEE_VERIFICATION
-
-// Number of RX/TX queues
-static const uint16_t RX_QUEUES_COUNT = 1;
-static const uint16_t TX_QUEUES_COUNT = 1;
-
-// Queue sizes for receiving/transmitting packets
-// NOT powers of 2 so that ixgbe doesn't use vector stuff
-// but they have to be multiples of 8, and at least 32, otherwise the driver
-// refuses
-static const uint16_t RX_QUEUE_SIZE = 96;
-static const uint16_t TX_QUEUE_SIZE = 96;
-
-void flood(struct rte_mbuf *frame, uint16_t skip_device, uint16_t nb_devices) {
-  rte_mbuf_refcnt_set(frame, nb_devices - 1);
-  int total_sent = 0;
-  for (uint16_t device = 0; device < nb_devices; device++) {
-    if (device == skip_device)
-      continue;
-    total_sent += rte_eth_tx_burst(device, 0, &frame, 1);
-  }
-  if (total_sent != nb_devices - 1) {
-    rte_pktmbuf_free(frame);
-  }
-}
-
-// Buffer count for mempools
-static const unsigned MEMPOOL_BUFFER_COUNT = 256;
-
-// --- Initialization ---
-static int nf_init_device(uint16_t device, struct rte_mempool *mbuf_pool) {
-  int retval;
-
-  // device_conf passed to rte_eth_dev_configure cannot be NULL
-  struct rte_eth_conf device_conf;
-  memset(&device_conf, 0, sizeof(struct rte_eth_conf));
-  device_conf.rxmode.hw_strip_crc = 1;
-
-  // Configure the device
-  retval = rte_eth_dev_configure(device, RX_QUEUES_COUNT, TX_QUEUES_COUNT,
-                                 &device_conf);
-=======
 // Unverified support for batching, useful for performance comparisons
 #ifndef VIGOR_BATCH_SIZE
 #  define VIGOR_BATCH_SIZE 1
@@ -190,7 +107,6 @@ static int nf_init_device(uint16_t device, struct rte_mempool* mbuf_pool) {
 
   // Configure the device (1, 1 == number of RX/TX queues)
   retval = rte_eth_dev_configure(device, 1, 1, &device_conf);
->>>>>>> upstream/master
   if (retval != 0) {
     return retval;
   }
