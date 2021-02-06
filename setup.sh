@@ -10,13 +10,34 @@ set -euo pipefail
 # Setup
 # =====
 
+# OCaml (installed later) uses variables in its scripts without
+# defining them first - we're in strict mode!
+if [ -z ${PERL5LIB+x} ]; then
+  export PERL5LIB=''
+fi
+if [ -z ${MANPATH+x} ]; then
+  export MANPATH=''
+fi
+if [ -z ${PROMPT_COMMAND+x} ]; then
+  export PROMPT_COMMAND=''
+fi
+
+
 VNDSDIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
 BUILDDIR=`pwd`
 PATHSFILE="$BUILDDIR/paths.sh"
 
 
 OS='linux'
-if grep docker /proc/1/cgroup -qa; then OS='docker'; fi
+if grep docker /proc/1/cgroup -qa; then
+  OS='docker'
+fi
+
+# might not have sudo, especially in Docker, install it for simplicity so that scripts work in either case
+if [ "$(which sudo)" = '' ] ; then
+  apt-get update
+  apt-get install -y sudo
+fi
 
 
 if [ "$BUILDDIR" -ef "$VNDSDIR" ] && [ "$OS" != "docker" ]; then
@@ -40,29 +61,38 @@ if [ ! -f "$PATHSFILE" ]; then
 fi
 
 sudo apt-get update
-sudo apt-get install -y ca-certificates software-properties-common \
+sudo DEBIAN_FRONTEND=noninteractive \
+     apt-get install -y ca-certificates software-properties-common \
                         patch wget build-essential git cloc
+
+# If there is a single version of GCC and it's a single digit, as in e.g. GCC 9 on Ubuntu 20.04,
+# our clang won't detect it because it expects a version in the format x.y.z with all components
+# so let's create a symlink
+# 0 -> nothing, 2 -> a single dot (because there is also \0)
+GCC_VER=$(ls -1 /usr/lib/gcc/x86_64-linux-gnu/ | sort -V | tail -n 1)
+if [ $(echo $GCC_VER | grep -Fo . | wc -c) -eq 0 ]; then sudo ln -s "/usr/lib/gcc/x86_64-linux-gnu/$GCC_VER" "/usr/lib/gcc/x86_64-linux-gnu/$GCC_VER.0.0" ; fi
+if [ $(echo $GCC_VER | grep -Fo . | wc -c) -eq 2 ]; then sudo ln -s "/usr/lib/gcc/x86_64-linux-gnu/$GCC_VER" "/usr/lib/gcc/x86_64-linux-gnu/$GCC_VER.0" ; fi
 
 
 # ====
 # DPDK
 # ====
 
-sudo apt-get install -y libpcap-dev libnuma-dev
+sudo DEBIAN_FRONTEND=noninteractive \
+     apt-get install -y libpcap-dev libnuma-dev
 
 # Install the right headers
 if [ "$OS" = 'linux' -o "$OS" = 'docker' ]; then
-  KERNEL_VER=$(uname -r | sed 's/-generic//')
   if [ "$OS" = 'docker' ]; then
       echo "Warning: the guest uses the host kernel,"
       echo " so the guest should be able to install headers for the host's kernel..."
   fi
 
-  sudo apt-get install -y "linux-headers-$KERNEL_VER"
-  sudo apt-get install -y "linux-headers-${KERNEL_VER}-generic"
+  sudo apt-get install -y "linux-headers-generic"
 fi
 
-DPDK_RELEASE='17.11'
+DPDK_RELEASE='20.08'
+DPDK_SUFFIX='' # e.g. for LTS releases '-stable', for non-LTS ''
 pushd "$BUILDDIR"
   if [ ! -f dpdk/.version ] || \
      [ "$(cat dpdk/.version)" != "$DPDK_RELEASE" ]; then
@@ -71,7 +101,7 @@ pushd "$BUILDDIR"
     wget -O dpdk.tar.xz "https://fast.dpdk.org/rel/dpdk-$DPDK_RELEASE.tar.xz"
     tar xf dpdk.tar.xz
     rm dpdk.tar.xz
-    mv "dpdk-$DPDK_RELEASE" dpdk
+    mv "dpdk$DPDK_SUFFIX-$DPDK_RELEASE" dpdk
 
     echo 'export RTE_TARGET=x86_64-native-linuxapp-gcc' >> "$PATHSFILE"
     echo "export RTE_SDK=$BUILDDIR/dpdk" >> "$PATHSFILE"
@@ -83,7 +113,7 @@ pushd "$BUILDDIR"
         patch -p1 < "$p"
       done
 
-      make install -j$(nproc) T=x86_64-native-linuxapp-gcc DESTDIR=.
+      make install -j$(nproc) T=x86_64-native-linuxapp-gcc DESTDIR=. MAKE_PAUSE=n
 
       echo "$DPDK_RELEASE" > .version
     popd
@@ -96,19 +126,21 @@ popd
 # OCaml
 # =====
 
-sudo apt-get install -y opam m4
-
-# OCaml uses variables in its scripts without
-# defining them first - we're in strict mode!
-if [ -z ${PERL5LIB+x} ]; then
-  export PERL5LIB=''
-fi
-if [ -z ${MANPATH+x} ]; then
-  export MANPATH=''
-fi
+# we depend on an OCaml package that needs libgmp-dev
+sudo DEBIAN_FRONTEND=noninteractive \
+     apt-get install -y opam m4 libgmp-dev
 
 opam init -y
-opam switch 4.06.0
+eval "$(opam env)"
+# Opam 1.x doesn't have "create", later versions require it but only the first time
+if opam --version | grep '^1.' >/dev/null ; then
+  opam switch 4.06.0
+else
+  opam switch list
+  if ! opam switch list 2>&1 | grep -Fq 4.06 ; then
+    opam switch create 4.06.0
+  fi
+fi
 
 if ! grep -q opam "$PATHSFILE"; then
   echo 'PATH='"$HOME/.opam/system/bin"':$PATH' >> "$PATHSFILE"
@@ -125,7 +157,8 @@ opam install goblint-cil core -y
 # Python
 # ======
 
-sudo apt-get install -y python3.6
+sudo DEBIAN_FRONTEND=noninteractive \
+     apt-get install -y python3.6
 
 
 
@@ -133,7 +166,8 @@ sudo apt-get install -y python3.6
 # FastClick
 # =========
 
-sudo apt-get install -y libz-dev
+sudo DEBIAN_FRONTEND=noninteractive \
+     apt-get install -y libz-dev
 
 # We make two folders,
 # one configured with batching and the other without,
@@ -141,7 +175,7 @@ sudo apt-get install -y libz-dev
 if [ ! -e "$BUILDDIR/fastclick" ]; then
   git clone https://github.com/tbarbette/fastclick "$BUILDDIR/fastclick"
   pushd "$BUILDDIR/fastclick"
-    git checkout e77376fef6d982fef59517ddd3f1533b9dffc000
+    git checkout e14b85d5ee801f92c762a11614802ee6af6b6316
     cp elements/etherswitch/etherswitch.* elements/ethernet/. # more convenient
   popd
   cp -r "$BUILDDIR/fastclick" "$BUILDDIR/fastclick-batch"
@@ -174,7 +208,8 @@ fi
 # =======
 
 # the libmoon readme doesn't mention libtbb2, but libmoon fails without it
-sudo apt-get install -y libtbb2 lshw cmake
+sudo DEBIAN_FRONTEND=noninteractive \
+     apt-get install -y libtbb2 lshw cmake
 
 if [ ! -e "$BUILDDIR/libmoon" ]; then
   git clone https://github.com/libmoon/libmoon "$BUILDDIR/libmoon"
@@ -198,7 +233,7 @@ fi
 sudo DEBIAN_FRONTEND=noninteractive \
      apt-get install -yq qemu-system-x86 build-essential wget bison flex \
                          libgmp3-dev libmpc-dev libmpfr-dev texinfo \
-                         libcloog-isl-dev libisl-0.18-dev gnupg \
+                         gnupg \
                          xorriso nasm git grub-pc
 
 NFOS_TARGET=x86_64-elf
@@ -263,12 +298,19 @@ popd
 # LLVM required to build klee-uclibc
 # (including the libc necessary to build NFOS)
 sudo apt-get install -y bison flex zlib1g-dev libncurses5-dev \
-                        libcap-dev subversion python2.7
+                        libcap-dev python2.7
+
+# Python2 needs to be available as python for some configure scripts, which is not the case in Ubuntu 20.04
+if [ ! -e /usr/bin/python ] ; then
+  sudo ln -s /usr/bin/python2.7 /usr/bin/python
+fi
 
 if [ ! -e "$BUILDDIR/llvm" ]; then
-  svn co https://llvm.org/svn/llvm-project/llvm/tags/RELEASE_342/final "$BUILDDIR/llvm"
-  svn co https://llvm.org/svn/llvm-project/cfe/tags/RELEASE_342/final "$BUILDDIR/llvm/tools/clang"
-  svn co https://llvm.org/svn/llvm-project/libcxx/tags/RELEASE_342/final "$BUILDDIR/llvm/projects/libcxx"
+  git clone --branch llvmorg-3.4.2 --depth 1 https://github.com/llvm/llvm-project "$BUILDDIR/llvm-project"
+  mv "$BUILDDIR/llvm-project/llvm" "$BUILDDIR/llvm"
+  mv "$BUILDDIR/llvm-project/clang" "$BUILDDIR/llvm/tools/clang"
+  mv "$BUILDDIR/llvm-project/libcxx" "$BUILDDIR/llvm/projects/libcxx"
+  rm -rf "$BUILDDIR/llvm-project"
   pushd "$BUILDDIR/llvm"
     CXXFLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" \
         ./configure --enable-optimized --disable-assertions \
@@ -292,6 +334,11 @@ if [ ! -e "$BUILDDIR/klee-uclibc-binary" ]; then
 
     # Use our minimalistic config
     cp "$VNDSDIR/setup/klee-uclibc.config" '.config'
+
+    # Use our patches
+    for f in "$VNDSDIR/setup/uclibc/"* ; do
+      cat "$f" >> "libc/stdio/$(basename "$f")"
+    done
 
     make clean
     make -j$(nproc)
@@ -320,7 +367,7 @@ if [ ! -e "$BUILDDIR/z3" ]; then
   git clone --depth 1 --branch z3-4.5.0 \
             https://github.com/Z3Prover/z3 "$BUILDDIR/z3"
   pushd "$BUILDDIR/z3"
-    python scripts/mk_make.py --ml -p "$BUILDDIR/z3/build"
+    python2 scripts/mk_make.py --ml -p "$BUILDDIR/z3/build"
     pushd build
       make -k -j$(nproc) || true
       # -jN here may break the make (hidden deps or something)
@@ -329,7 +376,7 @@ if [ ! -e "$BUILDDIR/z3" ]; then
 
       # Weird, but required sometimes
       # Remove the outdated libz3.so
-      sudo apt-get remove  libz3-dev || true
+      sudo apt-get remove -y libz3-dev || true
       sudo rm -f /usr/lib/x86_64-linux-gnu/libz3.so || true
       sudo rm -f /usr/lib/x86_64-linux-gnu/libz3.so.4 || true
       sudo rm -f /usr/lib/libz3.so || true
@@ -386,6 +433,11 @@ if [ ! -e "$BUILDDIR/klee-uclibc" ]; then
 
     # Use our minimalistic config
     cp "$VNDSDIR/setup/klee-uclibc.config" '.config'
+
+    # Use our patches
+    for f in "$VNDSDIR/setup/uclibc/"* ; do
+      cat "$f" >> "libc/stdio/$(basename "$f")"
+    done
 
     make -j$(nproc)
   popd

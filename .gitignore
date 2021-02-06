@@ -36,4 +36,3 @@ klee-last
 .vscode/*
 *.vfmanifest
 fspec_gen.ml
-*kdev4*

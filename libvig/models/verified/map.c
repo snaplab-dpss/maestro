@@ -115,12 +115,11 @@ __attribute__((noinline)) int map_get(struct Map *map, void *key,
   // To avoid symbolic-pointer-dereference,
   // consciously trace "map" as a simple value.
   klee_trace_param_i32((uint32_t)map, "map");
+
   klee_trace_param_tagged_ptr(key, map->key_size, "key", map->key_type,
                               TD_BOTH);
   klee_trace_param_ptr(value_out, sizeof(int), "value_out");
-  
   TRACE_KEY_FIELDS(key, map);
-
   for (int n = 0; n < map->next_unclaimed_entry; ++n) {
     if (map->keq(key, map->key_copyp[n])) {
       if (map->key_deleted[n]) {

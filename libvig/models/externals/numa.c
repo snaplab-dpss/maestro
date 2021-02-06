@@ -44,8 +44,19 @@ void numa_bitmask_free(struct bitmask *bmp) {
   free(bmp);
 }
 
-long get_mempolicy(int *policy, const unsigned long *nmask,
-                   unsigned long maxnode, void *addr, int flags) {
+// The constness of 'nmask' and type of 'flags' changed between Ubuntu 18.04 and Ubuntu 20.04
+long get_mempolicy(int *policy,
+#ifndef NUMA_GET_MEMPOLICY_UNSIGNED_FLAGS
+const
+#endif
+                   unsigned long *nmask,
+                   unsigned long maxnode, void *addr,
+#ifdef NUMA_GET_MEMPOLICY_UNSIGNED_FLAGS
+unsigned flags
+#else
+int flags
+#endif
+) {
   // http://man7.org/linux/man-pages/man2/get_mempolicy.2.html
   if (flags == 0) {
     // When flags is 0, addr must be specified as NULL.
@@ -62,6 +73,16 @@ long get_mempolicy(int *policy, const unsigned long *nmask,
     // errno is set to indicate the error.
     return 0;
   }
-
+  if ((flags & MPOL_F_ADDR) == MPOL_F_ADDR && (flags & MPOL_F_NODE) == MPOL_F_NODE) {
+    // "If flags specifies both MPOL_F_NODE and MPOL_F_ADDR, get_mempolicy()
+    // will return the node ID of the node on which the address addr is
+    // allocated into the location pointed to by mode. If no page has yet
+    // been allocated for the specified address, get_mempolicy() will
+    // allocate a page as if the thread had performed a read (load) access
+    // to that address, and return the ID of the node where that page was
+    // allocated."
+    // The only node we can ever allocate memory on is 0
+    return 0;
+  }
   klee_abort();
 }

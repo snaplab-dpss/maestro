@@ -2,10 +2,13 @@ This repository contains the Vigor verification toolchain and network functions 
 
 # Machine prerequisites
 
-Our scripts assume you are using Ubuntu 18.04, with an active Internet connection to download dependencies.
+Our scripts assume you are using Ubuntu 18.04 or 20.04, with an active Internet connection to download dependencies.
 Older Ubuntus, or other Debian-based distros, may work but have not been tested.
 
-As an alternative to installing the dependencies on your own machine, we provide a Docker image: `dslabepfl/vigor`.
+> :information_source: If you run the scripts in a Docker container, launch it as `--privileged` to allow opam to create namespaces. (see ocaml/opam#3498)
+
+As an alternative to installing the dependencies on your own machine, we provide a Docker image: `dslabepfl/vigor-20.08`.
+(The image `dslabepfl/vigor` corresponding to the artifact-evaluated version, using DPDK 17.11, is still available.)
 However, you must still use Ubuntu 18.04 as a host, since the guest uses the host's kernel and DPDK needs kernel headers to compile.
 This image can be generated with the `./Docker-build.sh` script.
 
@@ -118,7 +121,7 @@ Besides the NF folders mentioned above, the repository contains:
 - `codegen`: Code generators, used as part of the Vigor build process
 - `doc`: Documentation files
 - `grub.cfg`, `linker.ld`, `pxe-boot.sh`: NFOS-related files
-- `libvig`: The libVig folder, containing `verified` code, `models`, and the NFOS `kernel`
+- `libvig`: The libVig folder, containing `verified` code, `proof` code, `models`, and the NFOS `kernel`
 - `nf.{h,c}`, `nf-util.{h,c}`, `nf-log.h`: Skeleton code for Vigor NFs
 - `setup*`: Setup script and related files
 - `template`: Template for new Vigor NFs (see "Create your own Vigor NF" above)
@@ -229,12 +232,12 @@ We depend on, and are grateful for:
 
 - [DPDK](https://www.dpdk.org)
 - [FastClick](https://github.com/tbarbette/fastclick)
-- [KLEE](https://klee.github.io), with our modifications available as [a repository in the same GitHub organization](https://github.com/vignat/klee)
+- [KLEE](https://klee.github.io), with our modifications available as [a repository in the same GitHub organization](https://github.com/vigor-nf/klee)
 - [KLEE-uClibc](https://github.com/klee/klee-uclibc)
 - [Libmoon](https://github.com/libmoon/libmoon) and its associated [MoonGen](https://github.com/emmericp/MoonGen)
 - [OCaml](https://ocaml.org)
 - [Python](https://www.python.org)
-- [VeriFast](https://people.cs.kuleuven.be/~bart.jacobs/verifast), with our modifications available as [a repository in the same GitHub organization](https://github.com/vignat/verifast)
+- [VeriFast](https://people.cs.kuleuven.be/~bart.jacobs/verifast), with our modifications available as [a repository in the same GitHub organization](https://github.com/vigor-nf/verifast)
 - [Z3](https://github.com/Z3Prover/z3/wiki)
 
 
