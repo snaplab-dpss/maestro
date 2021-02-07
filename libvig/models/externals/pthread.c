@@ -43,6 +43,7 @@ int pthread_getaffinity_np(pthread_t thread, size_t cpusetsize,
     CPU_SET(0, cpuset);
   }
 
+
   return ret;
 }
 
