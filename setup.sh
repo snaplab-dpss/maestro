@@ -384,6 +384,7 @@ if [ ! -e "$BUILDDIR/z3" ]; then
       sudo ldconfig
       # Install it in .opam as well, VeriFast wants it there...
       ln -fs /usr/lib/libz3.so ~/.opam/4.06.0/.
+      echo 'Z3_DIR='"$BUILDDIR/z3"'' >> "$PATHSFILE"
     popd
   popd
 fi
@@ -472,7 +473,23 @@ if [ ! -e "$BUILDDIR/klee" ]; then
   popd
 fi
 
+# ====
+# libR3S
+# ====
 
+sudo apt-get install -y libsctp-dev
+if [ ! -e "$BUILDDIR/libr3s" ]; then
+  git clone --depth 1 https://github.com/fchamicapereira/libr3s.git "$BUILDDIR/libr3s"
+  pushd "$BUILDDIR/libr3s"
+    rm -rf build
+    mkdir build
+    pushd build
+      ../build.sh
+      echo "export R3S_DIR=$BUILDDIR/libr3s" >> "$PATHSFILE"
+      . "$PATHSFILE"
+    popd
+  popd
+fi
 
 # =====
 # Vigor
