@@ -20,7 +20,7 @@ before-maestro:
 
 maestro: before-maestro $(BUILD)/dependency.o $(BUILD)/libvig_access.o $(BUILD)/rss_config_builder.o $(BUILD)/constraint.o \
 	$(BUILD)/parser.o $(BUILD)/logger.o
-	$(MAESTRO_CC) $(MAESTRO_SRCS_DIR)/parse-libvig-access.cpp \
+	$(MAESTRO_CC) $(MAESTRO_SRCS_DIR)/main.cpp \
 	-o $(BUILD)/rss-config-from-lvas                	      \
 	$(BUILD)/dependency.o                           	      \
 	$(BUILD)/libvig_access.o                        	      \

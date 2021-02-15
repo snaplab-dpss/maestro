@@ -83,27 +83,27 @@ public:
     fill_libvig_access_constraints(trimmed_accesses);
     analyse_dchain_interpretations(trimmed_accesses);
 
-    Logger::log() << "\n";
-    Logger::log() << "Packet field dependencies:";
-    Logger::log() << "\n";
+    Logger::debug() << "\n";
+    Logger::debug() << "Packet field dependencies:";
+    Logger::debug() << "\n";
     for (auto &pf : unique_packet_fields_dependencies) {
-      Logger::log() << "  " << R3S::R3S_pf_to_string(pf);
-      Logger::log() << "\n";
+      Logger::debug() << "  " << R3S::R3S_pf_to_string(pf);
+      Logger::debug() << "\n";
     }
 
-    Logger::log() << "\n";
-    Logger::log() << "Devices:";
-    Logger::log() << "\n";
+    Logger::debug() << "\n";
+    Logger::debug() << "Devices:";
+    Logger::debug() << "\n";
     for (const auto &device : unique_devices) {
-      Logger::log() << "  " << device;
-      Logger::log() << "\n";
+      Logger::debug() << "  " << device;
+      Logger::debug() << "\n";
     }
 
     load_rss_config_options();
     generate_solver_constraints();
     optimize_constraints();
 
-    Logger::log() << "\nR3S configuration:\n" << R3S::R3S_cfg_to_string(cfg)
+    Logger::debug() << "\nR3S configuration:\n" << R3S::R3S_cfg_to_string(cfg)
                   << "\n";
   }
 

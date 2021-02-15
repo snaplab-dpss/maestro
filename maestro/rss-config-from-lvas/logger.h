@@ -47,22 +47,25 @@ private:
 
 private:
   Logger(const Level &_level) : stream(nullptr), level(_level) {
-    stream.rdbuf(std::cout.rdbuf());
-
     switch (_level) {
       case DEBUG:
+        stream.rdbuf(std::cerr.rdbuf());
         color = Colors::GREEN;
         break;
       case LOG:
+        stream.rdbuf(std::cout.rdbuf());
         color = Colors::WHITE;
         break;
       case WARNING:
+        stream.rdbuf(std::cerr.rdbuf());
         color = Colors::CYAN;
         break;
       case ERROR:
+        stream.rdbuf(std::cerr.rdbuf());
         color = Colors::RED_BRIGHT;
         break;
       default:
+        stream.rdbuf(std::cerr.rdbuf());
         color = Colors::WHITE;
     }
   }
@@ -78,9 +81,9 @@ template <typename T> Logger &operator<<(Logger &logger, T &&t) {
   if (logger.level < Logger::MINIMUM_LOG_LEVEL)
     return logger;
 
-  logger.stream << logger.color;
+  //logger.stream << logger.color;
   logger.stream << std::forward<T>(t);
-  logger.stream << Colors::RESET;
+  //logger.stream << Colors::RESET;
   logger.stream.flush();
 
   return logger;

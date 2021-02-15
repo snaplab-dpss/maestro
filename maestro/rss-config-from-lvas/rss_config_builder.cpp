@@ -40,9 +40,9 @@ void RSSConfigBuilder::load_rss_config_options() {
   R3S::R3S_cfg_set_number_of_keys(cfg, unique_devices.size());
 
   if (libvig_access_constraints.size() == 0) {
-    Logger::log() << "No constraints. Configuring RSS with every possible "
+    Logger::debug() << "No constraints. Configuring RSS with every possible "
                      "option available.";
-    Logger::log() << "\n";
+    Logger::debug() << "\n";
 
     for (int iopt = R3S::R3S_FIRST_OPT; iopt <= R3S::R3S_LAST_OPT; iopt++) {
       auto opt = static_cast<R3S::R3S_opt_t>(iopt);
@@ -323,8 +323,8 @@ void RSSConfigBuilder::build_rss_config() {
   R3S::R3S_cfg_set_user_data(cfg, (void *)&constraints);
 
   if (constraints.size() == 0) {
-    Logger::log() << "No constraints. Generating random keys.";
-    Logger::log() << "\n";
+    Logger::debug() << "No constraints. Generating random keys.";
+    Logger::debug() << "\n";
 
     for (unsigned i = 0; i < cfg->n_keys; i++) {
       R3S::R3S_key_rand(cfg, keys[i]);
@@ -336,8 +336,8 @@ void RSSConfigBuilder::build_rss_config() {
     return;
   }
 
-  Logger::log() << "Running the solver now. This might take a while...";
-  Logger::log() << "\n";
+  Logger::debug() << "Running the solver now. This might take a while...";
+  Logger::debug() << "\n";
 
   status = R3S::R3S_keys_fit_cnstrs(
       cfg, &RSSConfigBuilder::make_solver_constraints, keys);
