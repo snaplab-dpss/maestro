@@ -109,7 +109,7 @@ public:
 
   const R3S::R3S_cfg_t &get_cfg() const { return cfg; }
   const std::vector<LibvigAccessConstraint> &get_libvig_access_constraints() const { return libvig_access_constraints; }
-  const RSSConfig &get_generated_rss_cfg() const { return rss_config; }
+  RSSConfig &get_generated_rss_cfg() { return rss_config; }
 
   static R3S::Z3_ast ast_replace(R3S::Z3_context ctx, R3S::Z3_ast root,
                                  R3S::Z3_ast target, R3S::Z3_ast dst);

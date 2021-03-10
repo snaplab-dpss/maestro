@@ -29,7 +29,7 @@ LVA = f"{BUILD_DIR}/report.lva"
 LVA_DEBUG = f"{BUILD_DIR}/report.txt"
 
 def symbex(nf):
-	#os.system(f"cd {nf}; make symbex")
+	# os.system(f"cd {nf}; make symbex")
 
 	call_paths = glob.glob(f"{nf}/klee-last/*.call_path")
 	call_paths.sort(key=lambda f: int(re.sub('\D', '', f)))
@@ -45,11 +45,11 @@ def synthesize_nf(nf, call_paths):
 	os.system(f"{BDD_TO_C_CODE} {BDD_TO_C_CODE_ARGS}")
 
 def stitch_synthesized_nf():
-	boilerplate_file = open(BOILERPLATE, mode='r')
+	boilerplate_file    = open(BOILERPLATE, mode='r')
 	boilerplate_content = boilerplate_file.read()
 	boilerplate_file.close()
 
-	synthesized_file = open(SYNTHESIZED, mode='r')
+	synthesized_file    = open(SYNTHESIZED, mode='r')
 	synthesized_content = synthesized_file.read()
 	synthesized_file.close()
 
@@ -60,16 +60,16 @@ def stitch_synthesized_nf():
 	parallel_file.close()
 
 def analyze_call_paths(nf, call_paths):
-	ANALYZE = f"{KLEE_DIR}/build/bin/analyse-libvig-call-paths"
-	ANALYZE_ARGS = ' '.join(call_paths)
+	ANALYZE 		= f"{KLEE_DIR}/build/bin/analyse-libvig-call-paths"
+	ANALYZE_ARGS	= ' '.join(call_paths)
 
-	#os.system(f"{ANALYZE} {ANALYZE_ARGS} > {LVA} 2> {LVA_DEBUG}")
+	# os.system(f"{ANALYZE} {ANALYZE_ARGS} > {LVA} 2> {LVA_DEBUG}")
 	os.system(f"{ANALYZE} {ANALYZE_ARGS} > {LVA}")
 
 def rss_conf_from_lvas():
-	RSS_CONF_FROM_LVA = f"{BUILD_DIR}/rss-config-from-lvas"
-	RSS_CONF_FROM_LVA_ARGS = f"{BUILD_DIR}/report.lva"
-	RSS_CONF_FROM_LVA_OUT = f"{BUILD_DIR}/rss_conf.txt"
+	RSS_CONF_FROM_LVA 		= f"{BUILD_DIR}/rss-config-from-lvas"
+	RSS_CONF_FROM_LVA_ARGS	= f"{BUILD_DIR}/report.lva"
+	RSS_CONF_FROM_LVA_OUT	= f"{BUILD_DIR}/rss_conf.txt"
 
 	os.system(f"{RSS_CONF_FROM_LVA} {RSS_CONF_FROM_LVA_ARGS} > {RSS_CONF_FROM_LVA_OUT}")
 
@@ -84,5 +84,6 @@ if __name__ == "__main__":
 	call_paths = symbex(args.nf)
 	analyze_call_paths(args.nf, call_paths)
 	rss_conf_from_lvas()
-	#synthesize_nf(args.nf, call_paths)
-	#stitch_synthesized_nf()
+	
+	# synthesize_nf(args.nf, call_paths)
+	# stitch_synthesized_nf()
