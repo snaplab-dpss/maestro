@@ -48,13 +48,13 @@ private:
 private:
   Logger(const Level &_level) : stream(nullptr), level(_level) {
     switch (_level) {
-      case DEBUG:
-        stream.rdbuf(std::cerr.rdbuf());
-        color = Colors::GREEN;
-        break;
       case LOG:
         stream.rdbuf(std::cout.rdbuf());
         color = Colors::WHITE;
+        break;
+      case DEBUG:
+        stream.rdbuf(std::cerr.rdbuf());
+        color = Colors::GREEN;
         break;
       case WARNING:
         stream.rdbuf(std::cerr.rdbuf());

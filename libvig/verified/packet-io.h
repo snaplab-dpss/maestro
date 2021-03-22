@@ -26,8 +26,6 @@ struct rte_mempool;
                     list<pair<int8_t*, int> > missing_chunks);
   @*/
 
-void packet_io_init();
-
 // The main IO primitive.
 void packet_borrow_next_chunk(void *p, size_t length, void **chunk);
 /*@ requires packetp(p, ?unread, ?mc) &*&

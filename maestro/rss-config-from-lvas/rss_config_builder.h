@@ -104,7 +104,7 @@ public:
     optimize_constraints();
 
     Logger::debug() << "\nR3S configuration:\n" << R3S::R3S_cfg_to_string(cfg)
-                  << "\n";
+                    << "\n";
   }
 
   const R3S::R3S_cfg_t &get_cfg() const { return cfg; }
@@ -115,7 +115,7 @@ public:
                                  R3S::Z3_ast target, R3S::Z3_ast dst);
 
   static R3S::Z3_ast ast_equal_association(R3S::Z3_context ctx, R3S::Z3_ast root,
-                                                             R3S::Z3_ast target);
+                                           R3S::Z3_ast target);
 
   void build_rss_config();
 

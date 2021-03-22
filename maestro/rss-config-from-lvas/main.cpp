@@ -37,10 +37,12 @@ int main(int argc, char *argv[]) {
   auto keys = config.get_keys();
 
   for (auto i = 0; i < config.get_n_keys(); i++) {
-    Logger::log() << "Device ";
-    Logger::log() << i;
-    Logger::log() << ": \n";
-    Logger::log() << R3S::R3S_key_to_string(keys[i]);
-    Logger::log() << "\n";
+    Logger::debug() << "Device ";
+    Logger::debug() << i;
+    Logger::debug() << ": \n";
+    Logger::debug() << R3S::R3S_key_to_string(keys[i]);
+    Logger::debug() << "\n";
   }
+
+  config.dump();
 }

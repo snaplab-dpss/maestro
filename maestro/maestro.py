@@ -21,9 +21,10 @@ MAESTRO_DIR=pathlib.Path(__file__).parent.absolute()
 
 BUILD_DIR = f"{MAESTRO_DIR}/build/maestro"
 
-BOILERPLATE = f"{MAESTRO_DIR}/boilerplate.c"
-SYNTHESIZED = f"{BUILD_DIR}/nf.process.gen.c"
-SYNTHESIZED_XML = f"{BUILD_DIR}/nf.process.gen.xml"
+#BOILERPLATE = f"{MAESTRO_DIR}/boilerplate.c"
+BOILERPLATE = f"{MAESTRO_DIR}/boilerplate/sequential.c"
+SYNTHESIZED = f"{BUILD_DIR}/nf_process.gen.c"
+SYNTHESIZED_XML = f"{BUILD_DIR}/nf_process.gen.xml"
 PARALLEL_NF = f"{BUILD_DIR}/nf.c"
 LVA = f"{BUILD_DIR}/report.lva"
 LVA_DEBUG = f"{BUILD_DIR}/report.txt"
@@ -36,13 +37,28 @@ def symbex(nf):
 
 	return call_paths
 
-def synthesize_nf(nf, call_paths):
+def analyze_call_paths(nf, call_paths):
+	analyze 		= f"{KLEE_DIR}/build/bin/analyse-libvig-call-paths"
+	analyze_args	= ' '.join(call_paths)
+
+	# os.system(f"{analyze} {analyze_args} > {LVA} 2> {LVA_DEBUG}")
+	os.system(f"{analyze} {analyze_args} > {LVA}")
+
+def rss_conf_from_lvas():
+	rss_conf_from_lva 		= f"{BUILD_DIR}/rss-config-from-lvas"
+	rss_conf_from_lva_args	= f"{BUILD_DIR}/report.lva"
+	rss_conf_from_lva_out	= f"{BUILD_DIR}/rss_conf.txt"
+
+	code = os.system(f"{rss_conf_from_lva} {rss_conf_from_lva_args} > {rss_conf_from_lva_out}")
+	return code == 0
+
+def synthesize_nf(nf, call_paths, shared_nothing):
 	assert(call_paths)
 
-	BDD_TO_C_CODE = f"{KLEE_DIR}/build/bin/bdd-to-C-code"
-	BDD_TO_C_CODE_ARGS = f"-out={SYNTHESIZED} -xml={SYNTHESIZED_XML} {' '.join(call_paths)}"
+	bdd_to_c 		= f"{KLEE_DIR}/build/bin/bdd-to-c"
+	bdd_to_c_args	= f"-out={SYNTHESIZED} -xml={SYNTHESIZED_XML} {' '.join(call_paths)}"
 
-	os.system(f"{BDD_TO_C_CODE} {BDD_TO_C_CODE_ARGS}")
+	os.system(f"{bdd_to_c} {bdd_to_c_args}")
 
 def stitch_synthesized_nf():
 	boilerplate_file    = open(BOILERPLATE, mode='r')
@@ -59,20 +75,6 @@ def stitch_synthesized_nf():
 	parallel_file.write(parallel_content)
 	parallel_file.close()
 
-def analyze_call_paths(nf, call_paths):
-	ANALYZE 		= f"{KLEE_DIR}/build/bin/analyse-libvig-call-paths"
-	ANALYZE_ARGS	= ' '.join(call_paths)
-
-	# os.system(f"{ANALYZE} {ANALYZE_ARGS} > {LVA} 2> {LVA_DEBUG}")
-	os.system(f"{ANALYZE} {ANALYZE_ARGS} > {LVA}")
-
-def rss_conf_from_lvas():
-	RSS_CONF_FROM_LVA 		= f"{BUILD_DIR}/rss-config-from-lvas"
-	RSS_CONF_FROM_LVA_ARGS	= f"{BUILD_DIR}/report.lva"
-	RSS_CONF_FROM_LVA_OUT	= f"{BUILD_DIR}/rss_conf.txt"
-
-	os.system(f"{RSS_CONF_FROM_LVA} {RSS_CONF_FROM_LVA_ARGS} > {RSS_CONF_FROM_LVA_OUT}")
-
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description='Parallelize a Vigor NF.')
 	
@@ -83,7 +85,7 @@ if __name__ == "__main__":
 
 	call_paths = symbex(args.nf)
 	analyze_call_paths(args.nf, call_paths)
-	rss_conf_from_lvas()
+	shared_nothing = rss_conf_from_lvas()
 	
-	# synthesize_nf(args.nf, call_paths)
-	# stitch_synthesized_nf()
+	synthesize_nf(args.nf, call_paths, shared_nothing)
+	stitch_synthesized_nf()
