@@ -410,7 +410,7 @@ void LibvigAccessConstraint::check_incompatible_dependencies() {
       second_it != second_dependencies.end()) {
     Logger::error() << "Dependencies incompatible with RSS. Nothing we can do."
                     << "\n";
-    exit(0);
+    exit(1);
   }
 }
 

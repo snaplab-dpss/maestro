@@ -27,6 +27,10 @@
 #include "libvig/verified/tcpudp_hdr.h"
 #include "libvig/verified/vigor-time.h"
 
+#include "libvig/verified/double-chain.h"
+#include "libvig/verified/vector.h"
+#include "libvig/verified/map.h"
+
 /**********************************************
  * 
  *                  PACKET-IO
@@ -543,7 +547,7 @@ int MAIN(int argc, char** argv) {
     rte_eal_remote_launch((lcore_function_t *)worker_main, NULL, lcore_id);
   }
 
-  lcore_main();
+  worker_main();
 
   return 0;
 }

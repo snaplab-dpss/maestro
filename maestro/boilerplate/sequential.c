@@ -27,6 +27,10 @@
 #include "libvig/verified/tcpudp_hdr.h"
 #include "libvig/verified/vigor-time.h"
 
+#include "libvig/verified/double-chain.h"
+#include "libvig/verified/vector.h"
+#include "libvig/verified/map.h"
+
 /**********************************************
  * 
  *                  PACKET-IO

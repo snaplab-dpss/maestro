@@ -28,6 +28,10 @@
 #include "libvig/verified/tcpudp_hdr.h"
 #include "libvig/verified/vigor-time.h"
 
+#include "libvig/unverified/double-chain-locks.h"
+#include "libvig/verified/vector.h"
+#include "libvig/verified/map.h"
+
 /**********************************************
  * 
  *                  NF-LOCKS
@@ -518,8 +522,8 @@ static void worker_main(void) {
     rte_exit(EXIT_FAILURE, "Error initializing NF");
   }
 
-  bool* write_attempt = &RTE_PER_LCORE(write_attempt);
-  bool* write_state = &RTE_PER_LCORE(write_state);
+  bool* write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool* write_state_ptr = &RTE_PER_LCORE(write_state);
 
   NF_INFO("Core %u forwarding packets.", rte_lcore_id());
 
@@ -542,15 +546,15 @@ static void worker_main(void) {
         packet_state_total_length(data, &(mbufs[n]->pkt_len));
         vigor_time_t VIGOR_NOW = current_time();
 
-        *write_attempt = false;
-        *write_state = false;
+        *write_attempt_ptr = false;
+        *write_state_ptr = false;
 
         nf_lock_block_writes(&nf_lock);
         uint16_t dst_device = nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
         nf_return_all_chunks(data);
 
-        if (*write_attempt) {
-          *write_state = true;
+        if (*write_attempt_ptr) {
+          *write_state_ptr = true;
 
           nf_lock_write_lock(&nf_lock);
           uint16_t dst_device = nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
@@ -639,7 +643,7 @@ int MAIN(int argc, char** argv) {
     rte_eal_remote_launch((lcore_function_t *)worker_main, NULL, lcore_id);
   }
 
-  lcore_main();
+  worker_main();
 
   return 0;
 }

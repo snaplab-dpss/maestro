@@ -22,11 +22,9 @@ private:
   R3S::R3S_key_t *keys;
   unsigned n_keys;
 
-  RSSConfig() { keys = NULL; options_translator_init(); }
-
   void add_option(const R3S::R3S_opt_t &option) { options.push_back(option); }
 
-  void set_keys(const R3S::R3S_key_t *_keys, const unsigned &size) {
+  void set_keys(R3S::R3S_key_t *_keys, const unsigned &size) {
     keys = new R3S::R3S_key_t[size]();
 
     n_keys = size;
@@ -52,6 +50,8 @@ private:
   }
 
 public:
+  RSSConfig() { keys = NULL; options_translator_init(); }
+
   RSSConfig(RSSConfig& config) : RSSConfig() {
     if (config.get_keys()) {
       set_keys(config.get_keys(), config.get_n_keys());
@@ -59,6 +59,29 @@ public:
 
     options = config.options;
   }
+
+  void randomize(unsigned int devices) {
+    R3S::R3S_cfg_t cfg;
+
+    R3S::R3S_cfg_init(&cfg);
+    R3S::R3S_cfg_set_skew_analysis(cfg, false);
+
+    for (int i = R3S::R3S_FIRST_OPT; i <= R3S::R3S_LAST_OPT; i++) {
+      auto opt = static_cast<R3S::R3S_opt_t>(i);
+      add_option(opt);
+      R3S::R3S_cfg_load_opt(cfg, opt);
+    }
+
+    keys = new R3S::R3S_key_t[devices]();
+    n_keys = devices;
+
+    for (auto device = 0; device < devices; device++) {
+      R3S::R3S_key_t key;
+      R3S::R3S_key_rand(cfg, key);
+      std::copy_n(key, KEY_SIZE, keys[device]);
+    }
+  }
+
   const std::vector<R3S::R3S_opt_t> &get_options() const { return options; }
 
   unsigned get_n_keys() { return n_keys; }
@@ -105,5 +128,6 @@ public:
     if (keys != NULL)
       delete[] keys;
   }
+
 };
 }
