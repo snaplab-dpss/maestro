@@ -88,7 +88,7 @@ bool flow_manager_get_external(struct FlowManager *manager,
   memcpy((void *)out_flow, (void *)key, sizeof(struct FlowId));
   vector_return(manager->state->fv, index, key);
 
-  // dchain_rejuvenate_index(manager->state->heap, index, time);
+  //dchain_rejuvenate_index(manager->state->heap, index, time);
 
   return true;
 }

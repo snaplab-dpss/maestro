@@ -27,15 +27,6 @@ struct nf_config config;
 
 struct State *mac_tables;
 
-int bridge_expire_entries(vigor_time_t time) {
-  assert(time >= 0); // we don't support the past
-  assert(sizeof(vigor_time_t) <= sizeof(uint64_t));
-  uint64_t time_u = (uint64_t)time; // OK because of the two asserts
-  vigor_time_t last_time = time_u - config.expiration_time * 1000; // us to ns
-  return expire_items_single_map(mac_tables->dyn_heap, mac_tables->dyn_keys,
-                                 mac_tables->dyn_map, last_time);
-}
-
 int bridge_get_device(struct rte_ether_addr *dst, uint16_t src_device) {
   int device = -1;
   struct StaticKey k;
@@ -45,10 +36,6 @@ int bridge_get_device(struct rte_ether_addr *dst, uint16_t src_device) {
   if (present) {
     return device;
   }
-#ifdef KLEE_VERIFICATION
-  map_reset(mac_tables->dyn_map); // simplify the traces for easy validation
-#endif                            // KLEE_VERIFICATION
-
   return -1;
 }
 
@@ -235,8 +222,6 @@ bool nf_init(void) {
 
 int nf_process(uint16_t device, uint8_t* buffer, uint16_t buffer_length, vigor_time_t now) {
   struct rte_ether_hdr *rte_ether_header = nf_then_get_rte_ether_header(buffer);
-
-  bridge_expire_entries(now);
 
   int forward_to = bridge_get_device(&rte_ether_header->d_addr, device);
 

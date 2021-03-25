@@ -22,6 +22,7 @@
 #include <rte_udp.h>
 #include <rte_errno.h>
 #include <rte_lcore.h>
+#include <rte_malloc.h>
 
 #include "libvig/verified/boilerplate-util.h"
 #include "libvig/verified/tcpudp_hdr.h"
@@ -122,12 +123,16 @@ struct rte_ether_hdr;
 RTE_DEFINE_PER_LCORE(void **, chunks_borrowed);
 RTE_DEFINE_PER_LCORE(size_t, chunks_borrowed_num);
 
+// this is doing nothing here, just making compilation easier
+RTE_DEFINE_PER_LCORE(bool, write_attempt);
+RTE_DEFINE_PER_LCORE(bool, write_state);
+
 void nf_util_init() {
   size_t *chunks_borrowed_num_ptr = &RTE_PER_LCORE(chunks_borrowed_num);
   void** *chunks_borrowed_ptr = &RTE_PER_LCORE(chunks_borrowed);
 
   (*chunks_borrowed_num_ptr) = 0;
-  (*chunks_borrowed_ptr) = (void**) rte_malloc(sizeof(void*) * MAX_N_CHUNKS);
+  (*chunks_borrowed_ptr) = (void**) rte_malloc(NULL, sizeof(void*) * MAX_N_CHUNKS, 64);
 }
 
 static inline void *nf_borrow_next_chunk(void *p, size_t length) {
@@ -170,6 +175,18 @@ static inline struct rte_ether_hdr *nf_then_get_rte_ether_header(void *p) {
   return (struct rte_ether_hdr *)hdr;
 }
 
+bool nf_has_rte_ipv4_header(struct rte_ether_hdr *header) {
+  return header->ether_type == rte_be_to_cpu_16(RTE_ETHER_TYPE_IPV4);
+}
+
+bool nf_has_tcpudp_header(struct rte_ipv4_hdr *header) {
+  // NOTE: Use non-short-circuiting version of OR, so that symbex doesn't fork
+  //       since here we only care of it's UDP or TCP, not if it's a specific
+  //       one
+  return header->next_proto_id == IPPROTO_TCP |
+         header->next_proto_id == IPPROTO_UDP;
+}
+
 static inline struct rte_ipv4_hdr *
 nf_then_get_rte_ipv4_header(void *rte_ether_header_, void *p, uint8_t **ip_options) {
   struct rte_ether_hdr *rte_ether_header = (struct rte_ether_hdr *)rte_ether_header_;
@@ -210,18 +227,6 @@ nf_then_get_tcpudp_header(struct rte_ipv4_hdr *ip_header, void *p) {
   CHUNK_LAYOUT(p, tcpudp_hdr, tcpudp_fields);
   return (struct tcpudp_hdr *)nf_borrow_next_chunk(p,
                                                    sizeof(struct tcpudp_hdr));
-}
-
-bool nf_has_rte_ipv4_header(struct rte_ether_hdr *header) {
-  return header->ether_type == rte_be_to_cpu_16(RTE_ETHER_TYPE_IPV4);
-}
-
-bool nf_has_tcpudp_header(struct rte_ipv4_hdr *header) {
-  // NOTE: Use non-short-circuiting version of OR, so that symbex doesn't fork
-  //       since here we only care of it's UDP or TCP, not if it's a specific
-  //       one
-  return header->next_proto_id == IPPROTO_TCP |
-         header->next_proto_id == IPPROTO_UDP;
 }
 
 void nf_set_rte_ipv4_udptcp_checksum(struct rte_ipv4_hdr *ip_header,
@@ -348,8 +353,6 @@ int nf_process(uint16_t device, uint8_t* buffer, uint16_t packet_length, vigor_t
       for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT; VIGOR_DEVICE++) {
 #  define VIGOR_LOOP_END
 
-struct nf_config config;
-
 // Do the opposite: we want batching!
 static const uint16_t RX_QUEUE_SIZE = 128;
 static const uint16_t TX_QUEUE_SIZE = 128;
@@ -448,14 +451,14 @@ static void worker_main(void) {
 
   NF_INFO("Core %u forwarding packets.", rte_lcore_id());
 
-  if (rte_eth_dev_count() != 2) {
+  if (rte_eth_dev_count_avail() != 2) {
     printf("We assume there will be exactly 2 devices for our simple batching implementation.");
     exit(1);
   }
   NF_INFO("Running with batches, this code is unverified!");
 
   while(1) {
-    unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count();
+    unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();
     for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT; VIGOR_DEVICE++) {
       struct rte_mbuf* mbufs[VIGOR_BATCH_SIZE];
       uint16_t rx_count = rte_eth_rx_burst(VIGOR_DEVICE, queue_id, mbufs, VIGOR_BATCH_SIZE);
@@ -500,16 +503,12 @@ int MAIN(int argc, char** argv) {
   nf_util_init();
   packet_io_init();
 
-  // NF-specific config
-  nf_config_init(argc, argv);
-  nf_config_print();
-
   // Create a memory pool
   unsigned nb_devices = rte_eth_dev_count_avail();
 
   char MBUF_POOL_NAME[20];
   struct rte_mempool **mbuf_pools;
-  mbuf_pools = (struct rte_mempool**) rte_malloc(sizeof(struct rte_mempool*) * rte_lcore_count());
+  mbuf_pools = (struct rte_mempool**) rte_malloc(NULL, sizeof(struct rte_mempool*) * rte_lcore_count(), 64);
 
   unsigned lcore_id;
   unsigned lcore_idx = 0;

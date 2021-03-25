@@ -17,6 +17,8 @@ SHELL := /bin/bash -O extglob -O globstar -c
 # somehow because of DPDK makefile magic wildcards mess up everything here,
 # so we ask echo to expand those
 SRCS-y := $(shell echo $(SELF_DIR)/libvig/verified/*.c)
+SRCS-y := $(shell python3 -c "print(' '.join(list(filter(lambda k: 'packet' not in k, '$(SRCS-y)'.split(' ')))))")
+SRCS-y += $(shell echo $(SELF_DIR)/libvig/unverified/*.c)
 SRCS-y += $(NF_FILES)
 # Compiler flags
 CFLAGS += -I $(SELF_DIR)
@@ -27,15 +29,16 @@ CFLAGS += -O0 -g -rdynamic -DENABLE_LOG -Wfatal-errors
 
 include $(RTE_SDK)/mk/rte.extapp.mk
 
+# Cleanup
+CLEAN_BUILD_ARTIFACTS_COMMAND := rm -rf *.bc *.os *.ll
+CLEAN_ALL_COMMAND := $(CLEAN_BUILD_ARTIFACTS_COMMAND) && rm -rf {loop,state}.{c,h} *.gen.{c,h}
+
 # Cleanup after ourselves, but don't shadow the existing DPDK target
 clean-vigor:
-	@echo "tudo clean vigor"
+	@$(CLEAN_ALL_COMMAND)
 
 clean: clean-vigor
 
-todo:
-	@echo "todo"
-
 # Built-in DPDK default target, make it aware of autogen,
 # and make it clean every time because our dependency tracking is nonexistent...
-all: clean todo
+all: clean

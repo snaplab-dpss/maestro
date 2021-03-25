@@ -39,6 +39,19 @@ struct rte_eth_txmode {
   // we don't care about other members
 };
 
+/**
+ *  Simple flags are used for rte_eth_conf.rxmode.mq_mode.
+ */
+#define ETH_MQ_RX_RSS_FLAG  0x1
+
+enum rte_eth_rx_mq_mode {
+	/** None of DCB,RSS or VMDQ mode */
+	ETH_MQ_RX_NONE = 0,
+
+	/** For RX side, only RSS is on */
+	ETH_MQ_RX_RSS = ETH_MQ_RX_RSS_FLAG
+};
+
 struct rte_eth_conf {
   struct {
     uint8_t hw_strip_crc;
