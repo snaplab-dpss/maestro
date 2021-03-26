@@ -384,7 +384,7 @@ if [ ! -e "$BUILDDIR/z3" ]; then
       sudo ldconfig
       # Install it in .opam as well, VeriFast wants it there...
       ln -fs /usr/lib/libz3.so ~/.opam/4.06.0/.
-      echo 'Z3_DIR='"$BUILDDIR/z3"'' >> "$PATHSFILE"
+      echo "export Z3_DIR=$BUILDDIR/z3" >> "$PATHSFILE"
       . "$PATHSFILE"
     popd
   popd
