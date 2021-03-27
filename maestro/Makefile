@@ -1,5 +1,5 @@
 MAESTRO_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-MAESTRO_CC=clang++ -std=c++11 -stdlib=libstdc++ -g
+MAESTRO_CC=g++ -std=c++11
 MAESTRO_SRCS_DIR := $(MAESTRO_DIR)/rss-config-from-lvas
 
 Z3_INCLUDE := -I$(Z3_DIR)/build/include

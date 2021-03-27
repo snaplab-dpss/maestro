@@ -467,6 +467,7 @@ if [ ! -e "$BUILDDIR/klee" ]; then
        ..
       make -j$(nproc)
       echo 'PATH='"$BUILDDIR/klee/build/bin"':$PATH' >> "$PATHSFILE"
+      echo "export KLEE_DIR=$BUILDDIR/klee" >> "$PATHSFILE"
       echo "export KLEE_INCLUDE=$BUILDDIR/klee/include" >> "$PATHSFILE"
       echo "export KLEE_BUILD_PATH=$BUILDDIR/klee/build" >> "$PATHSFILE"
       . "$PATHSFILE"

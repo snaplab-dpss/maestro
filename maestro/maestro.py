@@ -43,7 +43,7 @@ def build_maestro():
 	os.system("make maestro > /dev/null")
 
 def symbex(nf):
-	# os.system(f"cd {nf}; make symbex")
+	os.system(f"cd {nf}; make symbex")
 
 	call_paths = glob.glob(f"{nf}/klee-last/*.call_path")
 	call_paths.sort(key=lambda f: int(re.sub('\D', '', f)))
@@ -54,7 +54,6 @@ def analyze_call_paths(nf, call_paths):
 	analyze 		= f"{KLEE_DIR}/build/bin/analyse-libvig-call-paths"
 	analyze_args	= ' '.join(call_paths)
 
-	# os.system(f"{analyze} {analyze_args} > {LVA} 2> {LVA_DEBUG}")
 	os.system(f"{analyze} {analyze_args} > {LVA}")
 
 def rss_conf_from_lvas():
