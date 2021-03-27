@@ -4,8 +4,6 @@
 #include "libvig/verified/map.h"
 #include "libvig/verified/expirator.h"
 
-#include <linux/limits.h>
-#include <sys/types.h>
 #include <rte_ethdev.h>
 
 #include <assert.h>
@@ -116,7 +114,7 @@ struct LoadBalancedBackend lb_get_backend(struct LoadBalancer *balancer,
 
 void lb_process_heartbit(struct LoadBalancer *balancer,
                          struct LoadBalancedFlow *flow,
-                         struct ether_addr mac_addr, int nic,
+                         struct rte_ether_addr mac_addr, int nic,
                          vigor_time_t now) {
   int backend_index;
   if (map_get(balancer->state->ip_to_backend_id, &flow->src_ip,

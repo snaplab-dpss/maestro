@@ -3,26 +3,18 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-// DPDK needs these but doesn't include them. :|
-#include <linux/limits.h>
-#include <sys/types.h>
-
-#include <rte_common.h>
-#include <rte_ethdev.h>
-
-#include <cmdline_parse_etheraddr.h>
-
 #include "lb_config.h"
 #include "nf-util.h"
 #include "nf-log.h"
 
-#define PARSE_ERROR(format, ...)                                               \
-  nf_config_usage();                                                           \
-  rte_exit(EXIT_FAILURE, format, ##__VA_ARGS__);
+#define PARSE_ERROR(format, ...)          \
+  nf_config_usage();                      \
+  fprintf(stderr, format, ##__VA_ARGS__); \
+  exit(EXIT_FAILURE);
 
 void nf_config_init(int argc, char **argv) {
   // Init
-  uint16_t nb_devices = rte_eth_dev_count();
+  uint16_t nb_devices = rte_eth_dev_count_avail();
 
   struct option long_options[] = {
     { "flow-expiration", required_argument, NULL, 'x' },
@@ -92,8 +84,8 @@ void nf_config_init(int argc, char **argv) {
   optind = 1;
 
   // Fill in the mac addresses
-  config.device_macs = malloc(sizeof(struct ether_addr) * rte_eth_dev_count());
-  for (int i = 0; i < rte_eth_dev_count(); ++i) {
+  config.device_macs = malloc(sizeof(struct rte_ether_addr) * rte_eth_dev_count_avail());
+  for (int i = 0; i < rte_eth_dev_count_avail(); ++i) {
     rte_eth_macaddr_get(i, &config.device_macs[i]);
   }
 }

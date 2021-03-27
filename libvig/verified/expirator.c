@@ -1,6 +1,14 @@
 #include "expirator.h"
-#include <assert.h>
 
+#include <assert.h>
+#include <stdbool.h>
+
+#include <rte_per_lcore.h>
+
+#if LOCKS
+RTE_DECLARE_PER_LCORE(bool, write_attempt);
+RTE_DECLARE_PER_LCORE(bool, write_state);
+#endif
 
 /*@
   lemma void expire_0_indexes(dchain ch, vigor_time_t time)
@@ -34,6 +42,11 @@ int expire_items/*@<K1,K2,V> @*/(struct DoubleChain* chain,
             dmap_dchain_coherent<K1,K2,V>(nm, nch) &*&
             result == length(dchain_get_expired_indexes_fp(ch, time)); @*/
 {
+#if LOCKS
+  bool* write_attempt = &RTE_PER_LCORE(write_attempt);
+  bool* write_state = &RTE_PER_LCORE(write_state);
+#endif
+
   int count = 0;
   int index = -1;
   //@ expire_0_indexes(ch, time);
@@ -62,6 +75,12 @@ int expire_items/*@<K1,K2,V> @*/(struct DoubleChain* chain,
                   count <= length(dchain_get_expired_indexes_fp(ch, time)); @*/
     //@ decreases length(dchain_get_expired_indexes_fp(ch, time)) - count;
   {
+#if LOCKS
+    if (!*write_state) {
+      *write_attempt = true;
+      return 1;
+    }
+#endif
     /*@ dmap<K1,K2,V> cur_m = dmap_erase_all_fp
                                (m, take(count, dchain_get_expired_indexes_fp
                                                 (ch, time)),
@@ -130,6 +149,11 @@ int expire_items_single_map/*@ <kt> @*/(struct DoubleChain* chain,
             result == length(dchain_get_expired_indexes_fp(ch, time)) &*&
             true == forall2(nv, vaddrs, (kkeeper)(naddrs)); @*/
 {
+#if LOCKS
+  bool* write_attempt = &RTE_PER_LCORE(write_attempt);
+  bool* write_state = &RTE_PER_LCORE(write_state);
+#endif
+
   int count = 0;
   int index = -1;
   //@ expire_0_indexes(ch, time);
@@ -172,6 +196,12 @@ int expire_items_single_map/*@ <kt> @*/(struct DoubleChain* chain,
       @*/
     //@ decreases length(dchain_get_expired_indexes_fp(ch, time)) - count;
   {
+#if LOCKS
+    if (!*write_state) {
+      *write_attempt = true;
+      return 1;
+    }
+#endif
     /*@ mvc_coherent_bounds(cur_m, cur_v, cur_ch);
       @*/
     //@ dchain_oldest_allocated(cur_ch);

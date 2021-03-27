@@ -44,7 +44,8 @@ NF_FILES += state.c
 endif
 
 # Define this for the dpdk and nfos makefiles
-NF_ARGS := --no-shconf $(NF_DPDK_ARGS) -- $(NF_ARGS)
+# Strip spaces in case NF_DPDK_ARGS is not used
+NF_ARGS := $(strip --no-shconf --no-telemetry $(NF_DPDK_ARGS) -- $(NF_ARGS))
 
 ifeq (click,$(findstring click,$(shell pwd)))
 # Click baselines
@@ -75,7 +76,6 @@ autogen:
 	  $(SELF_DIR)/codegen/gen-loop-boilerplate.sh fspec_gen.ml; \
 	  fi; \
 	fi
-
 
 
 # ============

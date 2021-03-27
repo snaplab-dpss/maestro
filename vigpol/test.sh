@@ -17,19 +17,20 @@ function test_policer {
   RATE=$1
   BURST=$2
 
-  sudo ./build/app/nf \
+  sudo taskset -c 8 \
+      ./build/app/policer \
         --vdev "net_tap0,iface=test_wan" \
         --vdev "net_tap1,iface=test_lan" \
         --no-shconf -- \
-        --lan 1 \
-        --wan 0 \
+        --lan 3 \
+        --wan 2 \
         --rate $RATE \
         --burst $BURST \
         --capacity 65536 \
-        #>/dev/null 2>/dev/null &
+        >/dev/null 2>/dev/null &
   NF_PID=$!
 
-  while [ ! -f /sys/class/net/test_lan/tun_flags -o \
+  while [ ! -f /sys/class/net/test_lan/tun_flags -o
           ! -f /sys/class/net/test_lan/tun_flags ]; do
     echo "Waiting for NF to launch...";
     sleep 1;
@@ -66,7 +67,7 @@ function test_policer {
 
 
 make clean
-make ADDITIONAL_FLAGS="-DSTOP_ON_RX_0 -g"
+make ADDITIONAL_FLAGS="-DSTOP_ON_RX_0 -g" -j$(nproc)
 
 test_policer 12500 500000
 

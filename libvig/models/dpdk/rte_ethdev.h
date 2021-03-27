@@ -17,6 +17,11 @@
 
 #include <klee/klee.h>
 
+struct rte_eth_rss_conf {
+  uint8_t   *rss_key;
+  uint8_t   rss_key_len;
+  uint64_t  rss_hf;
+};
 
 struct rte_eth_link {
   uint32_t link_speed;
@@ -25,6 +30,8 @@ struct rte_eth_link {
   uint16_t link_status : 1;
 };
 
+const static uint32_t max_send_failures = 2;
+
 /**
  * A structure used to configure the TX features of an Ethernet port.
  */
@@ -32,9 +39,28 @@ struct rte_eth_txmode {
   // we don't care about other members
 };
 
+/**
+ *  Simple flags are used for rte_eth_conf.rxmode.mq_mode.
+ */
+#define ETH_MQ_RX_RSS_FLAG  0x1
+
+enum rte_eth_rx_mq_mode {
+	/** None of DCB,RSS or VMDQ mode */
+	ETH_MQ_RX_NONE = 0,
+
+	/** For RX side, only RSS is on */
+	ETH_MQ_RX_RSS = ETH_MQ_RX_RSS_FLAG
+};
+
 struct rte_eth_conf {
   struct {
     uint8_t hw_strip_crc;
+    enum rte_eth_rx_mq_mode mq_mode;
+    
+    struct {
+      struct rte_eth_rss_conf rss_conf;
+    } rx_adv_conf;
+
   } rxmode;
   struct rte_eth_txmode txmode;
 
@@ -69,7 +95,7 @@ int devices_promiscuous[STUB_DEVICES_COUNT];
 // To allocate mbufs
 struct rte_mempool *devices_rx_mempool[STUB_DEVICES_COUNT];
 
-static inline uint16_t rte_eth_dev_count(void) { return STUB_DEVICES_COUNT; }
+static inline uint16_t rte_eth_dev_count_avail(void) { return STUB_DEVICES_COUNT; }
 
 static inline int rte_eth_dev_configure(uint16_t port_id, uint16_t nb_rx_queue,
                                         uint16_t nb_tx_queue,
@@ -134,13 +160,13 @@ static inline int rte_eth_promiscuous_get(uint16_t port_id) {
 }
 
 static inline int rte_eth_dev_socket_id(uint16_t port_id) {
-  klee_assert(port_id < rte_eth_dev_count());
+  klee_assert(port_id < rte_eth_dev_count_avail());
 
   return 0;
 }
 
 static inline void rte_eth_macaddr_get(uint16_t port_id,
-                                       struct ether_addr *mac_addr) {
+                                       struct rte_ether_addr *mac_addr) {
   // TODO?
 }
 
@@ -198,7 +224,7 @@ static inline uint16_t rte_eth_rx_burst(uint16_t port_id, uint16_t queue_id,
   uint16_t data_length = klee_int("data_len");
 
   klee_assume(data_length <= packet_length);
-  klee_assume(sizeof(struct ether_hdr) <= data_length);
+  klee_assume(sizeof(struct rte_ether_hdr) <= data_length);
 
   // Keep concrete values for what a driver guarantees
   // (assignments are in the same order as the rte_mbuf declaration)
@@ -207,12 +233,9 @@ static inline uint16_t rte_eth_rx_burst(uint16_t port_id, uint16_t queue_id,
   // TODO: make data_off symbolic (but then we get symbolic pointer addition...)
   // Alternative: Somehow prove that the code never touches anything outside of
   // the [data_off, data_off+data_len] range...
-  (*rx_pkts)->data_off = 0; // klee_range(0, pool->elt_size - MBUF_MIN_SIZE
-                          // , "data_off");
+  (*rx_pkts)->data_off = 0;
   (*rx_pkts)->refcnt = 1;
-  (*rx_pkts)->nb_segs =
-      1; // TODO do we want to make a possibility of multiple packets? Or we
-         // could just prove the NF never touches this...
+  (*rx_pkts)->nb_segs = 1;
   (*rx_pkts)->port = port_id;
   (*rx_pkts)->ol_flags = 0;
   // packet_type is symbolic, NFs should use the content of the packet as the
@@ -248,14 +271,16 @@ static inline uint16_t rte_eth_tx_burst(uint16_t port_id, uint16_t queue_id,
   klee_assert(queue_id == 0); // we only support that
   klee_assert(nb_pkts == 1);  // same
 
-  packet_send((**tx_pkts).buf_addr, port_id);
+  packet_send(tx_pkts[0]->buf_addr, port_id);
 
-  // Undo our pseudo-chain trickery
-  klee_allow_access((*tx_pkts)->next, (*tx_pkts)->pool->elt_size);
-  free((*tx_pkts)->next);
-  (*tx_pkts)->next = NULL;
-  rte_mbuf_raw_free((*tx_pkts));
-
-  return 1;
+  tx_pkts[0]->refcnt--;
+  if (tx_pkts[0]->refcnt == 0) {
+    // Undo our pseudo-chain trickery
+    klee_allow_access(tx_pkts[0]->next, tx_pkts[0]->pool->elt_size);
+    free(tx_pkts[0]->next);
+    tx_pkts[0]->next = NULL;
+    rte_mbuf_raw_free(tx_pkts[0]);
+  }
+  return 1; // Assume the NIC will always accept the packet for a send.
 }
 

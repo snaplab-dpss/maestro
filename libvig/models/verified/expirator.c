@@ -22,7 +22,7 @@ int expire_items_single_map(struct DoubleChain *chain, struct Vector *vector,
   klee_trace_param_u64((uint64_t)vector, "vector");
   klee_trace_param_u64((uint64_t)map, "map");
   klee_trace_param_i64(time, "time");
-  int nfreed = klee_int("unmber_of_freed_flows");
+  int nfreed = klee_int("number_of_freed_flows");
   klee_assume(0 <= nfreed);
   dchain_make_space(chain, nfreed);
   return nfreed;
