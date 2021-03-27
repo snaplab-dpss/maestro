@@ -2,9 +2,12 @@
 #include <stdint.h>
 #include "vector.h"
 
-//@ #include "arith.gh"
-//@ #include "stdex.gh"
-//@ #include "listutils-lemmas.gh"
+#include <rte_malloc.h>
+#include <rte_lcore.h>
+
+//@ #include "../proof/arith.gh"
+//@ #include "../proof/stdex.gh"
+//@ #include "../proof/listutils-lemmas.gh"
 
 struct Vector {
   char* data;
@@ -147,9 +150,8 @@ struct Vector {
 int vector_allocate/*@ <t> @*/(int elem_size, unsigned capacity,
                                vector_init_elem* init_elem,
                                struct Vector** vector_out)
-/*@ requires 0 < elem_size &*& 0 < capacity &*&
-             [_]is_vector_init_elem<t>(init_elem, ?entp, elem_size, ?val) &*&
-             0 <= elem_size &*& elem_size < 4096 &*&
+/*@ requires [_]is_vector_init_elem<t>(init_elem, ?entp, elem_size, ?val) &*&
+             0 < elem_size &*& elem_size < 4096 &*&
              0 <= capacity &*& capacity < VECTOR_CAPACITY_UPPER_LIMIT &*&
              *vector_out |-> ?old_vo; @*/
 /*@ ensures result == 0 ?
@@ -162,13 +164,13 @@ int vector_allocate/*@ <t> @*/(int elem_size, unsigned capacity,
                true == forall(contents, is_one)); @*/
 {
   struct Vector* old_vector_val = *vector_out;
-  struct Vector* vector_alloc = (struct Vector*) malloc(sizeof(struct Vector));
+  struct Vector* vector_alloc = (struct Vector*) rte_malloc_socket(NULL, sizeof(struct Vector), 0, rte_socket_id());
   if (vector_alloc == 0) return 0;
   *vector_out = (struct Vector*) vector_alloc;
   //@ mul_bounds(elem_size, 4096, capacity, VECTOR_CAPACITY_UPPER_LIMIT);
-  char* data_alloc = (char*) malloc((uint32_t)elem_size*capacity);
+  char* data_alloc = (char*) rte_malloc_socket(NULL, (uint32_t)elem_size*capacity, 0, rte_socket_id());
   if (data_alloc == 0) {
-    free(vector_alloc);
+    rte_free(vector_alloc);
     *vector_out = old_vector_val;
     return 0;
   }

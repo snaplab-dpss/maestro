@@ -616,7 +616,7 @@
           (ReadLSB w64 (w32 0) next_time)))
 (ptr Nonptr))))
 (extra_ptrs ())
-(ret (((value (ReadLSB w32 (w32 0) unmber_of_freed_flows))
+(ret (((value (ReadLSB w32 (w32 0) number_of_freed_flows))
 (ptr Nonptr))))
 (call_context (
 (Sle (w64 0)
@@ -638,10 +638,10 @@
           (w64 10)))))
 (ret_context (
 (Sle (w32 0)
-      (ReadLSB w32 (w32 0) unmber_of_freed_flows))
+      (ReadLSB w32 (w32 0) number_of_freed_flows))
 (Eq false
      (Slt (w32 0)
-          (ReadLSB w32 (w32 0) unmber_of_freed_flows))))))
+          (ReadLSB w32 (w32 0) number_of_freed_flows))))))
 ((fun_name "map_get")
  (args (
 ((aname "map")
@@ -690,10 +690,10 @@
      (Slt (ReadLSB w64 (w32 0) next_time)
           (w64 10)))
 (Sle (w32 0)
-      (ReadLSB w32 (w32 0) unmber_of_freed_flows))
+      (ReadLSB w32 (w32 0) number_of_freed_flows))
 (Eq false
      (Slt (w32 0)
-          (ReadLSB w32 (w32 0) unmber_of_freed_flows)))))
+          (ReadLSB w32 (w32 0) number_of_freed_flows)))))
 (ret_context ()))
 ((fun_name "dchain_allocate_new_index")
  (args (
@@ -730,10 +730,10 @@
      (Slt (ReadLSB w64 (w32 0) next_time)
           (w64 10)))
 (Sle (w32 0)
-      (ReadLSB w32 (w32 0) unmber_of_freed_flows))
+      (ReadLSB w32 (w32 0) number_of_freed_flows))
 (Eq false
      (Slt (w32 0)
-          (ReadLSB w32 (w32 0) unmber_of_freed_flows)))
+          (ReadLSB w32 (w32 0) number_of_freed_flows)))
 (Sle (ReadLSB w64 (w32 0) reset_unnamed_19)
       (ReadLSB w64 (w32 0) next_time))
 (Eq false
@@ -791,10 +791,10 @@
      (Slt (ReadLSB w64 (w32 0) next_time)
           (w64 10)))
 (Sle (w32 0)
-      (ReadLSB w32 (w32 0) unmber_of_freed_flows))
+      (ReadLSB w32 (w32 0) number_of_freed_flows))
 (Eq false
      (Slt (w32 0)
-          (ReadLSB w32 (w32 0) unmber_of_freed_flows)))
+          (ReadLSB w32 (w32 0) number_of_freed_flows)))
 (Sle (w32 0)
       (ReadLSB w32 (w32 0) new_index_2))
 (Slt (ReadLSB w32 (w32 0) new_index_2)
@@ -847,10 +847,10 @@
      (Slt (ReadLSB w64 (w32 0) next_time)
           (w64 10)))
 (Sle (w32 0)
-      (ReadLSB w32 (w32 0) unmber_of_freed_flows))
+      (ReadLSB w32 (w32 0) number_of_freed_flows))
 (Eq false
      (Slt (w32 0)
-          (ReadLSB w32 (w32 0) unmber_of_freed_flows)))
+          (ReadLSB w32 (w32 0) number_of_freed_flows)))
 (Sle (w32 0)
       (ReadLSB w32 (w32 0) new_index_2))
 (Slt (ReadLSB w32 (w32 0) new_index_2)
@@ -902,10 +902,10 @@
      (Slt (ReadLSB w64 (w32 0) next_time)
           (w64 10)))
 (Sle (w32 0)
-      (ReadLSB w32 (w32 0) unmber_of_freed_flows))
+      (ReadLSB w32 (w32 0) number_of_freed_flows))
 (Eq false
      (Slt (w32 0)
-          (ReadLSB w32 (w32 0) unmber_of_freed_flows)))
+          (ReadLSB w32 (w32 0) number_of_freed_flows)))
 (Sle (w32 0)
       (ReadLSB w32 (w32 0) new_index_2))
 (Slt (ReadLSB w32 (w32 0) new_index_2)

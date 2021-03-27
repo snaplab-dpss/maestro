@@ -1,17 +1,27 @@
 #include "double-chain.h"
 
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stddef.h>
 
 #include "double-chain-impl.h"
 
+#include <rte_malloc.h>
+#include <rte_lcore.h>
+#include <rte_per_lcore.h>
+
 //@ #include <nat.gh>
-//@ #include "arith.gh"
-//@ #include "stdex.gh"
+//@ #include "../proof/arith.gh"
+//@ #include "../proof/stdex.gh"
 
 #ifndef NULL
 #define NULL 0
 #endif//NULL
+
+#if LOCKS
+RTE_DECLARE_PER_LCORE(bool, write_attempt);
+RTE_DECLARE_PER_LCORE(bool, write_state);
+#endif
 
 struct DoubleChain {
   struct dchain_cell* cells;
@@ -122,7 +132,7 @@ int dchain_allocate(int index_range, struct DoubleChain** chain_out)
 {
 
   struct DoubleChain* old_chain_out = *chain_out;
-  struct DoubleChain* chain_alloc = (struct DoubleChain*) malloc(sizeof(struct DoubleChain));
+  struct DoubleChain* chain_alloc = (struct DoubleChain*) rte_malloc_socket(NULL, sizeof(struct DoubleChain), 0, rte_socket_id());
   if (chain_alloc == NULL) return 0;
   *chain_out = (struct DoubleChain*) chain_alloc;
 
@@ -133,18 +143,18 @@ int dchain_allocate(int index_range, struct DoubleChain** chain_out)
                (index_range + DCHAIN_RESERVED), IRANG_LIMIT + DCHAIN_RESERVED);
     @*/
   struct dchain_cell* cells_alloc =
-    (struct dchain_cell*) malloc(sizeof (struct dchain_cell)*(index_range + DCHAIN_RESERVED));
+    (struct dchain_cell*) rte_malloc_socket(NULL, sizeof (struct dchain_cell)*(index_range + DCHAIN_RESERVED), 0, rte_socket_id());
   if (cells_alloc == NULL) {
-    free(chain_alloc);
+    rte_free(chain_alloc);
     *chain_out = old_chain_out;
     return 0;
   }
   (*chain_out)->cells = cells_alloc;
 
-  vigor_time_t* timestamps_alloc = (vigor_time_t*) malloc(sizeof(vigor_time_t)*(index_range));
+  vigor_time_t* timestamps_alloc = (vigor_time_t*) rte_malloc_socket(NULL, sizeof(vigor_time_t)*(index_range), 0, rte_socket_id());
   if (timestamps_alloc == NULL) {
-    free((void*)cells_alloc);
-    free(chain_alloc);
+    rte_free((void*)cells_alloc);
+    rte_free(chain_alloc);
     *chain_out = old_chain_out;
     return 0;
   }
@@ -786,6 +796,10 @@ int dchain_expire_one_index(struct DoubleChain* chain,
                 (double_chainp(ch, chain) &*&
                  result == 0)))); @*/
 {
+#if LOCKS
+  bool* write_attempt = &RTE_PER_LCORE(write_attempt);
+  bool* write_state = &RTE_PER_LCORE(write_state);
+#endif
   //@ open double_chainp(ch, chain);
   //@ assert chain->cells |-> ?cells;
   //@ assert chain->timestamps |-> ?timestamps;
@@ -805,6 +819,12 @@ int dchain_expire_one_index(struct DoubleChain* chain,
     if (chain->timestamps[*index_out] < time) {
       //@ glue_timestamp(timestamps, tmstmps, oi);
       //@ assert nth(oi, tmstmps) == dchain_get_oldest_time_fp(ch);
+#if LOCKS
+      if (!*write_state) {
+        *write_attempt = true;
+        return 1;
+      }
+#endif
       int rez = dchain_impl_free_index(chain->cells, *index_out);
       /*@
         {

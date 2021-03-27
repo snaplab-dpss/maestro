@@ -5,26 +5,19 @@
 #include <string.h>
 #include <stdio.h>
 
-// DPDK needs these but doesn't include them. :|
-#include <linux/limits.h>
-#include <sys/types.h>
-
-#include <rte_common.h>
-#include <rte_ethdev.h>
-#include <cmdline_parse_etheraddr.h>
-
 #include "nf-util.h"
 #include "nf-log.h"
 
-const uint32_t DEFAULT_LAN = 1;
-const uint32_t DEFAULT_WAN = 0;
-const uint32_t DEFAULT_RATE = 1000000; // 1MB/s
-const uint32_t DEFAULT_BURST = 100000; // 100kB
+const uint16_t DEFAULT_LAN = 1;
+const uint16_t DEFAULT_WAN = 0;
+const uint64_t DEFAULT_RATE = 1000000; // 1MB/s
+const uint64_t DEFAULT_BURST = 100000; // 100kB
 const uint32_t DEFAULT_CAPACITY = 128; // IPs
 
-#define PARSE_ERROR(format, ...)                                               \
-  nf_config_usage();                                                           \
-  rte_exit(EXIT_FAILURE, format, ##__VA_ARGS__);
+#define PARSE_ERROR(format, ...)          \
+  nf_config_usage();                      \
+  fprintf(stderr, format, ##__VA_ARGS__); \
+  exit(EXIT_FAILURE);
 
 void nf_config_init(int argc, char **argv) {
   // Set the default values
@@ -34,7 +27,7 @@ void nf_config_init(int argc, char **argv) {
   config.burst = DEFAULT_BURST;           // B
   config.dyn_capacity = DEFAULT_CAPACITY; // MAC addresses
 
-  unsigned nb_devices = rte_eth_dev_count();
+  unsigned nb_devices = rte_eth_dev_count_avail();
 
   struct option long_options[] = { { "lan", required_argument, NULL, 'l' },
                                    { "wan", required_argument, NULL, 'w' },
@@ -99,9 +92,9 @@ void nf_config_usage(void) {
           "\t--wan <device>: WAN device,"
           " default: %" PRIu16 ".\n"
           "\t--rate <rate>: policer rate in bytes/s,"
-          " default: %" PRIu32 ".\n"
+          " default: %" PRIu64 ".\n"
           "\t--burst <size>: policer burst size in bytes,"
-          " default: %" PRIu32 ".\n"
+          " default: %" PRIu64 ".\n"
           "\t--capacity <n>: policer table capacity,"
           " default: %" PRIu32 ".\n",
           DEFAULT_LAN, DEFAULT_WAN, DEFAULT_RATE, DEFAULT_BURST,
@@ -111,10 +104,10 @@ void nf_config_usage(void) {
 void nf_config_print(void) {
   NF_INFO("\n--- Policer Config ---\n");
 
-  NF_INFO("LAN Device: %" PRIu32, config.lan_device);
-  NF_INFO("WAN Device: %" PRIu32, config.wan_device);
-  NF_INFO("Rate: %" PRIu32, config.rate);
-  NF_INFO("Burst: %" PRIu32, config.burst);
+  NF_INFO("LAN Device: %" PRIu16, config.lan_device);
+  NF_INFO("WAN Device: %" PRIu16, config.wan_device);
+  NF_INFO("Rate: %" PRIu64, config.rate);
+  NF_INFO("Burst: %" PRIu64, config.burst);
   NF_INFO("Capacity: %" PRIu16, config.dyn_capacity);
 
   NF_INFO("\n--- ------ ------ ---\n");
