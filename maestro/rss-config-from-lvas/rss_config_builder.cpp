@@ -383,8 +383,9 @@ void RSSConfigBuilder::fill_unique_devices(
   }
 
   if (unique_devices.size() == 0) {
-    Logger::warn() << "No devices. No RSS configuration to generate." << "\n";
-    exit(0);
+    Logger::warn() << "No devices. Using default unique devices value (2)." << "\n";
+    unique_devices.push_back(0);
+    unique_devices.push_back(1);
   }
 }
 
