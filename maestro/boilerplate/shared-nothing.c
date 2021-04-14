@@ -445,6 +445,9 @@ static void worker_main(void) {
   const unsigned lcore_id = rte_lcore_id();
   const uint16_t queue_id = lcores_conf[lcore_id].queue_id;
 
+  nf_util_init();
+  packet_io_init();
+
   if (!nf_init()) {
     rte_exit(EXIT_FAILURE, "Error initializing NF");
   }
@@ -499,9 +502,6 @@ int MAIN(int argc, char** argv) {
   }
   argc -= ret;
   argv += ret;
-
-  nf_util_init();
-  packet_io_init();
 
   // Create a memory pool
   unsigned nb_devices = rte_eth_dev_count_avail();

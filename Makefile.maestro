@@ -24,8 +24,8 @@ SRCS-y += $(NF_FILES)
 CFLAGS += -I $(SELF_DIR)
 CFLAGS += -std=gnu99
 CFLAGS += -DCAPACITY_POW2
-#CFLAGS += -O3
-CFLAGS += -O0 -g -rdynamic -DENABLE_LOG -Wfatal-errors
+CFLAGS += -O3
+#CFLAGS += -O0 -g -rdynamic -DENABLE_LOG -Wfatal-errors
 
 include $(RTE_SDK)/mk/rte.extapp.mk
 
