@@ -24,11 +24,13 @@ BUILD_DIR = f"{MAESTRO_DIR}/build/maestro"
 CHOICE_SEQUENTIAL 		= "seq"
 CHOICE_SHARED_NOTHING	= "sn"
 CHOICE_LOCKS	 		= "locks"
+CHOICE_TM				= "tm"
 
 BOILERPLATE = {
 	CHOICE_SEQUENTIAL:		f"{MAESTRO_DIR}/boilerplate/sequential.c",
 	CHOICE_SHARED_NOTHING:	f"{MAESTRO_DIR}/boilerplate/shared-nothing.c",
 	CHOICE_LOCKS:			f"{MAESTRO_DIR}/boilerplate/locks.c",
+	CHOICE_TM:				f"{MAESTRO_DIR}/boilerplate/tm.c",
 }
 
 SYNTHESIZED 	 = f"{BUILD_DIR}/nf_process.gen.c"
@@ -154,7 +156,7 @@ if __name__ == "__main__":
 	parser.add_argument('nf', type=str, help='path to the NF')
 	parser.add_argument('--target', 											\
 		help='implementation model target', 									\
-		choices = [ CHOICE_SEQUENTIAL, CHOICE_SHARED_NOTHING, CHOICE_LOCKS ],	\
+		choices = [ CHOICE_SEQUENTIAL, CHOICE_SHARED_NOTHING, CHOICE_LOCKS, CHOICE_TM ],	\
 		default=CHOICE_SHARED_NOTHING)
 
 	args = parser.parse_args()
