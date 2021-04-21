@@ -153,8 +153,10 @@ int dchain_tm_expire_one_index(DoubleChainTM* chain,
   unsigned int this_lcore_id = rte_lcore_id();
 
   int has_ind = dchain_tm_impl_get_oldest_index(chain->active_cells[this_lcore_id], index_out);
-  
-  if (has_ind && chain->timestamps[this_lcore_id][*index_out].timestamp < time) {
+
+  if (has_ind &&
+      chain->timestamps[this_lcore_id][*index_out].timestamp > -1 &&
+      chain->timestamps[this_lcore_id][*index_out].timestamp < time) {
     unsigned int lcore_id;
     vigor_time_t most_recent = -1;
     RTE_LCORE_FOREACH(lcore_id) {

@@ -156,8 +156,10 @@ int dchain_locks_expire_one_index(struct DoubleChainLocks* chain,
   unsigned int this_lcore_id = rte_lcore_id();
 
   int has_ind = dchain_locks_impl_get_oldest_index(chain->active_cells[this_lcore_id], index_out);
-  
-  if (chain->timestamps[this_lcore_id][*index_out] < time) {
+
+  if (has_ind &&
+      chain->timestamps[this_lcore_id][*index_out] > -1 &&
+      chain->timestamps[this_lcore_id][*index_out] < time) {
     if (!*write_state_ptr) {
       *write_attempt_ptr = true;
       return 1;
