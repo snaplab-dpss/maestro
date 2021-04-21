@@ -7,6 +7,9 @@ import glob
 import re
 import argparse
 
+from time import perf_counter
+from datetime import timedelta 
+
 # env vars
 KLEE_DIR = os.getenv("KLEE_DIR")
 
@@ -162,8 +165,12 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 
 	build_maestro()
+
+	t_start = perf_counter()
 	call_paths = symbex(args.nf)
+	t_symbex = perf_counter()
 	analyze_call_paths(args.nf, call_paths)
+	t_analyze_call_paths = perf_counter()
 
 	if args.target == CHOICE_SHARED_NOTHING:
 		success = rss_conf_from_lvas()
@@ -180,3 +187,12 @@ if __name__ == "__main__":
 	synthesized_content = f"{rss_conf_code}\n{synthesized_nf}"
 
 	stitch_synthesized_nf(synthesized_content, args.target)
+	t_synthesize = perf_counter()
+	t_end = t_synthesize
+
+	print("================ REPORT ================")
+	print(f"Symbolic execution {timedelta(seconds=(t_symbex - t_start))}")
+	print(f"Analyze call paths {timedelta(seconds=(t_analyze_call_paths - t_symbex))}")
+	print(f"Synthesize         {timedelta(seconds=(t_synthesize - t_analyze_call_paths))}")
+	print(f"Total              {timedelta(seconds=(t_end - t_start))}")
+	print("========================================")
