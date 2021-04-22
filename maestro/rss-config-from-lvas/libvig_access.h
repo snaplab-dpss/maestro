@@ -76,9 +76,7 @@ public:
       : type(_type), expression(_expr) {}
 
   LibvigAccessArgument(const LibvigAccessArgument &argument)
-      : LibvigAccessArgument(argument.type, argument.expression) {
-    dependencies = argument.dependencies;
-  }
+      : type(argument.type), expression(argument.expression), dependencies(argument.dependencies) {}
 
   LibvigAccessArgument::Type get_type() const { return type; }
   const std::string &get_expression() const { return expression; }
@@ -138,11 +136,9 @@ public:
   }
 
   LibvigAccess(const LibvigAccess &access)
-      : LibvigAccess(access.id, access.src_device, access.dst_device,
-                     access.success, access.operation, access.object) {
-    arguments = access.arguments;
-    metadata = access.metadata;
-  }
+      : id(access.id), src_device(access.src_device), dst_device(access.dst_device),
+        success(access.success), operation(access.operation), object(access.object),
+        arguments(access.arguments), metadata(access.metadata) {}
 
   const unsigned int &get_id() const { return id; }
   const unsigned int &get_src_device() const { return src_device; }

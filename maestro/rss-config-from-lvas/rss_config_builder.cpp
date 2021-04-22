@@ -38,6 +38,7 @@ bool RSSConfigBuilder::is_access_pair_already_stored(
 
 void RSSConfigBuilder::load_rss_config_options() {
   R3S::R3S_cfg_set_number_of_keys(cfg, unique_devices.size());
+  R3S::R3S_cfg_set_number_of_processes(cfg, 4);
 
   if (libvig_access_constraints.size() == 0) {
     Logger::debug() << "No constraints. Configuring RSS with every possible "
@@ -64,7 +65,8 @@ void RSSConfigBuilder::load_rss_config_options() {
   size_t opts_sz;
 
   R3S::R3S_opts_from_pfs(&unique_packet_fields_dependencies[0],
-                         unique_packet_fields_dependencies.size(), &opts,
+                         unique_packet_fields_dependencies.size(),
+                         &opts,
                          &opts_sz);
 
   for (unsigned iopt = 0; iopt < opts_sz; iopt++) {
@@ -72,7 +74,7 @@ void RSSConfigBuilder::load_rss_config_options() {
     R3S::R3S_cfg_load_opt(cfg, opts[iopt]);
   }
 
-  delete opts;
+  delete[] opts;
 }
 
 void RSSConfigBuilder::fill_libvig_access_constraints(const std::vector<LibvigAccess> &accesses) {
