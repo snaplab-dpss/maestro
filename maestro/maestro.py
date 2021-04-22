@@ -98,9 +98,9 @@ def rss_conf_random(devices, verbose):
 	
 	rss_conf = open(RSS_CONF, mode='w')
 	if not verbose:
-		code = subprocess.call([ rss_conf_from_lva, "--rand", devices ], stdout=rss_conf, stderr=subprocess.DEVNULL)
+		code = subprocess.call([ rss_conf_from_lva, "--rand", str(devices) ], stdout=rss_conf, stderr=subprocess.DEVNULL)
 	else:
-		code = subprocess.call([ rss_conf_from_lva, "--rand", devices ], stdout=rss_conf)
+		code = subprocess.call([ rss_conf_from_lva, "--rand", str(devices) ], stdout=rss_conf)
 	rss_conf.close()
 
 	return code == 0
