@@ -10,9 +10,6 @@
 #include <stdlib.h>
 #include <stddef.h>
 
-#include <rte_malloc.h>
-#include <rte_lcore.h>
-
 //@ #include "../proof/arith.gh"
 
 #ifndef NULL
@@ -301,139 +298,139 @@ int dmap_allocate/*@ <K1,K2,V> @*/
   #endif//CAPACITY_POW2
 
   struct DoubleMap* old_map_val = *map_out;
-  struct DoubleMap* map_alloc = (struct DoubleMap*) rte_malloc_socket(NULL, sizeof(struct DoubleMap), 0, rte_socket_id());
+  struct DoubleMap* map_alloc = (struct DoubleMap*) malloc(sizeof(struct DoubleMap));
   if (map_alloc == NULL) return 0;
   *map_out = (struct DoubleMap*) map_alloc;
 
   //@ mul_bounds(value_size, 4096, capacity, CAPACITY_UPPER_LIMIT);
-  uint8_t* vals_alloc = (uint8_t*) rte_malloc_socket(NULL, (uint32_t)value_size*capacity, 0, rte_socket_id());
+  uint8_t* vals_alloc = (uint8_t*) malloc((uint32_t)value_size*capacity);
   if (vals_alloc == NULL) {
-    rte_free(map_alloc);
+    free(map_alloc);
     *map_out = old_map_val;
     return 0;
   }
   (*map_out)->values = vals_alloc;
-  int* bbs_a_alloc = (int*) rte_malloc_socket(NULL, sizeof(int)*(int)keys_capacity, 0, rte_socket_id());
+  int* bbs_a_alloc = (int*) malloc(sizeof(int)*(int)keys_capacity);
   if (bbs_a_alloc == NULL) {
-    rte_free(vals_alloc);
-    rte_free(map_alloc);
+    free(vals_alloc);
+    free(map_alloc);
     *map_out = old_map_val;
     return 0;
   }
   (*map_out)->bbs_a = bbs_a_alloc;
-  void** kps_a_alloc = (void**) rte_malloc_socket(NULL, sizeof(void*)*(int)keys_capacity, 0, rte_socket_id());
+  void** kps_a_alloc = (void**) malloc(sizeof(void*)*(int)keys_capacity);
   if (kps_a_alloc == NULL) {
-    rte_free(bbs_a_alloc);
-    rte_free(vals_alloc);
-    rte_free(map_alloc);
+    free(bbs_a_alloc);
+    free(vals_alloc);
+    free(map_alloc);
     *map_out = old_map_val;
     return 0;
   }
   (*map_out)->kps_a = kps_a_alloc;
-  unsigned* khs_a_alloc = (unsigned*) rte_malloc_socket(NULL, sizeof(unsigned)*(int)keys_capacity, 0, rte_socket_id());
+  unsigned* khs_a_alloc = (unsigned*) malloc(sizeof(unsigned)*(int)keys_capacity);
   if (khs_a_alloc == NULL) {
-    rte_free(kps_a_alloc);
-    rte_free(bbs_a_alloc);
-    rte_free(vals_alloc);
-    rte_free(map_alloc);
+    free(kps_a_alloc);
+    free(bbs_a_alloc);
+    free(vals_alloc);
+    free(map_alloc);
     *map_out = old_map_val;
     return 0;
   }
   (*map_out)->khs_a = khs_a_alloc;
-  int* chns_a_alloc = (int*) rte_malloc_socket(NULL, sizeof(int)*(int)keys_capacity, 0, rte_socket_id());
+  int* chns_a_alloc = (int*) malloc(sizeof(int)*(int)keys_capacity);
   if (chns_a_alloc == NULL) {
-    rte_free(khs_a_alloc);
-    rte_free(kps_a_alloc);
-    rte_free(bbs_a_alloc);
-    rte_free(vals_alloc);
-    rte_free(map_alloc);
+    free(khs_a_alloc);
+    free(kps_a_alloc);
+    free(bbs_a_alloc);
+    free(vals_alloc);
+    free(map_alloc);
     *map_out = old_map_val;
     return 0;
   }
   (*map_out)->chns_a = chns_a_alloc;
-  int* inds_a_alloc = (int*) rte_malloc_socket(NULL, sizeof(int)*(int)keys_capacity, 0, rte_socket_id());
+  int* inds_a_alloc = (int*) malloc(sizeof(int)*(int)keys_capacity);
   if (inds_a_alloc == NULL) {
-    rte_free(chns_a_alloc);
-    rte_free(khs_a_alloc);
-    rte_free(kps_a_alloc);
-    rte_free(bbs_a_alloc);
-    rte_free(vals_alloc);
-    rte_free(map_alloc);
+    free(chns_a_alloc);
+    free(khs_a_alloc);
+    free(kps_a_alloc);
+    free(bbs_a_alloc);
+    free(vals_alloc);
+    free(map_alloc);
     *map_out = old_map_val;
     return 0;
   }
   (*map_out)->inds_a = inds_a_alloc;
-  int* bbs_b_alloc = (int*) rte_malloc_socket(NULL, sizeof(int)*(int)keys_capacity, 0, rte_socket_id());
+  int* bbs_b_alloc = (int*) malloc(sizeof(int)*(int)keys_capacity);
   if (bbs_b_alloc == NULL) {
-    rte_free(inds_a_alloc);
-    rte_free(chns_a_alloc);
-    rte_free(khs_a_alloc);
-    rte_free(kps_a_alloc);
-    rte_free(bbs_a_alloc);
-    rte_free(vals_alloc);
-    rte_free(map_alloc);
+    free(inds_a_alloc);
+    free(chns_a_alloc);
+    free(khs_a_alloc);
+    free(kps_a_alloc);
+    free(bbs_a_alloc);
+    free(vals_alloc);
+    free(map_alloc);
     *map_out = old_map_val;
     return 0;
   }
   (*map_out)->bbs_b = bbs_b_alloc;
-  void** kps_b_alloc = (void**) rte_malloc_socket(NULL, sizeof(void*)*(int)keys_capacity, 0, rte_socket_id());
+  void** kps_b_alloc = (void**) malloc(sizeof(void*)*(int)keys_capacity);
   if (kps_b_alloc == NULL) {
-    rte_free(bbs_b_alloc);
-    rte_free(inds_a_alloc);
-    rte_free(chns_a_alloc);
-    rte_free(khs_a_alloc);
-    rte_free(kps_a_alloc);
-    rte_free(bbs_a_alloc);
-    rte_free(vals_alloc);
-    rte_free(map_alloc);
+    free(bbs_b_alloc);
+    free(inds_a_alloc);
+    free(chns_a_alloc);
+    free(khs_a_alloc);
+    free(kps_a_alloc);
+    free(bbs_a_alloc);
+    free(vals_alloc);
+    free(map_alloc);
     *map_out = old_map_val;
     return 0;
   }
   (*map_out)->kps_b = kps_b_alloc;
-  unsigned* khs_b_alloc = (unsigned*) rte_malloc_socket(NULL, sizeof(unsigned)*(int)keys_capacity, 0, rte_socket_id());
+  unsigned* khs_b_alloc = (unsigned*) malloc(sizeof(unsigned)*(int)keys_capacity);
   if (khs_b_alloc == NULL) {
-    rte_free(kps_b_alloc);
-    rte_free(bbs_b_alloc);
-    rte_free(inds_a_alloc);
-    rte_free(chns_a_alloc);
-    rte_free(khs_a_alloc);
-    rte_free(kps_a_alloc);
-    rte_free(bbs_a_alloc);
-    rte_free(vals_alloc);
-    rte_free(map_alloc);
+    free(kps_b_alloc);
+    free(bbs_b_alloc);
+    free(inds_a_alloc);
+    free(chns_a_alloc);
+    free(khs_a_alloc);
+    free(kps_a_alloc);
+    free(bbs_a_alloc);
+    free(vals_alloc);
+    free(map_alloc);
     *map_out = old_map_val;
     return 0;
   }
   (*map_out)->khs_b = khs_b_alloc;
-  int* inds_b_alloc = (int*) rte_malloc_socket(NULL, sizeof(int)*(int)keys_capacity, 0, rte_socket_id());
+  int* inds_b_alloc = (int*) malloc(sizeof(int)*(int)keys_capacity);
   if (inds_b_alloc == NULL) {
-    rte_free(khs_b_alloc);
-    rte_free(kps_b_alloc);
-    rte_free(bbs_b_alloc);
-    rte_free(inds_a_alloc);
-    rte_free(chns_a_alloc);
-    rte_free(khs_a_alloc);
-    rte_free(kps_a_alloc);
-    rte_free(bbs_a_alloc);
-    rte_free(vals_alloc);
-    rte_free(map_alloc);
+    free(khs_b_alloc);
+    free(kps_b_alloc);
+    free(bbs_b_alloc);
+    free(inds_a_alloc);
+    free(chns_a_alloc);
+    free(khs_a_alloc);
+    free(kps_a_alloc);
+    free(bbs_a_alloc);
+    free(vals_alloc);
+    free(map_alloc);
     *map_out = old_map_val;
     return 0;
   }
   (*map_out)->inds_b = inds_b_alloc;
-  int* chns_b_alloc = (int*) rte_malloc_socket(NULL, sizeof(int)*(int)keys_capacity, 0, rte_socket_id());
+  int* chns_b_alloc = (int*) malloc(sizeof(int)*(int)keys_capacity);
   if (chns_b_alloc == NULL) {
-    rte_free(inds_b_alloc);
-    rte_free(khs_b_alloc);
-    rte_free(kps_b_alloc);
-    rte_free(bbs_b_alloc);
-    rte_free(inds_a_alloc);
-    rte_free(chns_a_alloc);
-    rte_free(khs_a_alloc);
-    rte_free(kps_a_alloc);
-    rte_free(bbs_a_alloc);
-    rte_free(vals_alloc);
-    rte_free(map_alloc);
+    free(inds_b_alloc);
+    free(khs_b_alloc);
+    free(kps_b_alloc);
+    free(bbs_b_alloc);
+    free(inds_a_alloc);
+    free(chns_a_alloc);
+    free(khs_a_alloc);
+    free(kps_a_alloc);
+    free(bbs_a_alloc);
+    free(vals_alloc);
+    free(map_alloc);
     *map_out = old_map_val;
     return 0;
   }

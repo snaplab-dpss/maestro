@@ -2,9 +2,6 @@
 #include <assert.h>
 #include <stdlib.h>
 
-#include <rte_malloc.h>
-#include <rte_lcore.h>
-
 //@ #include "../proof/prime.gh"
 //@ #include "../proof/permutations.gh"
 //@ #include "../proof/transpose.gh"
@@ -567,7 +564,7 @@ int cht_fill_cht(struct Vector *cht, uint32_t cht_height, uint32_t backend_capac
     //@ assert(sizeof(int)*cht_height*backend_capacity < INT_MAX);
 
     // Generate the permutations of 0..(cht_height - 1) for each backend
-    int *permutations = (int*) rte_malloc_socket(NULL, sizeof(int) * (int)(cht_height * backend_capacity), 0, rte_socket_id());
+    int *permutations = (int*) malloc(sizeof(int) * (int)(cht_height * backend_capacity));
     if (permutations == 0) {
         return 0;
     }
@@ -658,9 +655,9 @@ int cht_fill_cht(struct Vector *cht, uint32_t cht_height, uint32_t backend_capac
         //@ forall_append(perms, cons(new_elem, nil), is_permutation);
     }
 
-    int *next = (int*) rte_malloc_socket(NULL, sizeof(int) * (int)(cht_height), 0, rte_socket_id());
+    int *next = (int*) malloc(sizeof(int) * (int)(cht_height));
     if (next == 0) {
-        rte_free(permutations);
+        free(permutations);
         return 0;
     }
 
@@ -874,8 +871,8 @@ int cht_fill_cht(struct Vector *cht, uint32_t cht_height, uint32_t backend_capac
     //@ assert (true == valid_cht(vals, backend_capacity, cht_height));
 
     // Free memory
-    rte_free(next);
-    rte_free(permutations);
+    free(next);
+    free(permutations);
     return 1;
 }
 

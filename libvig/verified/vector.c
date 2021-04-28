@@ -2,9 +2,6 @@
 #include <stdint.h>
 #include "vector.h"
 
-#include <rte_malloc.h>
-#include <rte_lcore.h>
-
 //@ #include "../proof/arith.gh"
 //@ #include "../proof/stdex.gh"
 //@ #include "../proof/listutils-lemmas.gh"
@@ -164,13 +161,13 @@ int vector_allocate/*@ <t> @*/(int elem_size, unsigned capacity,
                true == forall(contents, is_one)); @*/
 {
   struct Vector* old_vector_val = *vector_out;
-  struct Vector* vector_alloc = (struct Vector*) rte_malloc_socket(NULL, sizeof(struct Vector), 0, rte_socket_id());
+  struct Vector* vector_alloc = (struct Vector*) malloc(sizeof(struct Vector));
   if (vector_alloc == 0) return 0;
   *vector_out = (struct Vector*) vector_alloc;
   //@ mul_bounds(elem_size, 4096, capacity, VECTOR_CAPACITY_UPPER_LIMIT);
-  char* data_alloc = (char*) rte_malloc_socket(NULL, (uint32_t)elem_size*capacity, 0, rte_socket_id());
+  char* data_alloc = (char*) malloc((uint32_t)elem_size*capacity);
   if (data_alloc == 0) {
-    rte_free(vector_alloc);
+    free(vector_alloc);
     *vector_out = old_vector_val;
     return 0;
   }

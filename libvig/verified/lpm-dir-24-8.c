@@ -1,8 +1,5 @@
 #include "lpm-dir-24-8.h"
 
-#include <rte_malloc.h>
-#include <rte_lcore.h>
-
 //@ #include "../proof/lpm-dir-24-8-lemmas.gh"
 
 /*@
@@ -371,21 +368,23 @@ int lpm_allocate(struct lpm **lpm_out)
               table(new_lo, dir_init()) &*&
               result == 1; @*/
 {
-  struct lpm* _lpm = (struct lpm*) rte_malloc_socket(NULL, sizeof(struct lpm), 0, rte_socket_id());
+  struct lpm* _lpm = (struct lpm*) malloc(sizeof(struct lpm));
   if (_lpm == 0) {
     return 0;
   }
 
-  uint16_t* lpm_24 = (uint16_t*) rte_malloc_socket(NULL, lpm_24_MAX_ENTRIES * sizeof(uint16_t), 0, rte_socket_id());
+  uint16_t* lpm_24 = (uint16_t*) malloc(lpm_24_MAX_ENTRIES *
+                                        sizeof(uint16_t));
   if (lpm_24 == 0) {
-    rte_free(_lpm);
+    free(_lpm);
     return 0;
   }
 
-  uint16_t* lpm_long = (uint16_t*) rte_malloc_socket(NULL, lpm_LONG_MAX_ENTRIES * sizeof(uint16_t), 0, rte_socket_id());
+  uint16_t* lpm_long = (uint16_t*) malloc(lpm_LONG_MAX_ENTRIES *
+                                          sizeof(uint16_t));
   if (lpm_long == 0) {
-    rte_free(lpm_24);
-    rte_free(_lpm);
+    free(lpm_24);
+    free(_lpm);
     return 0;
   }
 
@@ -452,9 +451,9 @@ void lpm_free(struct lpm *_lpm)
 //@ ensures true;
 {
   //@ open table(_lpm, _);
-  rte_free(_lpm->lpm_24);
-  rte_free(_lpm->lpm_long);
-  rte_free(_lpm);
+  free(_lpm->lpm_24);
+  free(_lpm->lpm_long);
+  free(_lpm);
 }
 
 int lpm_lookup_elem(struct lpm *_lpm, uint32_t prefix)
