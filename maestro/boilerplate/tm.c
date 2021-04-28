@@ -22,17 +22,83 @@
 #include <rte_udp.h>
 #include <rte_errno.h>
 #include <rte_lcore.h>
+#include <rte_atomic.h>
 #include <rte_malloc.h>
-
 
 #include "libvig/verified/boilerplate-util.h"
 #include "libvig/verified/tcpudp_hdr.h"
 #include "libvig/verified/vigor-time.h"
 #include "libvig/verified/ether.h"
 
-#include "libvig/verified/double-chain.h"
+#include "libvig/unverified/double-chain-tm.h"
 #include "libvig/verified/vector.h"
 #include "libvig/verified/map.h"
+
+/**********************************************
+ * 
+ *                  NF-LOCKS
+ * 
+ **********************************************/
+
+typedef struct {
+  rte_atomic32_t* tokens;
+  rte_atomic32_t write_token;
+} nf_lock_t;
+
+static inline void
+nf_lock_init(nf_lock_t *nfl)
+{
+  nfl->tokens = (rte_atomic32_t*) rte_malloc(NULL, sizeof(rte_atomic32_t) * RTE_MAX_LCORE, 64);
+
+	unsigned lcore_id;
+	RTE_LCORE_FOREACH(lcore_id) {
+    rte_atomic32_init(&nfl->tokens[lcore_id]);
+	}
+
+	rte_atomic32_init(&nfl->write_token);
+}
+
+static inline void
+nf_lock_allow_writes(nf_lock_t *nfl) {
+	unsigned lcore_id = rte_lcore_id();
+  rte_atomic32_clear(&nfl->tokens[lcore_id]);
+}
+
+static inline void
+nf_lock_block_writes(nf_lock_t *nfl) {
+	unsigned lcore_id = rte_lcore_id();
+  while (!rte_atomic32_test_and_set(&nfl->tokens[lcore_id])) {
+    // prevent the compiler from removing this loop
+		__asm__ __volatile__("");
+  }
+}
+
+static inline void
+nf_lock_write_lock(nf_lock_t *nfl) {
+  unsigned lcore_id = rte_lcore_id();
+  rte_atomic32_clear(&nfl->tokens[lcore_id]);
+
+  while (!rte_atomic32_test_and_set(&nfl->write_token)) {
+    // prevent the compiler from removing this loop
+    __asm__ __volatile__("");
+  }
+
+	RTE_LCORE_FOREACH(lcore_id) {
+	  while (!rte_atomic32_test_and_set(&nfl->tokens[lcore_id])) {
+    __asm__ __volatile__("");
+    }
+	}
+}
+
+static inline void
+nf_lock_write_unlock(nf_lock_t *nfl) {
+  unsigned lcore_id;
+  RTE_LCORE_FOREACH(lcore_id) {
+	  rte_atomic32_clear(&nfl->tokens[lcore_id]);
+	}
+
+  rte_atomic32_clear(&nfl->write_token);
+}
 
 /**********************************************
  * 
@@ -125,9 +191,14 @@ struct rte_ether_hdr;
 RTE_DEFINE_PER_LCORE(void **, chunks_borrowed);
 RTE_DEFINE_PER_LCORE(size_t, chunks_borrowed_num);
 
-// this is doing nothing here, just making compilation easier
 RTE_DEFINE_PER_LCORE(bool, write_attempt);
 RTE_DEFINE_PER_LCORE(bool, write_state);
+
+nf_lock_t nf_lock;
+
+void nf_util_init_locks() {
+  nf_lock_init(&nf_lock);
+}
 
 void nf_util_init() {
   size_t *chunks_borrowed_num_ptr = &RTE_PER_LCORE(chunks_borrowed_num);
@@ -329,6 +400,452 @@ bool nf_parse_ipv4addr(const char* str, uint32_t* addr)
 
 /**********************************************
  * 
+ *                  TM
+ * 
+ **********************************************/
+
+// TODO: CACHE_LINE_SIZE can be get using:
+// > getconf LEVEL1_DCACHE_LINESIZE
+// Number of processors:
+// > getconf _NPROCESSORS_ONLN
+
+
+//#pragma message ( "USING_TSX" )
+
+#include <immintrin.h> // includes avx512 now
+#define _IMMINTRIN_H_INCLUDED
+#include <xtestintrin.h>
+#include <rtmintrin.h>
+#define CACHE_LINE_SIZE 64
+// TODO: use __sync_synchronize() instead
+#define MEMFENCE asm volatile ("MFENCE" : : : "memory")
+#define PAUSE()  _mm_pause()
+
+typedef enum {
+  HTM_SUCCESS = 0,
+  HTM_ABORT,
+  HTM_EXPLICIT,
+  HTM_RETRY,
+  HTM_CONFLICT,
+  HTM_CAPACITY,
+  HTM_DEBUG,
+  HTM_NESTED,
+  HTM_OTHER,
+  HTM_FALLBACK
+} HTM_errors_e;
+
+#define HTM_NB_ERRORS     10
+#define HTM_STATUS_TYPE   register int
+#define HTM_CODE_SUCCESS  _XBEGIN_STARTED
+
+#define HTM_begin(var)			  (var = _xbegin())
+#define HTM_abort()           _xabort(0)
+#define HTM_named_abort(code)	_xabort(code)
+#define HTM_test()            _xtest()
+#define HTM_commit()          _xend()
+#define HTM_get_named(status) (status >> 24)
+#define HTM_is_named(status)  (status & 1)
+
+#define HTM_ERROR_INC(status, error_array) ({ \
+  if (status == _XBEGIN_STARTED) { \
+    error_array[HTM_SUCCESS] += 1; \
+  } else { \
+    error_array[HTM_ABORT] += 1; \
+    int nb_errors = __builtin_popcount(status); \
+    int tsx_error = status & 0x1F; /* only catch known aborts */ \
+    do { \
+      int idx = tsx_error & _XABORT_EXPLICIT ? \
+      ({tsx_error = tsx_error & ~_XABORT_EXPLICIT; HTM_EXPLICIT;}) : \
+      tsx_error & _XABORT_RETRY ? \
+      ({tsx_error = tsx_error & ~_XABORT_RETRY; HTM_RETRY;}) : \
+      tsx_error & _XABORT_CONFLICT ? \
+      ({tsx_error = tsx_error & ~_XABORT_CONFLICT; HTM_CONFLICT;}) : \
+      tsx_error & _XABORT_CAPACITY ? \
+      ({tsx_error = tsx_error & ~_XABORT_CAPACITY; HTM_CAPACITY;}) : \
+      tsx_error & _XABORT_DEBUG ? \
+      ({tsx_error = tsx_error & ~_XABORT_DEBUG; HTM_DEBUG;}) : \
+      HTM_OTHER; \
+      error_array[idx] += 1; \
+      nb_errors--; \
+    } while (nb_errors > 0); \
+  } \
+})
+
+#define CL_ALIGN __attribute__((aligned(CACHE_LINE_SIZE)))
+#define CL_DISTANCE(type) CACHE_LINE_SIZE / sizeof(type)
+
+#ifndef GRANULE_TYPE
+#define GRANULE_TYPE intptr_t
+#endif /* GRANULE_TYPE */
+
+#ifndef GRANULE_P_TYPE
+#define GRANULE_P_TYPE intptr_t*
+#endif /* GRANULE_P_TYPE */
+
+#ifndef GRANULE_D_TYPE
+#define GRANULE_D_TYPE double
+#endif /* GRANULE_D_TYPE */
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+#ifndef HTM_SGL_INIT_BUDGET
+#define HTM_SGL_INIT_BUDGET 2
+#endif /* HTM_SGL_INIT_BUDGET */
+
+typedef struct HTM_SGL_local_vars_ {
+    int64_t budget;
+    int64_t tid;
+    int64_t status;
+    uint64_t padding[5];
+} __attribute__((packed))  HTM_SGL_local_vars_s;
+
+// there is some wasted space near the SGL that can be used as read-only storate
+extern void * HTM_read_only_storage1;
+extern int HTM_read_only_storage1_size;
+extern void * HTM_read_only_storage2;
+extern int HTM_read_only_storage2_size;
+
+extern __thread int64_t * volatile HTM_SGL_var_addr; // points to the prev
+extern __thread HTM_SGL_local_vars_s CL_ALIGN HTM_SGL_vars;
+extern __thread int64_t HTM_SGL_errors[HTM_NB_ERRORS];
+
+#define START_TRANSACTION(status) (HTM_begin(status) != HTM_CODE_SUCCESS)
+#define BEFORE_TRANSACTION(tid, budget) /* empty */
+#define AFTER_TRANSACTION(tid, budget)  /* empty */
+
+/* DEBUG VERSION
+#define UPDATE_BUDGET(tid, budget, status) \
+    HTM_inc_status_count(status); \
+    HTM_INC(status); \
+	budget = HTM_update_budget(budget, status)
+*/
+
+#define UPDATE_BUDGET(tid, budget, status) \
+	budget = HTM_update_budget(budget, status)
+
+/* The HTM_SGL_update_budget also handle statistics */
+
+#define CHECK_SGL_NOTX() if (__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != -1) { HTM_block(); }
+#define CHECK_SGL_HTM()  if (__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != -1) { HTM_abort(); }
+
+#define AFTER_BEGIN(tid, budget, status)   /* empty */
+#define BEFORE_COMMIT(tid, budget, status) /* empty */
+
+/* DEBUG VERSION
+#define COMMIT_TRANSACTION(tid, budget, status) \
+    HTM_commit(); \
+    HTM_inc_status_count(status); \
+    HTM_INC(status)
+*/
+
+#define COMMIT_TRANSACTION(tid, budget, status) \
+    HTM_commit(); /* Commits and updates some statistics after */ \
+
+#define ENTER_SGL(tid) HTM_enter_fallback()
+#define EXIT_SGL(tid)  HTM_exit_fallback()
+#define AFTER_ABORT(tid, budget, status)   /* empty */
+
+#define BEFORE_HTM_BEGIN(tid, budget)  /* empty */
+#define AFTER_HTM_BEGIN(tid, budget)   /* empty */
+#define BEFORE_SGL_BEGIN(tid)          /* empty */
+#define AFTER_SGL_BEGIN(tid)           /* empty */
+
+#define BEFORE_HTM_COMMIT(tid, budget) /* empty */
+#define AFTER_HTM_COMMIT(tid, budget)  /* empty */
+#define BEFORE_SGL_COMMIT(tid)         /* empty */
+#define AFTER_SGL_COMMIT(tid)          /* empty */
+
+#define BEFORE_CHECK_BUDGET(budget) /* empty */
+// called within HTM_update_budget
+#define HTM_UPDATE_BUDGET(budget, status) (budget - 1)
+
+#define ENTER_HTM_COND(tid, budget) budget > 0
+#define IN_TRANSACTION(tid, budget, status) \
+	HTM_test()
+
+// #################################
+// Called within the API
+#define HTM_INIT()       /* empty */
+#define HTM_EXIT()       /* empty */
+#define HTM_THR_INIT()   /* empty */
+#define HTM_THR_EXIT()   /* empty */
+#define HTM_INC(status)  /* Use this to construct side statistics */
+// #################################
+
+#define HTM_SGL_budget HTM_SGL_vars.budget
+#define HTM_SGL_status HTM_SGL_vars.status
+#define HTM_SGL_tid    HTM_SGL_vars.tid
+
+#define HTM_SGL_begin() \
+{ \
+    HTM_SGL_budget = HTM_SGL_INIT_BUDGET; /* HTM_get_budget(); */ \
+    BEFORE_TRANSACTION(HTM_SGL_tid, HTM_SGL_budget); \
+    while (1) { \
+        BEFORE_CHECK_BUDGET(HTM_SGL_budget); \
+        if (ENTER_HTM_COND(HTM_SGL_tid, HTM_SGL_budget)) { \
+            CHECK_SGL_NOTX(); \
+            BEFORE_HTM_BEGIN(HTM_SGL_tid, HTM_SGL_budget); \
+            if (START_TRANSACTION(HTM_SGL_status)) { \
+                UPDATE_BUDGET(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status); \
+                AFTER_ABORT(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status); \
+                continue; \
+            } \
+            CHECK_SGL_HTM(); \
+            AFTER_HTM_BEGIN(HTM_SGL_tid, HTM_SGL_budget); \
+        } \
+        else { \
+            /*printf("BEGIN CONFLICT LIMIT REACHED %ld\n", HTM_SGL_tid);*/ BEFORE_SGL_BEGIN(HTM_SGL_tid); \
+            ENTER_SGL(HTM_SGL_tid); \
+            AFTER_SGL_BEGIN(HTM_SGL_tid); \
+        } \
+        AFTER_BEGIN(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status); \
+        break; /* delete when using longjmp */ \
+    } \
+}
+//
+#define HTM_SGL_commit() \
+{ \
+    BEFORE_COMMIT(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status); \
+    if (IN_TRANSACTION(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status)) { \
+        BEFORE_HTM_COMMIT(HTM_SGL_tid, HTM_SGL_budget); \
+        COMMIT_TRANSACTION(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status); \
+        AFTER_HTM_COMMIT(HTM_SGL_tid, HTM_SGL_budget); \
+    } \
+    else { \
+        /*printf("COMMIT CONFLICT LIMIT REACHED %ld\n", HTM_SGL_tid);*/ BEFORE_SGL_COMMIT(HTM_SGL_tid); \
+        EXIT_SGL(HTM_SGL_tid); \
+        AFTER_SGL_COMMIT(HTM_SGL_tid); \
+    } \
+    AFTER_TRANSACTION(HTM_SGL_tid, HTM_SGL_budget); \
+} \
+
+#define HTM_SGL_before_write(addr, val) /* empty */
+#define HTM_SGL_after_write(addr, val)  /* empty */
+
+#define HTM_SGL_write(addr, val) ({ \
+	HTM_SGL_before_write(addr, val); \
+	*((GRANULE_TYPE*)addr) = val; \
+	HTM_SGL_after_write(addr, val); \
+	val; \
+})
+
+#define HTM_SGL_write_D(addr, val) ({ \
+	GRANULE_TYPE g = CONVERT_GRANULE_D(val); \
+	HTM_SGL_write((GRANULE_TYPE*)addr, g); \
+	val; \
+})
+
+#define HTM_SGL_write_P(addr, val) ({ \
+	GRANULE_TYPE g = (GRANULE_TYPE) val; /* works for pointers only */ \
+	HTM_SGL_write((GRANULE_TYPE*)addr, g); \
+	val; \
+})
+
+#define HTM_SGL_before_read(addr) /* empty */
+
+#define HTM_SGL_read(addr) ({ \
+	HTM_SGL_before_read(addr); \
+	*((GRANULE_TYPE*)addr); \
+})
+
+#define HTM_SGL_read_P(addr) ({ \
+	HTM_SGL_before_read(addr); \
+	*((GRANULE_P_TYPE*)addr); \
+})
+
+#define HTM_SGL_read_D(addr) ({ \
+	HTM_SGL_before_read(addr); \
+	*((GRANULE_D_TYPE*)addr); \
+})
+
+/* TODO: persistency assumes an identifier */
+#define HTM_SGL_alloc(size) malloc(size)
+#define HTM_SGL_free(pool) free(pool)
+
+// Exposed API
+#define HTM_init(nb_threads) HTM_init_(HTM_SGL_INIT_BUDGET, nb_threads)
+void HTM_init_(int init_budget, int nb_threads);
+void HTM_exit();
+int HTM_thr_init(int); // pass -1 to get an id
+void HTM_thr_exit();
+void HTM_block();
+
+// int HTM_update_budget(int budget, HTM_STATUS_TYPE status);
+#define HTM_update_budget(budget, status) HTM_UPDATE_BUDGET(budget, status)
+void HTM_enter_fallback();
+void HTM_exit_fallback();
+
+void HTM_inc_status_count(int status_code);
+int HTM_get_nb_threads();
+int HTM_get_tid();
+
+// Getter and Setter for the initial budget
+int HTM_get_budget();
+void HTM_set_budget(int budget);
+
+void HTM_set_is_record(int is_rec);
+int HTM_get_is_record();
+/**
+ * @accum : int[nb_threads][HTM_NB_ERRORS]
+ */
+long HTM_get_status_count(int status_code, long **accum);
+void HTM_reset_status_count();
+
+#ifdef __cplusplus
+}
+#endif
+
+#define LOCK(mtx) \
+  while (!__sync_bool_compare_and_swap(&mtx, 0, 1)) PAUSE() \
+//
+
+#define UNLOCK(mtx) \
+  mtx = 0; \
+  __sync_synchronize() \
+//
+
+// using namespace std;
+
+#define SGL_SIZE 128
+#define SGL_POS  16
+
+static volatile int64_t CL_ALIGN HTM_SGL_var[SGL_SIZE] = { -1 };
+/* extern */__thread int64_t * volatile HTM_SGL_var_addr = (int64_t * volatile)&(HTM_SGL_var[SGL_POS]);
+/* extern */__thread CL_ALIGN HTM_SGL_local_vars_s HTM_SGL_vars;
+/* extern */__thread int64_t HTM_SGL_errors[HTM_NB_ERRORS];
+
+/* extern */void * HTM_read_only_storage1 = (void*)&(HTM_SGL_var[0]);
+/* extern */int HTM_read_only_storage1_size = SGL_POS * sizeof(int64_t);
+/* extern */void * HTM_read_only_storage2 = (void*)&(HTM_SGL_var[SGL_POS+1]);
+/* extern */int HTM_read_only_storage2_size = (SGL_SIZE - SGL_POS - 1) * sizeof(int64_t);
+
+static /* mutex */ int mtx;
+static int init_budget = HTM_SGL_INIT_BUDGET;
+static int threads;
+static int thr_counter;
+
+static __thread int is_record;
+static __thread int tid = -1;
+
+void HTM_init_(int init_budget, int nb_threads)
+{
+  init_budget = HTM_SGL_INIT_BUDGET;
+  threads = nb_threads;
+  HTM_SGL_var[SGL_POS] = -1;
+  HTM_SGL_var_addr = (int64_t * volatile)&(HTM_SGL_var[SGL_POS]);
+  HTM_INIT();
+}
+
+void HTM_exit()
+{
+  HTM_EXIT();
+}
+
+int HTM_thr_init(int reqTID)
+{
+  if (tid != -1) return tid; // TODO
+  LOCK(mtx); // mtx.lock();
+  if (reqTID != -1) {
+    tid = reqTID;
+    HTM_SGL_tid = reqTID;
+  } else {
+    tid = thr_counter++;
+    HTM_SGL_tid = tid;
+  }
+  HTM_SGL_var_addr = (int64_t * volatile)&(HTM_SGL_var[SGL_POS]);
+  HTM_THR_INIT();
+  UNLOCK(mtx); //mtx.unlock();
+  return tid;
+}
+
+void HTM_thr_exit()
+{
+  LOCK(mtx); // mtx.lock();
+  --thr_counter;
+  HTM_THR_EXIT();
+  UNLOCK(mtx); //mtx.unlock();
+}
+
+int HTM_get_budget() { return init_budget; }
+void HTM_set_budget(int _budget) { init_budget = _budget; }
+
+void HTM_enter_fallback()
+{
+  // mtx.lock();
+  while (__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != tid) {
+    while (__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != -1) {
+      PAUSE();
+    }
+    __sync_val_compare_and_swap(HTM_SGL_var_addr, -1, tid);
+  }
+
+  // HTM_SGL_var = 1;
+  // __sync_synchronize();
+  HTM_SGL_errors[HTM_FALLBACK]++;
+}
+
+void HTM_exit_fallback()
+{
+  // __sync_val_compare_and_swap(&HTM_SGL_var, 1, 0);
+  // __asm__ __volatile__("mfence" ::: "memory");
+  __atomic_store_n(HTM_SGL_var_addr, -1, __ATOMIC_RELEASE);
+  // mtx.unlock();
+}
+
+void HTM_block()
+{
+  while(__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != -1) {
+    PAUSE();
+  }
+
+  // mtx.lock();
+  // mtx.unlock();
+}
+
+void HTM_inc_status_count(int status_code)
+{
+  if (is_record) {
+    HTM_ERROR_INC(status_code, HTM_SGL_errors);
+  }
+}
+
+// int HTM_update_budget(int budget, HTM_STATUS_TYPE status)
+// {
+//   int res = 0;
+//   // HTM_inc_status_count(status);
+//   res = HTM_UPDATE_BUDGET(budget, status);
+//   return res;
+// }
+
+long HTM_get_status_count(int status_code, long **accum)
+{
+  long res = 0;
+  res = HTM_SGL_errors[status_code];
+  if (accum != NULL) {
+    accum[tid][status_code] = HTM_SGL_errors[status_code];
+  }
+  return res;
+}
+
+void HTM_reset_status_count()
+{
+  int i, j;
+  for (i = 0; i < HTM_NB_ERRORS; ++i) {
+    HTM_SGL_errors[i] = 0;
+  }
+}
+
+int HTM_get_nb_threads() { return threads; }
+int HTM_get_tid() { return tid; }
+
+void HTM_set_is_record(int is_rec) { is_record = is_rec; }
+int HTM_get_is_record() { return is_record; }
+
+/**********************************************
+ * 
  *                  NF
  * 
  **********************************************/
@@ -454,6 +971,9 @@ static void worker_main(void) {
     rte_exit(EXIT_FAILURE, "Error initializing NF");
   }
 
+  bool* write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool* write_state_ptr = &RTE_PER_LCORE(write_state);
+
   NF_INFO("Core %u forwarding packets.", rte_lcore_id());
 
   if (rte_eth_dev_count_avail() != 2) {
@@ -474,8 +994,25 @@ static void worker_main(void) {
         uint8_t* data = rte_pktmbuf_mtod(mbufs[n], uint8_t*);
         packet_state_total_length(data, &(mbufs[n]->pkt_len));
         vigor_time_t VIGOR_NOW = current_time();
+
+        *write_attempt_ptr = false;
+        *write_state_ptr = false;
+
+        nf_lock_block_writes(&nf_lock);
         uint16_t dst_device = nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
         nf_return_all_chunks(data);
+
+        if (*write_attempt_ptr) {
+          *write_state_ptr = true;
+
+          nf_lock_write_lock(&nf_lock);
+          uint16_t dst_device = nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
+          nf_lock_write_unlock(&nf_lock);
+
+          nf_return_all_chunks(data);
+        } else {
+          nf_lock_allow_writes(&nf_lock);
+        }
 
         if (dst_device == VIGOR_DEVICE) {
           rte_pktmbuf_free(mbufs[n]);
@@ -511,6 +1048,8 @@ int MAIN(int argc, char** argv) {
   char MBUF_POOL_NAME[20];
   struct rte_mempool **mbuf_pools;
   mbuf_pools = (struct rte_mempool**) rte_malloc(NULL, sizeof(struct rte_mempool*) * rte_lcore_count(), 64);
+
+  HTM_init(rte_lcore_count());
 
   unsigned lcore_id;
   unsigned lcore_idx = 0;

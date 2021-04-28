@@ -28,6 +28,7 @@
 #include "libvig/verified/boilerplate-util.h"
 #include "libvig/verified/tcpudp_hdr.h"
 #include "libvig/verified/vigor-time.h"
+#include "libvig/verified/ether.h"
 
 #include "libvig/unverified/double-chain-locks.h"
 #include "libvig/verified/vector.h"
