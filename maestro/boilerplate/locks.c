@@ -31,8 +31,8 @@
 #include "libvig/verified/ether.h"
 
 #include "libvig/unverified/double-chain-locks.h"
-#include "libvig/verified/vector.h"
-#include "libvig/verified/map.h"
+#include "libvig/unverified/vector-locks.h"
+#include "libvig/unverified/map-locks.h"
 
 /**********************************************
  * 

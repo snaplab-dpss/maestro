@@ -4,9 +4,9 @@
 #include <stdbool.h>
 
 typedef struct dchain_tm_cell {
-    int prev;
-    int next;
-} __attribute__ ((aligned (64))) dchain_tm_cell_t;
+  int prev;
+  int next;
+} __attribute__((aligned(64))) dchain_tm_cell_t;
 
 // Requires the array dchain_tm_cell, large enough to fit all the range of
 // possible 'index' values + 2 special values.
@@ -51,13 +51,14 @@ int dchain_tm_impl_allocate_new_index(dchain_tm_cell_t *cells, int *index);
 int dchain_tm_impl_free_index(dchain_tm_cell_t *cells, int index);
 int dchain_tm_impl_next(dchain_tm_cell_t *cells, int index, int *next);
 int dchain_tm_impl_get_oldest_index(dchain_tm_cell_t *cells, int *index);
-int dchain_tm_impl_reposition_index(dchain_tm_cell_t *cells, int index, int new_prev_index);
+int dchain_tm_impl_reposition_index(dchain_tm_cell_t *cells, int index,
+                                    int new_prev_index);
 int dchain_tm_impl_rejuvenate_index(dchain_tm_cell_t *cells, int index);
 int dchain_tm_impl_is_index_allocated(dchain_tm_cell_t *cells, int index);
 
 void dchain_tm_impl_activity_init(dchain_tm_cell_t *cells, int size);
-int dchain_tm_impl_activate_index(dchain_tm_cell_t* cells, int index);
-int dchain_tm_impl_deactivate_index(dchain_tm_cell_t* cells, int index);
-int dchain_tm_impl_is_index_active(dchain_tm_cell_t* cells, int index);
+int dchain_tm_impl_activate_index(dchain_tm_cell_t *cells, int index);
+int dchain_tm_impl_deactivate_index(dchain_tm_cell_t *cells, int index);
+int dchain_tm_impl_is_index_active(dchain_tm_cell_t *cells, int index);
 
 #endif //_DOUBLE_CHAIN_TM_IMPL_H_INCLUDED_

@@ -4,8 +4,8 @@
 #include <stdbool.h>
 
 struct dchain_locks_cell {
-    int prev;
-    int next;
+  int prev;
+  int next;
 };
 
 // Requires the array dchain_locks_cell, large enough to fit all the range of
@@ -48,22 +48,31 @@ struct dchain_locks_cell {
 
 void dchain_locks_impl_init(struct dchain_locks_cell *cells, int index_range);
 
-int dchain_locks_impl_allocate_new_index(struct dchain_locks_cell *cells, int *index);
+int dchain_locks_impl_allocate_new_index(struct dchain_locks_cell *cells,
+                                         int *index);
 
 int dchain_locks_impl_free_index(struct dchain_locks_cell *cells, int index);
 
-int dchain_locks_impl_next(struct dchain_locks_cell *cells, int index, int *next);
+int dchain_locks_impl_next(struct dchain_locks_cell *cells, int index,
+                           int *next);
 
-int dchain_locks_impl_get_oldest_index(struct dchain_locks_cell *cells, int *index);
+int dchain_locks_impl_get_oldest_index(struct dchain_locks_cell *cells,
+                                       int *index);
 
-int dchain_locks_impl_reposition_index(struct dchain_locks_cell *cells, int index, int new_prev_index);
-int dchain_locks_impl_rejuvenate_index(struct dchain_locks_cell *cells, int index);
+int dchain_locks_impl_reposition_index(struct dchain_locks_cell *cells,
+                                       int index, int new_prev_index);
+int dchain_locks_impl_rejuvenate_index(struct dchain_locks_cell *cells,
+                                       int index);
 
-int dchain_locks_impl_is_index_allocated(struct dchain_locks_cell *cells, int index);
+int dchain_locks_impl_is_index_allocated(struct dchain_locks_cell *cells,
+                                         int index);
 
 void dchain_locks_impl_activity_init(struct dchain_locks_cell *cells, int size);
-int dchain_locks_impl_activate_index(struct dchain_locks_cell* cells, int index);
-int dchain_locks_impl_deactivate_index(struct dchain_locks_cell* cells, int index);
-int dchain_locks_impl_is_index_active(struct dchain_locks_cell* cells, int index);
+int dchain_locks_impl_activate_index(struct dchain_locks_cell *cells,
+                                     int index);
+int dchain_locks_impl_deactivate_index(struct dchain_locks_cell *cells,
+                                       int index);
+int dchain_locks_impl_is_index_active(struct dchain_locks_cell *cells,
+                                      int index);
 
 #endif //_DOUBLE_CHAIN_LOCKS_IMPL_H_INCLUDED_

@@ -5,32 +5,37 @@
 
 #include "double-chain-locks-impl.h"
 
-#include "rte_malloc.h"
-#include "rte_lcore.h"
+#include <rte_malloc.h>
+#include <rte_lcore.h>
 
 #ifndef NULL
 #define NULL 0
-#endif//NULL
+#endif // NULL
 
 struct DoubleChainLocks {
-  struct dchain_locks_cell* cells[RTE_MAX_LCORE];
-  struct dchain_locks_cell* active_cells[RTE_MAX_LCORE];
+  struct dchain_locks_cell *cells[RTE_MAX_LCORE];
+  struct dchain_locks_cell *active_cells[RTE_MAX_LCORE];
   vigor_time_t *timestamps[RTE_MAX_LCORE];
   int range;
 };
 
-int dchain_locks_allocate(int index_range, struct DoubleChainLocks** chain_out)
-{
+int dchain_locks_allocate(int index_range,
+                          struct DoubleChainLocks **chain_out) {
 
-  struct DoubleChainLocks* old_chain_out = *chain_out;
-  struct DoubleChainLocks* chain_alloc = (struct DoubleChainLocks*) rte_malloc(NULL, sizeof(struct DoubleChainLocks), 0);
-  if (chain_alloc == NULL) return 0;
-  *chain_out = (struct DoubleChainLocks*) chain_alloc;
+  struct DoubleChainLocks *old_chain_out = *chain_out;
+  struct DoubleChainLocks *chain_alloc = (struct DoubleChainLocks *)rte_malloc(
+      NULL, sizeof(struct DoubleChainLocks), 0);
+  if (chain_alloc == NULL)
+    return 0;
+  *chain_out = (struct DoubleChainLocks *)chain_alloc;
 
   unsigned lcore_id;
   RTE_LCORE_FOREACH(lcore_id) {
-    struct dchain_locks_cell* cells_alloc =
-      (struct dchain_locks_cell*) rte_malloc(NULL, sizeof (struct dchain_locks_cell)*(index_range + DCHAIN_RESERVED), 0);
+    struct dchain_locks_cell *cells_alloc =
+        (struct dchain_locks_cell *)rte_malloc(
+            NULL,
+            sizeof(struct dchain_locks_cell) * (index_range + DCHAIN_RESERVED),
+            0);
     if (cells_alloc == NULL) {
       rte_free(chain_alloc);
       *chain_out = old_chain_out;
@@ -38,21 +43,26 @@ int dchain_locks_allocate(int index_range, struct DoubleChainLocks** chain_out)
     }
     (*chain_out)->cells[lcore_id] = cells_alloc;
 
-    struct dchain_locks_cell* active_cells_alloc =
-      (struct dchain_locks_cell*) rte_malloc(NULL, sizeof (struct dchain_locks_cell)*(index_range + DCHAIN_RESERVED), 0);
+    struct dchain_locks_cell *active_cells_alloc =
+        (struct dchain_locks_cell *)rte_malloc(
+            NULL,
+            sizeof(struct dchain_locks_cell) * (index_range + DCHAIN_RESERVED),
+            0);
     if (active_cells_alloc == NULL) {
-      rte_free((void*)cells_alloc);
+      rte_free((void *)cells_alloc);
       rte_free(chain_alloc);
       *chain_out = old_chain_out;
       return 0;
     }
     (*chain_out)->active_cells[lcore_id] = active_cells_alloc;
-    dchain_locks_impl_activity_init((*chain_out)->active_cells[lcore_id], index_range);
+    dchain_locks_impl_activity_init((*chain_out)->active_cells[lcore_id],
+                                    index_range);
 
-    vigor_time_t* timestamps_alloc = (vigor_time_t*) rte_zmalloc(NULL, sizeof(vigor_time_t)*(index_range), 0);
+    vigor_time_t *timestamps_alloc = (vigor_time_t *)rte_zmalloc(
+        NULL, sizeof(vigor_time_t) * (index_range), 0);
     if (timestamps_alloc == NULL) {
-      rte_free((void*)cells_alloc);
-      rte_free((void*)active_cells_alloc);
+      rte_free((void *)cells_alloc);
+      rte_free((void *)active_cells_alloc);
       rte_free(chain_alloc);
       *chain_out = old_chain_out;
       return 0;
@@ -62,19 +72,18 @@ int dchain_locks_allocate(int index_range, struct DoubleChainLocks** chain_out)
     }
     (*chain_out)->range = index_range;
     (*chain_out)->timestamps[lcore_id] = timestamps_alloc;
-    
+
     dchain_locks_impl_init((*chain_out)->cells[lcore_id], index_range);
   }
-    
+
   return 1;
 }
 
-int dchain_locks_allocate_new_index(struct DoubleChainLocks* chain,
-                              int *index_out, vigor_time_t time)
-{
-  bool* write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
-  bool* write_state_ptr = &RTE_PER_LCORE(write_state);
-  
+int dchain_locks_allocate_new_index(struct DoubleChainLocks *chain,
+                                    int *index_out, vigor_time_t time) {
+  bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool *write_state_ptr = &RTE_PER_LCORE(write_state);
+
   if (!*write_state_ptr) {
     *write_attempt_ptr = true;
     return 1;
@@ -83,7 +92,8 @@ int dchain_locks_allocate_new_index(struct DoubleChainLocks* chain,
   int ret = -1;
   unsigned lcore_id;
   RTE_LCORE_FOREACH(lcore_id) {
-    int new_ret = dchain_locks_impl_allocate_new_index(chain->cells[lcore_id], index_out);
+    int new_ret =
+        dchain_locks_impl_allocate_new_index(chain->cells[lcore_id], index_out);
     ret = new_ret;
     if (new_ret) {
       chain->timestamps[lcore_id][*index_out] = time;
@@ -98,23 +108,21 @@ int dchain_locks_allocate_new_index(struct DoubleChainLocks* chain,
   return ret;
 }
 
-int dchain_locks_rejuvenate_index(struct DoubleChainLocks* chain,
-                            int index, vigor_time_t time)
-{
+int dchain_locks_rejuvenate_index(struct DoubleChainLocks *chain, int index,
+                                  vigor_time_t time) {
   unsigned int lcore_id = rte_lcore_id();
   int ret = dchain_locks_impl_rejuvenate_index(chain->cells[lcore_id], index);
-  
+
   if (ret) {
     chain->timestamps[lcore_id][index] = time;
     dchain_locks_impl_activate_index(chain->active_cells[lcore_id], index);
   }
-  
+
   return ret;
 }
 
-int dchain_locks_update_timestamp(struct DoubleChainLocks* chain,
-                            int index, vigor_time_t time)
-{
+int dchain_locks_update_timestamp(struct DoubleChainLocks *chain, int index,
+                                  vigor_time_t time) {
   unsigned int lcore_id = rte_lcore_id();
 
   int new_prev = -1;
@@ -141,24 +149,24 @@ int dchain_locks_update_timestamp(struct DoubleChainLocks* chain,
   if (new_prev == -1) {
     ret = dchain_locks_impl_rejuvenate_index(chain->cells[lcore_id], index);
   } else {
-    ret = dchain_locks_impl_reposition_index(chain->cells[lcore_id], index, new_prev);
+    ret = dchain_locks_impl_reposition_index(chain->cells[lcore_id], index,
+                                             new_prev);
   }
 
   return ret;
 }
 
-int dchain_locks_expire_one_index(struct DoubleChainLocks* chain,
-                            int* index_out, vigor_time_t time)
-{
-  bool* write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
-  bool* write_state_ptr = &RTE_PER_LCORE(write_state);
-  
+int dchain_locks_expire_one_index(struct DoubleChainLocks *chain,
+                                  int *index_out, vigor_time_t time) {
+  bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool *write_state_ptr = &RTE_PER_LCORE(write_state);
+
   unsigned int this_lcore_id = rte_lcore_id();
 
-  int has_ind = dchain_locks_impl_get_oldest_index(chain->active_cells[this_lcore_id], index_out);
+  int has_ind = dchain_locks_impl_get_oldest_index(
+      chain->active_cells[this_lcore_id], index_out);
 
-  if (has_ind &&
-      chain->timestamps[this_lcore_id][*index_out] > -1 &&
+  if (has_ind && chain->timestamps[this_lcore_id][*index_out] > -1 &&
       chain->timestamps[this_lcore_id][*index_out] < time) {
     if (!*write_state_ptr) {
       *write_attempt_ptr = true;
@@ -176,22 +184,21 @@ int dchain_locks_expire_one_index(struct DoubleChainLocks* chain,
     if (most_recent >= time) {
       return dchain_locks_update_timestamp(chain, *index_out, most_recent);
     }
-    
+
     return dchain_locks_free_index(chain, *index_out);
   }
 
   return 0;
 }
 
-int dchain_locks_is_index_allocated(struct DoubleChainLocks* chain, int index)
-{
-  return dchain_locks_impl_is_index_allocated(chain->cells[rte_lcore_id()], index);
+int dchain_locks_is_index_allocated(struct DoubleChainLocks *chain, int index) {
+  return dchain_locks_impl_is_index_allocated(chain->cells[rte_lcore_id()],
+                                              index);
 }
 
-int dchain_locks_free_index(struct DoubleChainLocks* chain, int index)
-{
-  bool* write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
-  bool* write_state_ptr = &RTE_PER_LCORE(write_state);
+int dchain_locks_free_index(struct DoubleChainLocks *chain, int index) {
+  bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool *write_state_ptr = &RTE_PER_LCORE(write_state);
 
   if (!*write_state_ptr) {
     *write_attempt_ptr = true;

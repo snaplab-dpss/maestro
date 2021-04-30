@@ -3,10 +3,11 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+
 #include <rte_lcore.h>
 #include <rte_per_lcore.h>
 
-#include "libvig/verified/vigor-time.h"
+#include "../verified/vigor-time.h"
 
 RTE_DECLARE_PER_LCORE(bool, write_attempt);
 RTE_DECLARE_PER_LCORE(bool, write_state);
@@ -21,18 +22,18 @@ struct DoubleChainLocks;
 #define time_integer llong_integer
 #define times llongs
 
-int dchain_locks_allocate(int index_range, struct DoubleChainLocks** chain_out);
+int dchain_locks_allocate(int index_range, struct DoubleChainLocks **chain_out);
 
-int dchain_locks_allocate_new_index(struct DoubleChainLocks* chain,
-                              int* index_out, vigor_time_t time);
+int dchain_locks_allocate_new_index(struct DoubleChainLocks *chain,
+                                    int *index_out, vigor_time_t time);
 
-int dchain_locks_rejuvenate_index(struct DoubleChainLocks* chain,
-                            int index, vigor_time_t time);
+int dchain_locks_rejuvenate_index(struct DoubleChainLocks *chain, int index,
+                                  vigor_time_t time);
 
-int dchain_locks_expire_one_index(struct DoubleChainLocks* chain,
-                            int* index_out, vigor_time_t time);
+int dchain_locks_expire_one_index(struct DoubleChainLocks *chain,
+                                  int *index_out, vigor_time_t time);
 
-int dchain_locks_is_index_allocated(struct DoubleChainLocks* chain, int index);
-int dchain_locks_free_index(struct DoubleChainLocks* chain, int index);
+int dchain_locks_is_index_allocated(struct DoubleChainLocks *chain, int index);
+int dchain_locks_free_index(struct DoubleChainLocks *chain, int index);
 
 #endif //_DOUBLE_CHAIN_LOCKS_H_INCLUDED_
