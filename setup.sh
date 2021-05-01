@@ -158,7 +158,10 @@ opam install goblint-cil core -y
 # ======
 
 sudo DEBIAN_FRONTEND=noninteractive \
-     apt-get install -y python3.6
+     apt-get install -y python3.6 python3-pip
+
+sudo DEBIAN_FRONTEND=noninteractive \
+     pip3 install numpy scapy
 
 
 

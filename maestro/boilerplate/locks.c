@@ -398,6 +398,53 @@ bool nf_parse_ipv4addr(const char* str, uint32_t* addr)
   return false;
 }
 
+#define RETA_CONF_SIZE     (ETH_RSS_RETA_SIZE_512 / RTE_RETA_GROUP_SIZE)
+
+typedef struct {
+  uint16_t tables[RTE_MAX_LCORE][ETH_RSS_RETA_SIZE_512];
+  bool set;
+} retas_t;
+
+retas_t retas_per_device[MAX_NUM_DEVICES];
+
+void init_retas() {
+  for (unsigned i = 0; i < MAX_NUM_DEVICES; i++) {
+    retas_per_device[i].set = false;
+  }
+
+  /*@INIT-RETAS@*/
+}
+
+void set_reta(uint16_t device) {
+  unsigned lcores = rte_lcore_count();
+
+  if (lcores <= 1 || !retas_per_device[device].set) {
+    return;
+  }
+
+  struct rte_eth_rss_reta_entry64 reta_conf[RETA_CONF_SIZE];
+
+  struct rte_eth_dev_info dev_info;
+  rte_eth_dev_info_get(device, &dev_info);
+
+  /* RETA setting */
+  memset(reta_conf, 0, sizeof(reta_conf));
+
+  for (uint16_t bucket = 0; bucket < dev_info.reta_size; bucket++) {
+      reta_conf[bucket / RTE_RETA_GROUP_SIZE].mask = UINT64_MAX;
+  }
+
+  for (uint16_t bucket = 0; bucket < dev_info.reta_size; bucket++) {
+      uint32_t reta_id  = bucket / RTE_RETA_GROUP_SIZE;
+      uint32_t reta_pos = bucket % RTE_RETA_GROUP_SIZE;
+      reta_conf[reta_id].reta[reta_pos] = retas_per_device[device].tables[lcores - 2][bucket];
+  }
+
+  /* RETA update */
+  rte_eth_dev_rss_reta_update(device, reta_conf, dev_info.reta_size);
+}
+
+
 /**********************************************
  * 
  *                  NF
@@ -510,6 +557,8 @@ static int nf_init_device(uint16_t device, struct rte_mempool** mbuf_pools) {
     return retval;
   }
 
+  set_reta(device);
+
   return 0;
 }
 
@@ -598,6 +647,8 @@ int MAIN(int argc, char** argv) {
 
   // Create a memory pool
   unsigned nb_devices = rte_eth_dev_count_avail();
+
+  init_retas();
 
   char MBUF_POOL_NAME[20];
   struct rte_mempool **mbuf_pools;

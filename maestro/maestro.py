@@ -11,6 +11,8 @@ import subprocess
 from time import perf_counter
 from datetime import timedelta 
 
+import get_balanced_lut
+
 # env vars
 KLEE_DIR = os.getenv("KLEE_DIR")
 
@@ -45,7 +47,9 @@ LVA_DEBUG 		 = f"{BUILD_DIR}/report.txt"
 RSS_CONF 		 = f"{BUILD_DIR}/rss_conf.txt"
 RSS_KEY_LEN		 = 52
 
-def error():
+RETA_MARKER		 = "/*@INIT-RETAS@*/"
+
+def error(verbose):
 	if not verbose:
 		print("\nOh-oh something went wrong. Use '-v' to gather clues.")
 	print("Exiting...")
@@ -131,11 +135,14 @@ def synthesize_rss_conf(target):
 	confs 	= []
 	code = ""
 
+	keys = []
+
 	assert(devices)
 
 	for device in range(devices):
 		opts = rss_conf[device * 2].split(' ')
 		key	 = [ int(v) for v in rss_conf[device * 2 + 1].split(' ') ]
+		keys.append(key)
 
 		var_name, key_code = code_key(key, device)
 		code += key_code
@@ -155,7 +162,7 @@ def synthesize_rss_conf(target):
 		if iconf != len(confs) - 1: code += ",\n"
 
 	code += f"\n}};"
-	return code
+	return code, keys
 
 def synthesize_nf(nf, call_paths, target, verbose):
 	assert(call_paths)
@@ -176,7 +183,7 @@ def synthesize_nf(nf, call_paths, target, verbose):
 
 	return synthesized_content
 
-def stitch_synthesized_nf(synthesized_content, target):
+def stitch_synthesized_nf(synthesized_content, balance_lut_code, target):
 	assert(target in BOILERPLATE)
 
 	boilerplate_file    = open(BOILERPLATE[target], mode='r')
@@ -184,20 +191,43 @@ def stitch_synthesized_nf(synthesized_content, target):
 	boilerplate_file.close()
 
 	parallel_content = f"{boilerplate_content}\n{synthesized_content}\n\n"
+	parallel_content = parallel_content.replace(RETA_MARKER, balance_lut_code)
 
 	parallel_file = open(PARALLEL_NF, mode='w')
 	parallel_file.write(parallel_content)
 	parallel_file.close()
 
+def synthesize_balance_lut(keys, pcap, verbose):
+	code = ""
+
+	if not pcap:
+		return code
+
+	for ikey, key in enumerate(keys):
+		if verbose: print(f"Balancing LUT for key {ikey}")
+		lut = get_balanced_lut.run(key, pcap, verbose)
+
+		code += "\n"
+		code += f"  retas_per_device[{ikey}].set = true;"
+
+		for j, lut_core in enumerate(lut):
+			code += "\n"
+
+			for k, bucket in enumerate(lut_core):
+				code += f"  retas_per_device[{ikey}].tables[{j}][{k}] = {bucket};\n"
+
+	return code
+
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description='Parallelize a Vigor NF.')
 	
 	parser.add_argument('nf', type=str, help='path to the NF')
-	parser.add_argument('-v', action='store_true', help='Verbose')
+	parser.add_argument('-v', action='store_true', help='verbose')
 	parser.add_argument('--target', 														\
 		help='implementation model target', 												\
-		choices = [ CHOICE_SEQUENTIAL, CHOICE_SHARED_NOTHING, CHOICE_LOCKS, CHOICE_TM ],	\
+		choices=[ CHOICE_SEQUENTIAL, CHOICE_SHARED_NOTHING, CHOICE_LOCKS, CHOICE_TM ],	\
 		default=CHOICE_SHARED_NOTHING)
+	parser.add_argument('--balance', type=str, help='pcap used to balance LUT')
 
 	args = parser.parse_args()
 
@@ -229,13 +259,16 @@ if __name__ == "__main__":
 	print("[5/5] Synthesizing parallel implementation")
 	synthesized_nf = synthesize_nf(args.nf, call_paths, args.target, args.v)
 
-	rss_conf_code = synthesize_rss_conf(args.target)
+	rss_conf_code, keys = synthesize_rss_conf(args.target)
+	balance_lut_code = synthesize_balance_lut(keys, args.balance, args.v)
+
 	synthesized_content = f"{rss_conf_code}\n{synthesized_nf}"
 
-	stitch_synthesized_nf(synthesized_content, args.target)
+	stitch_synthesized_nf(synthesized_content, balance_lut_code, args.target)
 	t_synthesize = perf_counter()
 	t_end = t_synthesize
 
+	print()
 	print("================ REPORT ================")
 	print(f"Symbolic execution  {timedelta(seconds=(t_symbex - t_start))}")
 	print(f"Call path analysis  {timedelta(seconds=(t_analyze_call_paths - t_symbex))}")
