@@ -223,8 +223,8 @@ if __name__ == "__main__":
 	
 	parser.add_argument('nf', type=str, help='path to the NF')
 	parser.add_argument('-v', action='store_true', help='verbose')
-	parser.add_argument('--target', 														\
-		help='implementation model target', 												\
+	parser.add_argument('--target', 													\
+		help='implementation model target', 											\
 		choices=[ CHOICE_SEQUENTIAL, CHOICE_SHARED_NOTHING, CHOICE_LOCKS, CHOICE_TM ],	\
 		default=CHOICE_SHARED_NOTHING)
 	parser.add_argument('--balance', type=str, help='pcap used to balance LUT')
