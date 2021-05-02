@@ -195,9 +195,9 @@ def stitch_synthesized_nf(synthesized_content, target):
 		if not marker: code += f"\n{content}"
 		else: code = code.replace(marker, content)
 
-	parallel_file = open(FINAL_CODE, mode='w')
-	parallel_file.write(code)
-	parallel_file.close()
+	final_code_file = open(FINAL_CODE, mode='w')
+	final_code_file.write(code)
+	final_code_file.close()
 
 def synthesize_balance_lut(keys, pcap, target, verbose):
 	code = ""
