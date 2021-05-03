@@ -36,3 +36,4 @@ klee-last
 .vscode/*
 *.vfmanifest
 fspec_gen.ml
+__pycache__
