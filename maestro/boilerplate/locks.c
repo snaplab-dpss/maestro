@@ -33,6 +33,7 @@
 #include "libvig/unverified/double-chain-locks.h"
 #include "libvig/unverified/vector-locks.h"
 #include "libvig/unverified/map-locks.h"
+#include "libvig/unverified/expirator-locks.h"
 
 /**********************************************
  * 

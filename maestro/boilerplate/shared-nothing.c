@@ -33,6 +33,7 @@
 #include "libvig/verified/double-chain.h"
 #include "libvig/verified/vector.h"
 #include "libvig/verified/map.h"
+#include "libvig/verified/expirator.h"
 
 /**********************************************
  * 
