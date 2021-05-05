@@ -256,7 +256,7 @@ if __name__ == "__main__":
 
 	t_rss_conf = perf_counter()
 
-	print("[5/5] Synthesizing parallel implementation")
+	print("[5/5] Synthesizing")
 	synthesized_content = []
 
 	rss_conf_code, keys = synthesize_rss_conf(args.target)
