@@ -26,7 +26,8 @@ NF_DIR := $(shell if [ '$(notdir $(shell pwd))' = 'build' ]; \
 # otherwise grep with empty argument list will wait on stdin
 ifeq (true,$(shell if grep -q clock_gettime                     \
                            $(SELF_DIR)/nf.c                     \
-                           $(addprefix $(NF_DIR)/,$(NF_FILES)); \
+                           $(addprefix $(NF_DIR)/,$(NF_FILES))  \
+													 2> /dev/null; 												\
                    then echo 'true';                            \
                    fi))
 $(error Please use the vigor_time header instead of clock_gettime)
@@ -53,6 +54,9 @@ include $(SELF_DIR)/Makefile.click
 else ifeq (nfos-,$(findstring nfos-,$(MAKECMDGOALS)))
 # NFOS-related targets
 include $(SELF_DIR)/Makefile.nfos
+else ifeq (maestro,$(findstring maestro,$(shell pwd)))
+# Maestro NFs
+include $(SELF_DIR)/Makefile.maestro
 else ifeq (,$(findstring moonpol,$(abspath $(NF_DIR))))
 # DPDK-based NFs
 include $(SELF_DIR)/Makefile.dpdk

@@ -377,6 +377,22 @@ static int nf_init_device(uint16_t device, struct rte_mempool *mbuf_pool) {
   return 0;
 }
 
+uint64_t *call_path_hit_counter_ptr;
+unsigned call_path_hit_counter_sz;
+
+void dump() {
+  FILE *report = fopen("report.txt", "w");
+  for (unsigned i = 0; i < call_path_hit_counter_sz; i++) {
+    if (i != 0) {
+      fprintf(report, " ");
+    }
+    fprintf(report, "%lu", call_path_hit_counter_ptr[i]);
+  }
+  fprintf(report, "\n");
+  fclose(report);
+  exit(0);
+}
+
 // Main worker method (for now used on a single thread...)
 static void worker_main(void) {
   if (!nf_init()) {
@@ -391,7 +407,7 @@ static void worker_main(void) {
     exit(1);
   }
   NF_INFO("Running with batches, this code is unverified!");
-
+  int no_rx = 0;
   while (1) {
     unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();
     for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT;
@@ -402,7 +418,15 @@ static void worker_main(void) {
 
       struct rte_mbuf *mbufs_to_send[VIGOR_BATCH_SIZE];
       uint16_t tx_count = 0;
+      if (rx_count == 0) {
+        no_rx++;
+      }
+
+      if (no_rx == 10) {
+        dump();
+      }
       for (uint16_t n = 0; n < rx_count; n++) {
+        no_rx = 0;
         uint8_t *data = rte_pktmbuf_mtod(mbufs[n], uint8_t *);
         packet_state_total_length(data, &(mbufs[n]->pkt_len));
         vigor_time_t VIGOR_NOW = current_time();

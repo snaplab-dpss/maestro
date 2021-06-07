@@ -9,11 +9,9 @@ Z3_LIB_FLAGS := -lz3 -Wl,-rpath,$(Z3_DIR)/build/lib -L$(Z3_DIR)/build/lib
 R3S_LIB_FLAGS := -lr3s -Wl,-rpath,$(R3S_DIR)/build/libs -L$(R3S_DIR)/build/libs
 
 KLEE_DIR := $(VIGOR_DIR)/klee
-
 BUILD := $(MAESTRO_DIR)/build/maestro
-NF_FILES := $(BUILD)/nf.c
 
-include $(abspath $(dir $(lastword $(MAKEFILE_LIST))))/../Makefile.maestro
+include $(abspath $(dir $(lastword $(MAKEFILE_LIST))))/Makefile.nf
 
 before-maestro:
 	@mkdir -p $(BUILD)

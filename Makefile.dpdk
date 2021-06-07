@@ -384,19 +384,3 @@ new-nf:
 	 mkdir vig$${name}; \
 	 cp template/* vig$${name}/.; \
 	 echo "Go to the vig$${name} folder, and check out the comments in each file."
-
-
-# ==============
-# Parallelize NF
-# ==============
-
-change-srcs:
-	@echo "before..."
-	SRCS-y   = $(shell echo $(SELF_DIR)/libvig/verified/*.c)
-	NF_FILES = vignop/build/parallelize/boilerplate.c
-	$(info $(NF_FILES))
-	SRCS-y   += $(NF_FILES)
-	$(info $(SRCS-y))
-	@echo "after"
-
-parallelize: change-srcs all

@@ -24,7 +24,6 @@
 #include <rte_lcore.h>
 #include <rte_malloc.h>
 
-
 #include "libvig/verified/boilerplate-util.h"
 #include "libvig/verified/tcpudp_hdr.h"
 #include "libvig/verified/vigor-time.h"
@@ -36,9 +35,9 @@
 #include "libvig/verified/expirator.h"
 
 /**********************************************
- * 
+ *
  *                  PACKET-IO
- * 
+ *
  **********************************************/
 
 RTE_DEFINE_PER_LCORE(size_t, global_total_length);
@@ -72,9 +71,9 @@ uint32_t packet_get_unread_length(void *p) {
 }
 
 /**********************************************
- * 
+ *
  *                  NF-RSS
- * 
+ *
  **********************************************/
 
 #define MBUF_CACHE_SIZE 256
@@ -84,34 +83,34 @@ uint32_t packet_get_unread_length(void *p) {
 struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES];
 
 struct lcore_conf {
-  struct rte_mempool* mbuf_pool;
+  struct rte_mempool *mbuf_pool;
   uint16_t queue_id;
 };
 
 struct lcore_conf lcores_conf[RTE_MAX_LCORE];
 
 /**********************************************
- * 
+ *
  *                  NF-LOG
- * 
+ *
  **********************************************/
 
-#  define NF_INFO(text, ...)                                                   \
-    printf(text "\n", ##__VA_ARGS__);                                          \
-    fflush(stdout);
+#define NF_INFO(text, ...)                                                     \
+  printf(text "\n", ##__VA_ARGS__);                                            \
+  fflush(stdout);
 
 #ifdef ENABLE_LOG
-#  define NF_DEBUG(text, ...)                                                  \
-    fprintf(stderr, "DEBUG: " text "\n", ##__VA_ARGS__);                       \
-    fflush(stderr);
+#define NF_DEBUG(text, ...)                                                    \
+  fprintf(stderr, "DEBUG: " text "\n", ##__VA_ARGS__);                         \
+  fflush(stderr);
 #else // ENABLE_LOG
-#  define NF_DEBUG(...)
+#define NF_DEBUG(...)
 #endif // ENABLE_LOG
 
 /**********************************************
- * 
+ *
  *                  NF-UTIL
- * 
+ *
  **********************************************/
 
 // rte_ether
@@ -132,15 +131,16 @@ RTE_DEFINE_PER_LCORE(bool, write_state);
 
 void nf_util_init() {
   size_t *chunks_borrowed_num_ptr = &RTE_PER_LCORE(chunks_borrowed_num);
-  void** *chunks_borrowed_ptr = &RTE_PER_LCORE(chunks_borrowed);
+  void ***chunks_borrowed_ptr = &RTE_PER_LCORE(chunks_borrowed);
 
   (*chunks_borrowed_num_ptr) = 0;
-  (*chunks_borrowed_ptr) = (void**) rte_malloc(NULL, sizeof(void*) * MAX_N_CHUNKS, 64);
+  (*chunks_borrowed_ptr) =
+      (void **)rte_malloc(NULL, sizeof(void *) * MAX_N_CHUNKS, 64);
 }
 
 static inline void *nf_borrow_next_chunk(void *p, size_t length) {
   size_t *chunks_borrowed_num_ptr = &RTE_PER_LCORE(chunks_borrowed_num);
-  void** *chunks_borrowed_ptr = &RTE_PER_LCORE(chunks_borrowed);
+  void ***chunks_borrowed_ptr = &RTE_PER_LCORE(chunks_borrowed);
 
   assert(*chunks_borrowed_num_ptr < MAX_N_CHUNKS);
   void *chunk;
@@ -150,8 +150,8 @@ static inline void *nf_borrow_next_chunk(void *p, size_t length) {
   return chunk;
 }
 
-#  define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests, tag)   \
-    /*nothing*/
+#define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests, tag)     \
+/*nothing*/
 
 #define CHUNK_LAYOUT_N(pkt, str_name, fields, nests)                           \
   CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields,                      \
@@ -164,7 +164,7 @@ static inline void *nf_borrow_next_chunk(void *p, size_t length) {
 
 static inline void nf_return_all_chunks(void *p) {
   size_t *chunks_borrowed_num_ptr = &RTE_PER_LCORE(chunks_borrowed_num);
-  void** *chunks_borrowed_ptr = &RTE_PER_LCORE(chunks_borrowed);
+  void ***chunks_borrowed_ptr = &RTE_PER_LCORE(chunks_borrowed);
 
   do {
     (*chunks_borrowed_num_ptr)--;
@@ -191,8 +191,10 @@ bool nf_has_tcpudp_header(struct rte_ipv4_hdr *header) {
 }
 
 static inline struct rte_ipv4_hdr *
-nf_then_get_rte_ipv4_header(void *rte_ether_header_, void *p, uint8_t **ip_options) {
-  struct rte_ether_hdr *rte_ether_header = (struct rte_ether_hdr *)rte_ether_header_;
+nf_then_get_rte_ipv4_header(void *rte_ether_header_, void *p,
+                            uint8_t **ip_options) {
+  struct rte_ether_hdr *rte_ether_header =
+      (struct rte_ether_hdr *)rte_ether_header_;
   *ip_options = NULL;
 
   uint16_t unread_len = packet_get_unread_length(p);
@@ -202,8 +204,8 @@ nf_then_get_rte_ipv4_header(void *rte_ether_header_, void *p, uint8_t **ip_optio
   }
 
   CHUNK_LAYOUT(p, rte_ipv4_hdr, rte_ipv4_fields);
-  struct rte_ipv4_hdr *hdr =
-      (struct rte_ipv4_hdr *)nf_borrow_next_chunk(p, sizeof(struct rte_ipv4_hdr));
+  struct rte_ipv4_hdr *hdr = (struct rte_ipv4_hdr *)nf_borrow_next_chunk(
+      p, sizeof(struct rte_ipv4_hdr));
 
   uint8_t ihl = hdr->version_ihl & 0x0f;
   if ((ihl < IP_MIN_SIZE_WORDS) |
@@ -233,7 +235,8 @@ nf_then_get_tcpudp_header(struct rte_ipv4_hdr *ip_header, void *p) {
 }
 
 void nf_set_rte_ipv4_udptcp_checksum(struct rte_ipv4_hdr *ip_header,
-                                 struct tcpudp_hdr *l4_header, void *packet) {
+                                     struct tcpudp_hdr *l4_header,
+                                     void *packet) {
   // Make sure the packet pointer points to the TCPUDP continuation
   // This check is exercised during verification, no need to repeat it.
   // void* payload = nf_borrow_next_chunk(packet,
@@ -274,10 +277,9 @@ char *nf_mac_to_str(struct rte_ether_addr *addr) {
     rte_exit(EXIT_FAILURE, "Out of memory in nf_mac_to_str!");
   }
 
-  snprintf(buffer, buffer_size, "%02X:%02X:%02X:%02X:%02X:%02X", addr->addr_bytes[0],
-           addr->addr_bytes[1], addr->addr_bytes[2],
-           addr->addr_bytes[3], addr->addr_bytes[4],
-           addr->addr_bytes[5]);
+  snprintf(buffer, buffer_size, "%02X:%02X:%02X:%02X:%02X:%02X",
+           addr->addr_bytes[0], addr->addr_bytes[1], addr->addr_bytes[2],
+           addr->addr_bytes[3], addr->addr_bytes[4], addr->addr_bytes[5]);
 
   return buffer;
 }
@@ -298,38 +300,29 @@ char *nf_rte_ipv4_to_str(uint32_t addr) {
 }
 
 /**********************************************
- * 
+ *
  *                  NF-PARSE
- * 
+ *
  **********************************************/
 
-bool nf_parse_etheraddr(const char* str, struct rte_ether_addr* addr)
-{
+bool nf_parse_etheraddr(const char *str, struct rte_ether_addr *addr) {
   return sscanf(str, "%02hhX:%02hhX:%02hhX:%02hhX:%02hhX:%02hhX",
-                addr->addr_bytes + 0,
-                addr->addr_bytes + 1,
-                addr->addr_bytes + 2,
-                addr->addr_bytes + 3,
-                addr->addr_bytes + 4,
-                addr->addr_bytes + 5)
-         == 6;
+                addr->addr_bytes + 0, addr->addr_bytes + 1,
+                addr->addr_bytes + 2, addr->addr_bytes + 3,
+                addr->addr_bytes + 4, addr->addr_bytes + 5) == 6;
 }
 
-bool nf_parse_ipv4addr(const char* str, uint32_t* addr)
-{
+bool nf_parse_ipv4addr(const char *str, uint32_t *addr) {
   uint8_t a, b, c, d;
   if (sscanf(str, "%hhu.%hhu.%hhu.%hhu", &a, &b, &c, &d) == 4) {
-    *addr = ((uint32_t) a << 24) |
-            ((uint32_t) b << 16) |
-            ((uint32_t) c <<  8) |
-            ((uint32_t) d <<  0);
+    *addr = ((uint32_t)a << 24) | ((uint32_t)b << 16) | ((uint32_t)c << 8) |
+            ((uint32_t)d << 0);
     return true;
   }
   return false;
 }
 
-
-#define RETA_CONF_SIZE     (ETH_RSS_RETA_SIZE_512 / RTE_RETA_GROUP_SIZE)
+#define RETA_CONF_SIZE (ETH_RSS_RETA_SIZE_512 / RTE_RETA_GROUP_SIZE)
 
 typedef struct {
   uint16_t tables[RTE_MAX_LCORE][ETH_RSS_RETA_SIZE_512];
@@ -362,13 +355,14 @@ void set_reta(uint16_t device) {
   memset(reta_conf, 0, sizeof(reta_conf));
 
   for (uint16_t bucket = 0; bucket < dev_info.reta_size; bucket++) {
-      reta_conf[bucket / RTE_RETA_GROUP_SIZE].mask = UINT64_MAX;
+    reta_conf[bucket / RTE_RETA_GROUP_SIZE].mask = UINT64_MAX;
   }
 
   for (uint16_t bucket = 0; bucket < dev_info.reta_size; bucket++) {
-      uint32_t reta_id  = bucket / RTE_RETA_GROUP_SIZE;
-      uint32_t reta_pos = bucket % RTE_RETA_GROUP_SIZE;
-      reta_conf[reta_id].reta[reta_pos] = retas_per_device[device].tables[lcores - 2][bucket];
+    uint32_t reta_id = bucket / RTE_RETA_GROUP_SIZE;
+    uint32_t reta_pos = bucket % RTE_RETA_GROUP_SIZE;
+    reta_conf[reta_id].reta[reta_pos] =
+        retas_per_device[device].tables[lcores - 2][bucket];
   }
 
   /* RETA update */
@@ -376,32 +370,34 @@ void set_reta(uint16_t device) {
 }
 
 /**********************************************
- * 
+ *
  *                  NF
- * 
+ *
  **********************************************/
 
 bool nf_init(void);
-int nf_process(uint16_t device, uint8_t* buffer, uint16_t packet_length, vigor_time_t now);
+int nf_process(uint16_t device, uint8_t *buffer, uint16_t packet_length,
+               vigor_time_t now);
 
-#define FLOOD_FRAME ((uint16_t) -1)
+#define FLOOD_FRAME ((uint16_t) - 1)
 
 // NFOS declares its own main method
 #ifdef NFOS
-#  define MAIN nf_main
+#define MAIN nf_main
 #else // NFOS
-#  define MAIN main
+#define MAIN main
 #endif // NFOS
 
 // Unverified support for batching, useful for performance comparisons
 #define VIGOR_BATCH_SIZE 32
 
-#  define VIGOR_LOOP_BEGIN                                                                   \
-    while (1) {                                                                              \
-      vigor_time_t VIGOR_NOW = current_time();                                               \
-      unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();                                    \
-      for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT; VIGOR_DEVICE++) {
-#  define VIGOR_LOOP_END
+#define VIGOR_LOOP_BEGIN                                                       \
+  while (1) {                                                                  \
+    vigor_time_t VIGOR_NOW = current_time();                                   \
+    unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();                  \
+    for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT;        \
+         VIGOR_DEVICE++) {
+#define VIGOR_LOOP_END
 
 // Do the opposite: we want batching!
 static const uint16_t RX_QUEUE_SIZE = 128;
@@ -411,7 +407,7 @@ static const uint16_t TX_QUEUE_SIZE = 128;
 static const unsigned MEMPOOL_BUFFER_COUNT = 256;
 
 // Send the given packet to all devices except the packet's own
-void flood(struct rte_mbuf* packet, uint16_t nb_devices, uint16_t queue_id) {
+void flood(struct rte_mbuf *packet, uint16_t nb_devices, uint16_t queue_id) {
   rte_mbuf_refcnt_set(packet, nb_devices - 1);
   int total_sent = 0;
   uint16_t skip_device = packet->port;
@@ -420,7 +416,8 @@ void flood(struct rte_mbuf* packet, uint16_t nb_devices, uint16_t queue_id) {
       total_sent += rte_eth_tx_burst(device, queue_id, &packet, 1);
     }
   }
-  // should not happen, but in case we couldn't transmit, ensure the packet is freed
+  // should not happen, but in case we couldn't transmit, ensure the packet is
+  // freed
   if (total_sent != nb_devices - 1) {
     rte_mbuf_refcnt_set(packet, 1);
     rte_pktmbuf_free(packet);
@@ -428,13 +425,13 @@ void flood(struct rte_mbuf* packet, uint16_t nb_devices, uint16_t queue_id) {
 }
 
 // Initializes the given device using the given memory pool
-static int nf_init_device(uint16_t device, struct rte_mempool** mbuf_pools) {
+static int nf_init_device(uint16_t device, struct rte_mempool **mbuf_pools) {
   int retval;
   const uint16_t num_queues = rte_lcore_count();
 
   // device_conf passed to rte_eth_dev_configure cannot be NULL
-  struct rte_eth_conf device_conf = {0};
-  //device_conf.rxmode.hw_strip_crc = 1;
+  struct rte_eth_conf device_conf = { 0 };
+  // device_conf.rxmode.hw_strip_crc = 1;
   device_conf.rxmode.mq_mode = ETH_MQ_RX_RSS;
   device_conf.rx_adv_conf.rss_conf = rss_conf[device];
 
@@ -458,15 +455,14 @@ static int nf_init_device(uint16_t device, struct rte_mempool** mbuf_pools) {
       return retval;
     }
   }
-  
+
   unsigned lcore_id;
   int rxq = 0;
   RTE_LCORE_FOREACH(lcore_id) {
     // Allocate and set up RX queues
     lcores_conf[lcore_id].queue_id = rxq;
     retval = rte_eth_rx_queue_setup(device, rxq, RX_QUEUE_SIZE,
-                                    rte_eth_dev_socket_id(device),
-                                    NULL,
+                                    rte_eth_dev_socket_id(device), NULL,
                                     mbuf_pools[rxq]);
     if (retval != 0) {
       return retval;
@@ -507,46 +503,53 @@ static void worker_main(void) {
   NF_INFO("Core %u forwarding packets.", rte_lcore_id());
 
   if (rte_eth_dev_count_avail() != 2) {
-    printf("We assume there will be exactly 2 devices for our simple batching implementation.");
+    printf("We assume there will be exactly 2 devices for our simple batching "
+           "implementation.");
     exit(1);
   }
   NF_INFO("Running with batches, this code is unverified!");
 
-  while(1) {
+  while (1) {
     unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();
-    for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT; VIGOR_DEVICE++) {
-      struct rte_mbuf* mbufs[VIGOR_BATCH_SIZE];
-      uint16_t rx_count = rte_eth_rx_burst(VIGOR_DEVICE, queue_id, mbufs, VIGOR_BATCH_SIZE);
+    for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT;
+         VIGOR_DEVICE++) {
+      struct rte_mbuf *mbufs[VIGOR_BATCH_SIZE];
+      uint16_t rx_count =
+          rte_eth_rx_burst(VIGOR_DEVICE, queue_id, mbufs, VIGOR_BATCH_SIZE);
 
       struct rte_mbuf *mbufs_to_send[VIGOR_BATCH_SIZE];
       uint16_t tx_count = 0;
       for (uint16_t n = 0; n < rx_count; n++) {
-        uint8_t* data = rte_pktmbuf_mtod(mbufs[n], uint8_t*);
+        uint8_t *data = rte_pktmbuf_mtod(mbufs[n], uint8_t *);
         packet_state_total_length(data, &(mbufs[n]->pkt_len));
         vigor_time_t VIGOR_NOW = current_time();
-        uint16_t dst_device = nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
+        uint16_t dst_device =
+            nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
         nf_return_all_chunks(data);
 
         if (dst_device == VIGOR_DEVICE) {
           rte_pktmbuf_free(mbufs[n]);
         } else if (dst_device == FLOOD_FRAME) {
           flood(mbufs[n], VIGOR_DEVICES_COUNT, queue_id);
-        } else { // includes flood when 2 devices, which is equivalent to just a send
+        } else { // includes flood when 2 devices, which is equivalent to just a
+                 // send
           mbufs_to_send[tx_count] = mbufs[n];
           tx_count++;
         }
       }
 
-      uint16_t sent_count = rte_eth_tx_burst(1 - VIGOR_DEVICE, queue_id, mbufs_to_send, tx_count);
+      uint16_t sent_count =
+          rte_eth_tx_burst(1 - VIGOR_DEVICE, queue_id, mbufs_to_send, tx_count);
       for (uint16_t n = sent_count; n < tx_count; n++) {
-        rte_pktmbuf_free(mbufs[n]); // should not happen, but we're in the unverified case anyway
+        rte_pktmbuf_free(mbufs[n]); // should not happen, but we're in the
+                                    // unverified case anyway
       }
     }
   }
 }
 
 // Entry point
-int MAIN(int argc, char** argv) {
+int MAIN(int argc, char **argv) {
   // Initialize the DPDK Environment Abstraction Layer (EAL)
   int ret = rte_eal_init(argc, argv);
   if (ret < 0) {
@@ -562,21 +565,22 @@ int MAIN(int argc, char** argv) {
 
   char MBUF_POOL_NAME[20];
   struct rte_mempool **mbuf_pools;
-  mbuf_pools = (struct rte_mempool**) rte_malloc(NULL, sizeof(struct rte_mempool*) * rte_lcore_count(), 64);
+  mbuf_pools = (struct rte_mempool **)rte_malloc(
+      NULL, sizeof(struct rte_mempool *) * rte_lcore_count(), 64);
 
   unsigned lcore_id;
   unsigned lcore_idx = 0;
   RTE_LCORE_FOREACH(lcore_id) {
     sprintf(MBUF_POOL_NAME, "MEMORY_POOL_%u", lcore_idx);
 
-    mbuf_pools[lcore_idx] = rte_pktmbuf_pool_create(
-                            MBUF_POOL_NAME, // name
-                            MEMPOOL_BUFFER_COUNT * nb_devices, // #elements
-                            MBUF_CACHE_SIZE, // cache size (per-lcore)
-                            0, // application private area size
-                            RTE_MBUF_DEFAULT_BUF_SIZE, // data buffer size
-                            rte_socket_id() // socket ID
-    );
+    mbuf_pools[lcore_idx] =
+        rte_pktmbuf_pool_create(MBUF_POOL_NAME,                    // name
+                                MEMPOOL_BUFFER_COUNT * nb_devices, // #elements
+                                MBUF_CACHE_SIZE, // cache size (per-lcore)
+                                0, // application private area size
+                                RTE_MBUF_DEFAULT_BUF_SIZE, // data buffer size
+                                rte_socket_id()            // socket ID
+                                );
 
     if (mbuf_pools[lcore_idx] == NULL) {
       rte_exit(EXIT_FAILURE, "Cannot create mbuf pool: %s\n",

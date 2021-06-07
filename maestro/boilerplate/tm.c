@@ -36,46 +36,40 @@
 #include "libvig/verified/expirator.h"
 
 /**********************************************
- * 
+ *
  *                  NF-LOCKS
- * 
+ *
  **********************************************/
 
 typedef struct {
-  rte_atomic32_t* tokens;
+  rte_atomic32_t *tokens;
   rte_atomic32_t write_token;
 } nf_lock_t;
 
-static inline void
-nf_lock_init(nf_lock_t *nfl)
-{
-  nfl->tokens = (rte_atomic32_t*) rte_malloc(NULL, sizeof(rte_atomic32_t) * RTE_MAX_LCORE, 64);
+static inline void nf_lock_init(nf_lock_t *nfl) {
+  nfl->tokens = (rte_atomic32_t *)rte_malloc(
+      NULL, sizeof(rte_atomic32_t) * RTE_MAX_LCORE, 64);
 
-	unsigned lcore_id;
-	RTE_LCORE_FOREACH(lcore_id) {
-    rte_atomic32_init(&nfl->tokens[lcore_id]);
-	}
+  unsigned lcore_id;
+  RTE_LCORE_FOREACH(lcore_id) { rte_atomic32_init(&nfl->tokens[lcore_id]); }
 
-	rte_atomic32_init(&nfl->write_token);
+  rte_atomic32_init(&nfl->write_token);
 }
 
-static inline void
-nf_lock_allow_writes(nf_lock_t *nfl) {
-	unsigned lcore_id = rte_lcore_id();
+static inline void nf_lock_allow_writes(nf_lock_t *nfl) {
+  unsigned lcore_id = rte_lcore_id();
   rte_atomic32_clear(&nfl->tokens[lcore_id]);
 }
 
-static inline void
-nf_lock_block_writes(nf_lock_t *nfl) {
-	unsigned lcore_id = rte_lcore_id();
+static inline void nf_lock_block_writes(nf_lock_t *nfl) {
+  unsigned lcore_id = rte_lcore_id();
   while (!rte_atomic32_test_and_set(&nfl->tokens[lcore_id])) {
     // prevent the compiler from removing this loop
-		__asm__ __volatile__("");
+    __asm__ __volatile__("");
   }
 }
 
-static inline void
-nf_lock_write_lock(nf_lock_t *nfl) {
+static inline void nf_lock_write_lock(nf_lock_t *nfl) {
   unsigned lcore_id = rte_lcore_id();
   rte_atomic32_clear(&nfl->tokens[lcore_id]);
 
@@ -84,27 +78,24 @@ nf_lock_write_lock(nf_lock_t *nfl) {
     __asm__ __volatile__("");
   }
 
-	RTE_LCORE_FOREACH(lcore_id) {
-	  while (!rte_atomic32_test_and_set(&nfl->tokens[lcore_id])) {
-    __asm__ __volatile__("");
+  RTE_LCORE_FOREACH(lcore_id) {
+    while (!rte_atomic32_test_and_set(&nfl->tokens[lcore_id])) {
+      __asm__ __volatile__("");
     }
-	}
+  }
 }
 
-static inline void
-nf_lock_write_unlock(nf_lock_t *nfl) {
+static inline void nf_lock_write_unlock(nf_lock_t *nfl) {
   unsigned lcore_id;
-  RTE_LCORE_FOREACH(lcore_id) {
-	  rte_atomic32_clear(&nfl->tokens[lcore_id]);
-	}
+  RTE_LCORE_FOREACH(lcore_id) { rte_atomic32_clear(&nfl->tokens[lcore_id]); }
 
   rte_atomic32_clear(&nfl->write_token);
 }
 
 /**********************************************
- * 
+ *
  *                  PACKET-IO
- * 
+ *
  **********************************************/
 
 RTE_DEFINE_PER_LCORE(size_t, global_total_length);
@@ -138,9 +129,9 @@ uint32_t packet_get_unread_length(void *p) {
 }
 
 /**********************************************
- * 
+ *
  *                  NF-RSS
- * 
+ *
  **********************************************/
 
 #define MBUF_CACHE_SIZE 256
@@ -150,34 +141,34 @@ uint32_t packet_get_unread_length(void *p) {
 struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES];
 
 struct lcore_conf {
-  struct rte_mempool* mbuf_pool;
+  struct rte_mempool *mbuf_pool;
   uint16_t queue_id;
 };
 
 struct lcore_conf lcores_conf[RTE_MAX_LCORE];
 
 /**********************************************
- * 
+ *
  *                  NF-LOG
- * 
+ *
  **********************************************/
 
-#  define NF_INFO(text, ...)                                                   \
-    printf(text "\n", ##__VA_ARGS__);                                          \
-    fflush(stdout);
+#define NF_INFO(text, ...)                                                     \
+  printf(text "\n", ##__VA_ARGS__);                                            \
+  fflush(stdout);
 
 #ifdef ENABLE_LOG
-#  define NF_DEBUG(text, ...)                                                  \
-    fprintf(stderr, "DEBUG: " text "\n", ##__VA_ARGS__);                       \
-    fflush(stderr);
+#define NF_DEBUG(text, ...)                                                    \
+  fprintf(stderr, "DEBUG: " text "\n", ##__VA_ARGS__);                         \
+  fflush(stderr);
 #else // ENABLE_LOG
-#  define NF_DEBUG(...)
+#define NF_DEBUG(...)
 #endif // ENABLE_LOG
 
 /**********************************************
- * 
+ *
  *                  NF-UTIL
- * 
+ *
  **********************************************/
 
 // rte_ether
@@ -197,21 +188,20 @@ RTE_DEFINE_PER_LCORE(bool, write_state);
 
 nf_lock_t nf_lock;
 
-void nf_util_init_locks() {
-  nf_lock_init(&nf_lock);
-}
+void nf_util_init_locks() { nf_lock_init(&nf_lock); }
 
 void nf_util_init() {
   size_t *chunks_borrowed_num_ptr = &RTE_PER_LCORE(chunks_borrowed_num);
-  void** *chunks_borrowed_ptr = &RTE_PER_LCORE(chunks_borrowed);
+  void ***chunks_borrowed_ptr = &RTE_PER_LCORE(chunks_borrowed);
 
   (*chunks_borrowed_num_ptr) = 0;
-  (*chunks_borrowed_ptr) = (void**) rte_malloc(NULL, sizeof(void*) * MAX_N_CHUNKS, 64);
+  (*chunks_borrowed_ptr) =
+      (void **)rte_malloc(NULL, sizeof(void *) * MAX_N_CHUNKS, 64);
 }
 
 static inline void *nf_borrow_next_chunk(void *p, size_t length) {
   size_t *chunks_borrowed_num_ptr = &RTE_PER_LCORE(chunks_borrowed_num);
-  void** *chunks_borrowed_ptr = &RTE_PER_LCORE(chunks_borrowed);
+  void ***chunks_borrowed_ptr = &RTE_PER_LCORE(chunks_borrowed);
 
   assert(*chunks_borrowed_num_ptr < MAX_N_CHUNKS);
   void *chunk;
@@ -221,8 +211,8 @@ static inline void *nf_borrow_next_chunk(void *p, size_t length) {
   return chunk;
 }
 
-#  define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests, tag)   \
-    /*nothing*/
+#define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests, tag)     \
+/*nothing*/
 
 #define CHUNK_LAYOUT_N(pkt, str_name, fields, nests)                           \
   CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields,                      \
@@ -235,7 +225,7 @@ static inline void *nf_borrow_next_chunk(void *p, size_t length) {
 
 static inline void nf_return_all_chunks(void *p) {
   size_t *chunks_borrowed_num_ptr = &RTE_PER_LCORE(chunks_borrowed_num);
-  void** *chunks_borrowed_ptr = &RTE_PER_LCORE(chunks_borrowed);
+  void ***chunks_borrowed_ptr = &RTE_PER_LCORE(chunks_borrowed);
 
   do {
     (*chunks_borrowed_num_ptr)--;
@@ -262,8 +252,10 @@ bool nf_has_tcpudp_header(struct rte_ipv4_hdr *header) {
 }
 
 static inline struct rte_ipv4_hdr *
-nf_then_get_rte_ipv4_header(void *rte_ether_header_, void *p, uint8_t **ip_options) {
-  struct rte_ether_hdr *rte_ether_header = (struct rte_ether_hdr *)rte_ether_header_;
+nf_then_get_rte_ipv4_header(void *rte_ether_header_, void *p,
+                            uint8_t **ip_options) {
+  struct rte_ether_hdr *rte_ether_header =
+      (struct rte_ether_hdr *)rte_ether_header_;
   *ip_options = NULL;
 
   uint16_t unread_len = packet_get_unread_length(p);
@@ -273,8 +265,8 @@ nf_then_get_rte_ipv4_header(void *rte_ether_header_, void *p, uint8_t **ip_optio
   }
 
   CHUNK_LAYOUT(p, rte_ipv4_hdr, rte_ipv4_fields);
-  struct rte_ipv4_hdr *hdr =
-      (struct rte_ipv4_hdr *)nf_borrow_next_chunk(p, sizeof(struct rte_ipv4_hdr));
+  struct rte_ipv4_hdr *hdr = (struct rte_ipv4_hdr *)nf_borrow_next_chunk(
+      p, sizeof(struct rte_ipv4_hdr));
 
   uint8_t ihl = hdr->version_ihl & 0x0f;
   if ((ihl < IP_MIN_SIZE_WORDS) |
@@ -304,7 +296,8 @@ nf_then_get_tcpudp_header(struct rte_ipv4_hdr *ip_header, void *p) {
 }
 
 void nf_set_rte_ipv4_udptcp_checksum(struct rte_ipv4_hdr *ip_header,
-                                 struct tcpudp_hdr *l4_header, void *packet) {
+                                     struct tcpudp_hdr *l4_header,
+                                     void *packet) {
   // Make sure the packet pointer points to the TCPUDP continuation
   // This check is exercised during verification, no need to repeat it.
   // void* payload = nf_borrow_next_chunk(packet,
@@ -345,10 +338,9 @@ char *nf_mac_to_str(struct rte_ether_addr *addr) {
     rte_exit(EXIT_FAILURE, "Out of memory in nf_mac_to_str!");
   }
 
-  snprintf(buffer, buffer_size, "%02X:%02X:%02X:%02X:%02X:%02X", addr->addr_bytes[0],
-           addr->addr_bytes[1], addr->addr_bytes[2],
-           addr->addr_bytes[3], addr->addr_bytes[4],
-           addr->addr_bytes[5]);
+  snprintf(buffer, buffer_size, "%02X:%02X:%02X:%02X:%02X:%02X",
+           addr->addr_bytes[0], addr->addr_bytes[1], addr->addr_bytes[2],
+           addr->addr_bytes[3], addr->addr_bytes[4], addr->addr_bytes[5]);
 
   return buffer;
 }
@@ -369,47 +361,38 @@ char *nf_rte_ipv4_to_str(uint32_t addr) {
 }
 
 /**********************************************
- * 
+ *
  *                  NF-PARSE
- * 
+ *
  **********************************************/
 
-bool nf_parse_etheraddr(const char* str, struct rte_ether_addr* addr)
-{
+bool nf_parse_etheraddr(const char *str, struct rte_ether_addr *addr) {
   return sscanf(str, "%02hhX:%02hhX:%02hhX:%02hhX:%02hhX:%02hhX",
-                addr->addr_bytes + 0,
-                addr->addr_bytes + 1,
-                addr->addr_bytes + 2,
-                addr->addr_bytes + 3,
-                addr->addr_bytes + 4,
-                addr->addr_bytes + 5)
-         == 6;
+                addr->addr_bytes + 0, addr->addr_bytes + 1,
+                addr->addr_bytes + 2, addr->addr_bytes + 3,
+                addr->addr_bytes + 4, addr->addr_bytes + 5) == 6;
 }
 
-bool nf_parse_ipv4addr(const char* str, uint32_t* addr)
-{
+bool nf_parse_ipv4addr(const char *str, uint32_t *addr) {
   uint8_t a, b, c, d;
   if (sscanf(str, "%hhu.%hhu.%hhu.%hhu", &a, &b, &c, &d) == 4) {
-    *addr = ((uint32_t) a << 24) |
-            ((uint32_t) b << 16) |
-            ((uint32_t) c <<  8) |
-            ((uint32_t) d <<  0);
+    *addr = ((uint32_t)a << 24) | ((uint32_t)b << 16) | ((uint32_t)c << 8) |
+            ((uint32_t)d << 0);
     return true;
   }
   return false;
 }
 
 /**********************************************
- * 
+ *
  *                  TM
- * 
+ *
  **********************************************/
 
 // TODO: CACHE_LINE_SIZE can be get using:
 // > getconf LEVEL1_DCACHE_LINESIZE
 // Number of processors:
 // > getconf _NPROCESSORS_ONLN
-
 
 //#pragma message ( "USING_TSX" )
 
@@ -419,8 +402,8 @@ bool nf_parse_ipv4addr(const char* str, uint32_t* addr)
 #include <rtmintrin.h>
 #define CACHE_LINE_SIZE 64
 // TODO: use __sync_synchronize() instead
-#define MEMFENCE asm volatile ("MFENCE" : : : "memory")
-#define PAUSE()  _mm_pause()
+#define MEMFENCE asm volatile("MFENCE" : : : "memory")
+#define PAUSE() _mm_pause()
 
 typedef enum {
   HTM_SUCCESS = 0,
@@ -435,42 +418,61 @@ typedef enum {
   HTM_FALLBACK
 } HTM_errors_e;
 
-#define HTM_NB_ERRORS     10
-#define HTM_STATUS_TYPE   register int
-#define HTM_CODE_SUCCESS  _XBEGIN_STARTED
+#define HTM_NB_ERRORS 10
+#define HTM_STATUS_TYPE register int
+#define HTM_CODE_SUCCESS _XBEGIN_STARTED
 
-#define HTM_begin(var)			  (var = _xbegin())
-#define HTM_abort()           _xabort(0)
-#define HTM_named_abort(code)	_xabort(code)
-#define HTM_test()            _xtest()
-#define HTM_commit()          _xend()
+#define HTM_begin(var) (var = _xbegin())
+#define HTM_abort() _xabort(0)
+#define HTM_named_abort(code) _xabort(code)
+#define HTM_test() _xtest()
+#define HTM_commit() _xend()
 #define HTM_get_named(status) (status >> 24)
-#define HTM_is_named(status)  (status & 1)
+#define HTM_is_named(status) (status & 1)
 
-#define HTM_ERROR_INC(status, error_array) ({ \
-  if (status == _XBEGIN_STARTED) { \
-    error_array[HTM_SUCCESS] += 1; \
-  } else { \
-    error_array[HTM_ABORT] += 1; \
-    int nb_errors = __builtin_popcount(status); \
-    int tsx_error = status & 0x1F; /* only catch known aborts */ \
-    do { \
-      int idx = tsx_error & _XABORT_EXPLICIT ? \
-      ({tsx_error = tsx_error & ~_XABORT_EXPLICIT; HTM_EXPLICIT;}) : \
-      tsx_error & _XABORT_RETRY ? \
-      ({tsx_error = tsx_error & ~_XABORT_RETRY; HTM_RETRY;}) : \
-      tsx_error & _XABORT_CONFLICT ? \
-      ({tsx_error = tsx_error & ~_XABORT_CONFLICT; HTM_CONFLICT;}) : \
-      tsx_error & _XABORT_CAPACITY ? \
-      ({tsx_error = tsx_error & ~_XABORT_CAPACITY; HTM_CAPACITY;}) : \
-      tsx_error & _XABORT_DEBUG ? \
-      ({tsx_error = tsx_error & ~_XABORT_DEBUG; HTM_DEBUG;}) : \
-      HTM_OTHER; \
-      error_array[idx] += 1; \
-      nb_errors--; \
-    } while (nb_errors > 0); \
-  } \
-})
+#define HTM_ERROR_INC(status, error_array)                                     \
+  ({                                                                           \
+    if (status == _XBEGIN_STARTED) {                                           \
+      error_array[HTM_SUCCESS] += 1;                                           \
+    } else {                                                                   \
+      error_array[HTM_ABORT] += 1;                                             \
+      int nb_errors = __builtin_popcount(status);                              \
+      int tsx_error = status & 0x1F; /* only catch known aborts */             \
+      do {                                                                     \
+        int idx =                                                              \
+            tsx_error & _XABORT_EXPLICIT                                       \
+                ? ({                                                           \
+                    tsx_error = tsx_error & ~_XABORT_EXPLICIT;                 \
+                    HTM_EXPLICIT;                                              \
+                  })                                                           \
+                : tsx_error & _XABORT_RETRY                                    \
+                      ? ({                                                     \
+                          tsx_error = tsx_error & ~_XABORT_RETRY;              \
+                          HTM_RETRY;                                           \
+                        })                                                     \
+                      : tsx_error & _XABORT_CONFLICT                           \
+                            ? ({                                               \
+                                tsx_error = tsx_error & ~_XABORT_CONFLICT;     \
+                                HTM_CONFLICT;                                  \
+                              })                                               \
+                            : tsx_error & _XABORT_CAPACITY                     \
+                                  ? ({                                         \
+                                      tsx_error =                              \
+                                          tsx_error & ~_XABORT_CAPACITY;       \
+                                      HTM_CAPACITY;                            \
+                                    })                                         \
+                                  : tsx_error & _XABORT_DEBUG                  \
+                                        ? ({                                   \
+                                            tsx_error =                        \
+                                                tsx_error & ~_XABORT_DEBUG;    \
+                                            HTM_DEBUG;                         \
+                                          })                                   \
+                                        : HTM_OTHER;                           \
+        error_array[idx] += 1;                                                 \
+        nb_errors--;                                                           \
+      } while (nb_errors > 0);                                                 \
+    }                                                                          \
+  })
 
 #define CL_ALIGN __attribute__((aligned(CACHE_LINE_SIZE)))
 #define CL_DISTANCE(type) CACHE_LINE_SIZE / sizeof(type)
@@ -480,7 +482,7 @@ typedef enum {
 #endif /* GRANULE_TYPE */
 
 #ifndef GRANULE_P_TYPE
-#define GRANULE_P_TYPE intptr_t*
+#define GRANULE_P_TYPE intptr_t *
 #endif /* GRANULE_P_TYPE */
 
 #ifndef GRANULE_D_TYPE
@@ -488,8 +490,7 @@ typedef enum {
 #endif /* GRANULE_D_TYPE */
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #ifndef HTM_SGL_INIT_BUDGET
@@ -497,19 +498,19 @@ extern "C"
 #endif /* HTM_SGL_INIT_BUDGET */
 
 typedef struct HTM_SGL_local_vars_ {
-    int64_t budget;
-    int64_t tid;
-    int64_t status;
-    uint64_t padding[5];
-} __attribute__((packed))  HTM_SGL_local_vars_s;
+  int64_t budget;
+  int64_t tid;
+  int64_t status;
+  uint64_t padding[5];
+} __attribute__((packed)) HTM_SGL_local_vars_s;
 
 // there is some wasted space near the SGL that can be used as read-only storate
-extern void * HTM_read_only_storage1;
+extern void *HTM_read_only_storage1;
 extern int HTM_read_only_storage1_size;
-extern void * HTM_read_only_storage2;
+extern void *HTM_read_only_storage2;
 extern int HTM_read_only_storage2_size;
 
-extern __thread int64_t * volatile HTM_SGL_var_addr; // points to the prev
+extern __thread int64_t *volatile HTM_SGL_var_addr; // points to the prev
 extern __thread HTM_SGL_local_vars_s CL_ALIGN HTM_SGL_vars;
 extern __thread int64_t HTM_SGL_errors[HTM_NB_ERRORS];
 
@@ -521,16 +522,22 @@ extern __thread int64_t HTM_SGL_errors[HTM_NB_ERRORS];
 #define UPDATE_BUDGET(tid, budget, status) \
     HTM_inc_status_count(status); \
     HTM_INC(status); \
-	budget = HTM_update_budget(budget, status)
+        budget = HTM_update_budget(budget, status)
 */
 
-#define UPDATE_BUDGET(tid, budget, status) \
-	budget = HTM_update_budget(budget, status)
+#define UPDATE_BUDGET(tid, budget, status)                                     \
+  budget = HTM_update_budget(budget, status)
 
 /* The HTM_SGL_update_budget also handle statistics */
 
-#define CHECK_SGL_NOTX() if (__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != -1) { HTM_block(); }
-#define CHECK_SGL_HTM()  if (__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != -1) { HTM_abort(); }
+#define CHECK_SGL_NOTX()                                                       \
+  if (__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != -1) {             \
+    HTM_block();                                                               \
+  }
+#define CHECK_SGL_HTM()                                                        \
+  if (__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != -1) {             \
+    HTM_abort();                                                               \
+  }
 
 #define AFTER_BEGIN(tid, budget, status)   /* empty */
 #define BEFORE_COMMIT(tid, budget, status) /* empty */
@@ -542,17 +549,17 @@ extern __thread int64_t HTM_SGL_errors[HTM_NB_ERRORS];
     HTM_INC(status)
 */
 
-#define COMMIT_TRANSACTION(tid, budget, status) \
-    HTM_commit(); /* Commits and updates some statistics after */ \
+#define COMMIT_TRANSACTION(tid, budget, status)                                \
+  HTM_commit(); /* Commits and updates some statistics after */
 
 #define ENTER_SGL(tid) HTM_enter_fallback()
-#define EXIT_SGL(tid)  HTM_exit_fallback()
-#define AFTER_ABORT(tid, budget, status)   /* empty */
+#define EXIT_SGL(tid) HTM_exit_fallback()
+#define AFTER_ABORT(tid, budget, status) /* empty */
 
-#define BEFORE_HTM_BEGIN(tid, budget)  /* empty */
-#define AFTER_HTM_BEGIN(tid, budget)   /* empty */
-#define BEFORE_SGL_BEGIN(tid)          /* empty */
-#define AFTER_SGL_BEGIN(tid)           /* empty */
+#define BEFORE_HTM_BEGIN(tid, budget) /* empty */
+#define AFTER_HTM_BEGIN(tid, budget)  /* empty */
+#define BEFORE_SGL_BEGIN(tid)         /* empty */
+#define AFTER_SGL_BEGIN(tid)          /* empty */
 
 #define BEFORE_HTM_COMMIT(tid, budget) /* empty */
 #define AFTER_HTM_COMMIT(tid, budget)  /* empty */
@@ -564,103 +571,108 @@ extern __thread int64_t HTM_SGL_errors[HTM_NB_ERRORS];
 #define HTM_UPDATE_BUDGET(budget, status) (budget - 1)
 
 #define ENTER_HTM_COND(tid, budget) budget > 0
-#define IN_TRANSACTION(tid, budget, status) \
-	HTM_test()
+#define IN_TRANSACTION(tid, budget, status) HTM_test()
 
 // #################################
 // Called within the API
-#define HTM_INIT()       /* empty */
-#define HTM_EXIT()       /* empty */
-#define HTM_THR_INIT()   /* empty */
-#define HTM_THR_EXIT()   /* empty */
-#define HTM_INC(status)  /* Use this to construct side statistics */
+#define HTM_INIT()      /* empty */
+#define HTM_EXIT()      /* empty */
+#define HTM_THR_INIT()  /* empty */
+#define HTM_THR_EXIT()  /* empty */
+#define HTM_INC(status) /* Use this to construct side statistics */
 // #################################
 
 #define HTM_SGL_budget HTM_SGL_vars.budget
 #define HTM_SGL_status HTM_SGL_vars.status
-#define HTM_SGL_tid    HTM_SGL_vars.tid
+#define HTM_SGL_tid HTM_SGL_vars.tid
 
-#define HTM_SGL_begin() \
-{ \
-    HTM_SGL_budget = HTM_SGL_INIT_BUDGET; /* HTM_get_budget(); */ \
-    BEFORE_TRANSACTION(HTM_SGL_tid, HTM_SGL_budget); \
-    while (1) { \
-        BEFORE_CHECK_BUDGET(HTM_SGL_budget); \
-        if (ENTER_HTM_COND(HTM_SGL_tid, HTM_SGL_budget)) { \
-            CHECK_SGL_NOTX(); \
-            BEFORE_HTM_BEGIN(HTM_SGL_tid, HTM_SGL_budget); \
-            if (START_TRANSACTION(HTM_SGL_status)) { \
-                UPDATE_BUDGET(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status); \
-                AFTER_ABORT(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status); \
-                continue; \
-            } \
-            CHECK_SGL_HTM(); \
-            AFTER_HTM_BEGIN(HTM_SGL_tid, HTM_SGL_budget); \
-        } \
-        else { \
-            /*printf("BEGIN CONFLICT LIMIT REACHED %ld\n", HTM_SGL_tid);*/ BEFORE_SGL_BEGIN(HTM_SGL_tid); \
-            ENTER_SGL(HTM_SGL_tid); \
-            AFTER_SGL_BEGIN(HTM_SGL_tid); \
-        } \
-        AFTER_BEGIN(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status); \
-        break; /* delete when using longjmp */ \
-    } \
-}
+#define HTM_SGL_begin()                                                        \
+  {                                                                            \
+    HTM_SGL_budget = HTM_SGL_INIT_BUDGET; /* HTM_get_budget(); */              \
+    BEFORE_TRANSACTION(HTM_SGL_tid, HTM_SGL_budget);                           \
+    while (1) {                                                                \
+      BEFORE_CHECK_BUDGET(HTM_SGL_budget);                                     \
+      if (ENTER_HTM_COND(HTM_SGL_tid, HTM_SGL_budget)) {                       \
+        CHECK_SGL_NOTX();                                                      \
+        BEFORE_HTM_BEGIN(HTM_SGL_tid, HTM_SGL_budget);                         \
+        if (START_TRANSACTION(HTM_SGL_status)) {                               \
+          UPDATE_BUDGET(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status);          \
+          AFTER_ABORT(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status);            \
+          continue;                                                            \
+        }                                                                      \
+        CHECK_SGL_HTM();                                                       \
+        AFTER_HTM_BEGIN(HTM_SGL_tid, HTM_SGL_budget);                          \
+      } else {                                                                 \
+        /*printf("BEGIN CONFLICT LIMIT REACHED %ld\n", HTM_SGL_tid);*/         \
+        BEFORE_SGL_BEGIN(HTM_SGL_tid);                                         \
+        ENTER_SGL(HTM_SGL_tid);                                                \
+        AFTER_SGL_BEGIN(HTM_SGL_tid);                                          \
+      }                                                                        \
+      AFTER_BEGIN(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status);                \
+      break; /* delete when using longjmp */                                   \
+    }                                                                          \
+  }
 //
-#define HTM_SGL_commit() \
-{ \
-    BEFORE_COMMIT(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status); \
-    if (IN_TRANSACTION(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status)) { \
-        BEFORE_HTM_COMMIT(HTM_SGL_tid, HTM_SGL_budget); \
-        COMMIT_TRANSACTION(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status); \
-        AFTER_HTM_COMMIT(HTM_SGL_tid, HTM_SGL_budget); \
-    } \
-    else { \
-        /*printf("COMMIT CONFLICT LIMIT REACHED %ld\n", HTM_SGL_tid);*/ BEFORE_SGL_COMMIT(HTM_SGL_tid); \
-        EXIT_SGL(HTM_SGL_tid); \
-        AFTER_SGL_COMMIT(HTM_SGL_tid); \
-    } \
-    AFTER_TRANSACTION(HTM_SGL_tid, HTM_SGL_budget); \
-} \
+#define HTM_SGL_commit()                                                       \
+  {                                                                            \
+    BEFORE_COMMIT(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status);                \
+    if (IN_TRANSACTION(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status)) {         \
+      BEFORE_HTM_COMMIT(HTM_SGL_tid, HTM_SGL_budget);                          \
+      COMMIT_TRANSACTION(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status);         \
+      AFTER_HTM_COMMIT(HTM_SGL_tid, HTM_SGL_budget);                           \
+    } else {                                                                   \
+      /*printf("COMMIT CONFLICT LIMIT REACHED %ld\n", HTM_SGL_tid);*/          \
+      BEFORE_SGL_COMMIT(HTM_SGL_tid);                                          \
+      EXIT_SGL(HTM_SGL_tid);                                                   \
+      AFTER_SGL_COMMIT(HTM_SGL_tid);                                           \
+    }                                                                          \
+    AFTER_TRANSACTION(HTM_SGL_tid, HTM_SGL_budget);                            \
+  }
 
 #define HTM_SGL_before_write(addr, val) /* empty */
 #define HTM_SGL_after_write(addr, val)  /* empty */
 
-#define HTM_SGL_write(addr, val) ({ \
-	HTM_SGL_before_write(addr, val); \
-	*((GRANULE_TYPE*)addr) = val; \
-	HTM_SGL_after_write(addr, val); \
-	val; \
-})
+#define HTM_SGL_write(addr, val)                                               \
+  ({                                                                           \
+    HTM_SGL_before_write(addr, val);                                           \
+    *((GRANULE_TYPE *)addr) = val;                                             \
+    HTM_SGL_after_write(addr, val);                                            \
+    val;                                                                       \
+  })
 
-#define HTM_SGL_write_D(addr, val) ({ \
-	GRANULE_TYPE g = CONVERT_GRANULE_D(val); \
-	HTM_SGL_write((GRANULE_TYPE*)addr, g); \
-	val; \
-})
+#define HTM_SGL_write_D(addr, val)                                             \
+  ({                                                                           \
+    GRANULE_TYPE g = CONVERT_GRANULE_D(val);                                   \
+    HTM_SGL_write((GRANULE_TYPE *)addr, g);                                    \
+    val;                                                                       \
+  })
 
-#define HTM_SGL_write_P(addr, val) ({ \
-	GRANULE_TYPE g = (GRANULE_TYPE) val; /* works for pointers only */ \
-	HTM_SGL_write((GRANULE_TYPE*)addr, g); \
-	val; \
-})
+#define HTM_SGL_write_P(addr, val)                                             \
+  ({                                                                           \
+    GRANULE_TYPE g = (GRANULE_TYPE)val; /* works for pointers only */          \
+    HTM_SGL_write((GRANULE_TYPE *)addr, g);                                    \
+    val;                                                                       \
+  })
 
 #define HTM_SGL_before_read(addr) /* empty */
 
-#define HTM_SGL_read(addr) ({ \
-	HTM_SGL_before_read(addr); \
-	*((GRANULE_TYPE*)addr); \
-})
+#define HTM_SGL_read(addr)                                                     \
+  ({                                                                           \
+    HTM_SGL_before_read(addr);                                                 \
+    *((GRANULE_TYPE *)addr);                                                   \
+  })
 
-#define HTM_SGL_read_P(addr) ({ \
-	HTM_SGL_before_read(addr); \
-	*((GRANULE_P_TYPE*)addr); \
-})
+#define HTM_SGL_read_P(addr)                                                   \
+  ({                                                                           \
+    HTM_SGL_before_read(addr);                                                 \
+    *((GRANULE_P_TYPE *)addr);                                                 \
+  })
 
-#define HTM_SGL_read_D(addr) ({ \
-	HTM_SGL_before_read(addr); \
-	*((GRANULE_D_TYPE*)addr); \
-})
+#define HTM_SGL_read_D(addr)                                                   \
+  ({                                                                           \
+    HTM_SGL_before_read(addr);                                                 \
+    *((GRANULE_D_TYPE *)addr);                                                 \
+  })
 
 /* TODO: persistency assumes an identifier */
 #define HTM_SGL_alloc(size) malloc(size)
@@ -699,29 +711,31 @@ void HTM_reset_status_count();
 }
 #endif
 
-#define LOCK(mtx) \
-  while (!__sync_bool_compare_and_swap(&mtx, 0, 1)) PAUSE() \
-//
+#define LOCK(mtx)                                                              \
+  while (!__sync_bool_compare_and_swap(&mtx, 0, 1))                            \
+  PAUSE()                                                                      \
+      //
 
-#define UNLOCK(mtx) \
-  mtx = 0; \
-  __sync_synchronize() \
-//
+#define UNLOCK(mtx)                                                            \
+  mtx = 0;                                                                     \
+  __sync_synchronize() //
 
 // using namespace std;
 
 #define SGL_SIZE 128
-#define SGL_POS  16
+#define SGL_POS 16
 
 static volatile int64_t CL_ALIGN HTM_SGL_var[SGL_SIZE] = { -1 };
-/* extern */__thread int64_t * volatile HTM_SGL_var_addr = (int64_t * volatile)&(HTM_SGL_var[SGL_POS]);
-/* extern */__thread CL_ALIGN HTM_SGL_local_vars_s HTM_SGL_vars;
-/* extern */__thread int64_t HTM_SGL_errors[HTM_NB_ERRORS];
+/* extern */ __thread int64_t *volatile HTM_SGL_var_addr =
+    (int64_t * volatile) & (HTM_SGL_var[SGL_POS]);
+/* extern */ __thread CL_ALIGN HTM_SGL_local_vars_s HTM_SGL_vars;
+/* extern */ __thread int64_t HTM_SGL_errors[HTM_NB_ERRORS];
 
-/* extern */void * HTM_read_only_storage1 = (void*)&(HTM_SGL_var[0]);
-/* extern */int HTM_read_only_storage1_size = SGL_POS * sizeof(int64_t);
-/* extern */void * HTM_read_only_storage2 = (void*)&(HTM_SGL_var[SGL_POS+1]);
-/* extern */int HTM_read_only_storage2_size = (SGL_SIZE - SGL_POS - 1) * sizeof(int64_t);
+/* extern */ void *HTM_read_only_storage1 = (void *)&(HTM_SGL_var[0]);
+/* extern */ int HTM_read_only_storage1_size = SGL_POS * sizeof(int64_t);
+/* extern */ void *HTM_read_only_storage2 = (void *)&(HTM_SGL_var[SGL_POS + 1]);
+/* extern */ int HTM_read_only_storage2_size =
+    (SGL_SIZE - SGL_POS - 1) * sizeof(int64_t);
 
 static /* mutex */ int mtx;
 static int init_budget = HTM_SGL_INIT_BUDGET;
@@ -731,24 +745,20 @@ static int thr_counter;
 static __thread int is_record;
 static __thread int tid = -1;
 
-void HTM_init_(int init_budget, int nb_threads)
-{
+void HTM_init_(int init_budget, int nb_threads) {
   init_budget = HTM_SGL_INIT_BUDGET;
   threads = nb_threads;
   HTM_SGL_var[SGL_POS] = -1;
-  HTM_SGL_var_addr = (int64_t * volatile)&(HTM_SGL_var[SGL_POS]);
+  HTM_SGL_var_addr = (int64_t * volatile) & (HTM_SGL_var[SGL_POS]);
   HTM_INIT();
 }
 
-void HTM_exit()
-{
-  HTM_EXIT();
-}
+void HTM_exit() { HTM_EXIT(); }
 
-int HTM_thr_init(int reqTID)
-{
-  if (tid != -1) return tid; // TODO
-  LOCK(mtx); // mtx.lock();
+int HTM_thr_init(int reqTID) {
+  if (tid != -1)
+    return tid; // TODO
+  LOCK(mtx);    // mtx.lock();
   if (reqTID != -1) {
     tid = reqTID;
     HTM_SGL_tid = reqTID;
@@ -756,25 +766,23 @@ int HTM_thr_init(int reqTID)
     tid = thr_counter++;
     HTM_SGL_tid = tid;
   }
-  HTM_SGL_var_addr = (int64_t * volatile)&(HTM_SGL_var[SGL_POS]);
+  HTM_SGL_var_addr = (int64_t * volatile) & (HTM_SGL_var[SGL_POS]);
   HTM_THR_INIT();
-  UNLOCK(mtx); //mtx.unlock();
+  UNLOCK(mtx); // mtx.unlock();
   return tid;
 }
 
-void HTM_thr_exit()
-{
+void HTM_thr_exit() {
   LOCK(mtx); // mtx.lock();
   --thr_counter;
   HTM_THR_EXIT();
-  UNLOCK(mtx); //mtx.unlock();
+  UNLOCK(mtx); // mtx.unlock();
 }
 
 int HTM_get_budget() { return init_budget; }
 void HTM_set_budget(int _budget) { init_budget = _budget; }
 
-void HTM_enter_fallback()
-{
+void HTM_enter_fallback() {
   // mtx.lock();
   while (__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != tid) {
     while (__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != -1) {
@@ -788,17 +796,15 @@ void HTM_enter_fallback()
   HTM_SGL_errors[HTM_FALLBACK]++;
 }
 
-void HTM_exit_fallback()
-{
+void HTM_exit_fallback() {
   // __sync_val_compare_and_swap(&HTM_SGL_var, 1, 0);
   // __asm__ __volatile__("mfence" ::: "memory");
   __atomic_store_n(HTM_SGL_var_addr, -1, __ATOMIC_RELEASE);
   // mtx.unlock();
 }
 
-void HTM_block()
-{
-  while(__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != -1) {
+void HTM_block() {
+  while (__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != -1) {
     PAUSE();
   }
 
@@ -806,8 +812,7 @@ void HTM_block()
   // mtx.unlock();
 }
 
-void HTM_inc_status_count(int status_code)
-{
+void HTM_inc_status_count(int status_code) {
   if (is_record) {
     HTM_ERROR_INC(status_code, HTM_SGL_errors);
   }
@@ -821,8 +826,7 @@ void HTM_inc_status_count(int status_code)
 //   return res;
 // }
 
-long HTM_get_status_count(int status_code, long **accum)
-{
+long HTM_get_status_count(int status_code, long **accum) {
   long res = 0;
   res = HTM_SGL_errors[status_code];
   if (accum != NULL) {
@@ -831,8 +835,7 @@ long HTM_get_status_count(int status_code, long **accum)
   return res;
 }
 
-void HTM_reset_status_count()
-{
+void HTM_reset_status_count() {
   int i, j;
   for (i = 0; i < HTM_NB_ERRORS; ++i) {
     HTM_SGL_errors[i] = 0;
@@ -845,7 +848,7 @@ int HTM_get_tid() { return tid; }
 void HTM_set_is_record(int is_rec) { is_record = is_rec; }
 int HTM_get_is_record() { return is_record; }
 
-#define RETA_CONF_SIZE     (ETH_RSS_RETA_SIZE_512 / RTE_RETA_GROUP_SIZE)
+#define RETA_CONF_SIZE (ETH_RSS_RETA_SIZE_512 / RTE_RETA_GROUP_SIZE)
 
 typedef struct {
   uint16_t tables[RTE_MAX_LCORE][ETH_RSS_RETA_SIZE_512];
@@ -878,47 +881,49 @@ void set_reta(uint16_t device) {
   memset(reta_conf, 0, sizeof(reta_conf));
 
   for (uint16_t bucket = 0; bucket < dev_info.reta_size; bucket++) {
-      reta_conf[bucket / RTE_RETA_GROUP_SIZE].mask = UINT64_MAX;
+    reta_conf[bucket / RTE_RETA_GROUP_SIZE].mask = UINT64_MAX;
   }
 
   for (uint16_t bucket = 0; bucket < dev_info.reta_size; bucket++) {
-      uint32_t reta_id  = bucket / RTE_RETA_GROUP_SIZE;
-      uint32_t reta_pos = bucket % RTE_RETA_GROUP_SIZE;
-      reta_conf[reta_id].reta[reta_pos] = retas_per_device[device].tables[lcores - 2][bucket];
+    uint32_t reta_id = bucket / RTE_RETA_GROUP_SIZE;
+    uint32_t reta_pos = bucket % RTE_RETA_GROUP_SIZE;
+    reta_conf[reta_id].reta[reta_pos] =
+        retas_per_device[device].tables[lcores - 2][bucket];
   }
 
   /* RETA update */
   rte_eth_dev_rss_reta_update(device, reta_conf, dev_info.reta_size);
 }
 
-
 /**********************************************
- * 
+ *
  *                  NF
- * 
+ *
  **********************************************/
 
 bool nf_init(void);
-int nf_process(uint16_t device, uint8_t* buffer, uint16_t packet_length, vigor_time_t now);
+int nf_process(uint16_t device, uint8_t *buffer, uint16_t packet_length,
+               vigor_time_t now);
 
-#define FLOOD_FRAME ((uint16_t) -1)
+#define FLOOD_FRAME ((uint16_t) - 1)
 
 // NFOS declares its own main method
 #ifdef NFOS
-#  define MAIN nf_main
+#define MAIN nf_main
 #else // NFOS
-#  define MAIN main
+#define MAIN main
 #endif // NFOS
 
 // Unverified support for batching, useful for performance comparisons
 #define VIGOR_BATCH_SIZE 32
 
-#  define VIGOR_LOOP_BEGIN                                                                   \
-    while (1) {                                                                              \
-      vigor_time_t VIGOR_NOW = current_time();                                               \
-      unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();                                    \
-      for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT; VIGOR_DEVICE++) {
-#  define VIGOR_LOOP_END
+#define VIGOR_LOOP_BEGIN                                                       \
+  while (1) {                                                                  \
+    vigor_time_t VIGOR_NOW = current_time();                                   \
+    unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();                  \
+    for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT;        \
+         VIGOR_DEVICE++) {
+#define VIGOR_LOOP_END
 
 // Do the opposite: we want batching!
 static const uint16_t RX_QUEUE_SIZE = 128;
@@ -928,7 +933,7 @@ static const uint16_t TX_QUEUE_SIZE = 128;
 static const unsigned MEMPOOL_BUFFER_COUNT = 256;
 
 // Send the given packet to all devices except the packet's own
-void flood(struct rte_mbuf* packet, uint16_t nb_devices, uint16_t queue_id) {
+void flood(struct rte_mbuf *packet, uint16_t nb_devices, uint16_t queue_id) {
   rte_mbuf_refcnt_set(packet, nb_devices - 1);
   int total_sent = 0;
   uint16_t skip_device = packet->port;
@@ -937,7 +942,8 @@ void flood(struct rte_mbuf* packet, uint16_t nb_devices, uint16_t queue_id) {
       total_sent += rte_eth_tx_burst(device, queue_id, &packet, 1);
     }
   }
-  // should not happen, but in case we couldn't transmit, ensure the packet is freed
+  // should not happen, but in case we couldn't transmit, ensure the packet is
+  // freed
   if (total_sent != nb_devices - 1) {
     rte_mbuf_refcnt_set(packet, 1);
     rte_pktmbuf_free(packet);
@@ -945,13 +951,13 @@ void flood(struct rte_mbuf* packet, uint16_t nb_devices, uint16_t queue_id) {
 }
 
 // Initializes the given device using the given memory pool
-static int nf_init_device(uint16_t device, struct rte_mempool** mbuf_pools) {
+static int nf_init_device(uint16_t device, struct rte_mempool **mbuf_pools) {
   int retval;
   const uint16_t num_queues = rte_lcore_count();
 
   // device_conf passed to rte_eth_dev_configure cannot be NULL
-  struct rte_eth_conf device_conf = {0};
-  //device_conf.rxmode.hw_strip_crc = 1;
+  struct rte_eth_conf device_conf = { 0 };
+  // device_conf.rxmode.hw_strip_crc = 1;
   device_conf.rxmode.mq_mode = ETH_MQ_RX_RSS;
   device_conf.rx_adv_conf.rss_conf = rss_conf[device];
 
@@ -975,15 +981,14 @@ static int nf_init_device(uint16_t device, struct rte_mempool** mbuf_pools) {
       return retval;
     }
   }
-  
+
   unsigned lcore_id;
   int rxq = 0;
   RTE_LCORE_FOREACH(lcore_id) {
     // Allocate and set up RX queues
     lcores_conf[lcore_id].queue_id = rxq;
     retval = rte_eth_rx_queue_setup(device, rxq, RX_QUEUE_SIZE,
-                                    rte_eth_dev_socket_id(device),
-                                    NULL,
+                                    rte_eth_dev_socket_id(device), NULL,
                                     mbuf_pools[rxq]);
     if (retval != 0) {
       return retval;
@@ -1021,27 +1026,30 @@ static void worker_main(void) {
     rte_exit(EXIT_FAILURE, "Error initializing NF");
   }
 
-  bool* write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
-  bool* write_state_ptr = &RTE_PER_LCORE(write_state);
+  bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool *write_state_ptr = &RTE_PER_LCORE(write_state);
 
   NF_INFO("Core %u forwarding packets.", rte_lcore_id());
 
   if (rte_eth_dev_count_avail() != 2) {
-    printf("We assume there will be exactly 2 devices for our simple batching implementation.");
+    printf("We assume there will be exactly 2 devices for our simple batching "
+           "implementation.");
     exit(1);
   }
   NF_INFO("Running with batches, this code is unverified!");
 
-  while(1) {
+  while (1) {
     unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();
-    for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT; VIGOR_DEVICE++) {
-      struct rte_mbuf* mbufs[VIGOR_BATCH_SIZE];
-      uint16_t rx_count = rte_eth_rx_burst(VIGOR_DEVICE, queue_id, mbufs, VIGOR_BATCH_SIZE);
+    for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT;
+         VIGOR_DEVICE++) {
+      struct rte_mbuf *mbufs[VIGOR_BATCH_SIZE];
+      uint16_t rx_count =
+          rte_eth_rx_burst(VIGOR_DEVICE, queue_id, mbufs, VIGOR_BATCH_SIZE);
 
       struct rte_mbuf *mbufs_to_send[VIGOR_BATCH_SIZE];
       uint16_t tx_count = 0;
       for (uint16_t n = 0; n < rx_count; n++) {
-        uint8_t* data = rte_pktmbuf_mtod(mbufs[n], uint8_t*);
+        uint8_t *data = rte_pktmbuf_mtod(mbufs[n], uint8_t *);
         packet_state_total_length(data, &(mbufs[n]->pkt_len));
         vigor_time_t VIGOR_NOW = current_time();
 
@@ -1049,14 +1057,16 @@ static void worker_main(void) {
         *write_state_ptr = false;
 
         nf_lock_block_writes(&nf_lock);
-        uint16_t dst_device = nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
+        uint16_t dst_device =
+            nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
         nf_return_all_chunks(data);
 
         if (*write_attempt_ptr) {
           *write_state_ptr = true;
 
           nf_lock_write_lock(&nf_lock);
-          uint16_t dst_device = nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
+          uint16_t dst_device =
+              nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
           nf_lock_write_unlock(&nf_lock);
 
           nf_return_all_chunks(data);
@@ -1068,22 +1078,25 @@ static void worker_main(void) {
           rte_pktmbuf_free(mbufs[n]);
         } else if (dst_device == FLOOD_FRAME) {
           flood(mbufs[n], VIGOR_DEVICES_COUNT, queue_id);
-        } else { // includes flood when 2 devices, which is equivalent to just a send
+        } else { // includes flood when 2 devices, which is equivalent to just a
+                 // send
           mbufs_to_send[tx_count] = mbufs[n];
           tx_count++;
         }
       }
 
-      uint16_t sent_count = rte_eth_tx_burst(1 - VIGOR_DEVICE, queue_id, mbufs_to_send, tx_count);
+      uint16_t sent_count =
+          rte_eth_tx_burst(1 - VIGOR_DEVICE, queue_id, mbufs_to_send, tx_count);
       for (uint16_t n = sent_count; n < tx_count; n++) {
-        rte_pktmbuf_free(mbufs[n]); // should not happen, but we're in the unverified case anyway
+        rte_pktmbuf_free(mbufs[n]); // should not happen, but we're in the
+                                    // unverified case anyway
       }
     }
   }
 }
 
 // Entry point
-int MAIN(int argc, char** argv) {
+int MAIN(int argc, char **argv) {
   // Initialize the DPDK Environment Abstraction Layer (EAL)
   int ret = rte_eal_init(argc, argv);
   if (ret < 0) {
@@ -1099,7 +1112,8 @@ int MAIN(int argc, char** argv) {
 
   char MBUF_POOL_NAME[20];
   struct rte_mempool **mbuf_pools;
-  mbuf_pools = (struct rte_mempool**) rte_malloc(NULL, sizeof(struct rte_mempool*) * rte_lcore_count(), 64);
+  mbuf_pools = (struct rte_mempool **)rte_malloc(
+      NULL, sizeof(struct rte_mempool *) * rte_lcore_count(), 64);
 
   HTM_init(rte_lcore_count());
 
@@ -1108,14 +1122,14 @@ int MAIN(int argc, char** argv) {
   RTE_LCORE_FOREACH(lcore_id) {
     sprintf(MBUF_POOL_NAME, "MEMORY_POOL_%u", lcore_idx);
 
-    mbuf_pools[lcore_idx] = rte_pktmbuf_pool_create(
-                            MBUF_POOL_NAME, // name
-                            MEMPOOL_BUFFER_COUNT * nb_devices, // #elements
-                            MBUF_CACHE_SIZE, // cache size (per-lcore)
-                            0, // application private area size
-                            RTE_MBUF_DEFAULT_BUF_SIZE, // data buffer size
-                            rte_socket_id() // socket ID
-    );
+    mbuf_pools[lcore_idx] =
+        rte_pktmbuf_pool_create(MBUF_POOL_NAME,                    // name
+                                MEMPOOL_BUFFER_COUNT * nb_devices, // #elements
+                                MBUF_CACHE_SIZE, // cache size (per-lcore)
+                                0, // application private area size
+                                RTE_MBUF_DEFAULT_BUF_SIZE, // data buffer size
+                                rte_socket_id()            // socket ID
+                                );
 
     if (mbuf_pools[lcore_idx] == NULL) {
       rte_exit(EXIT_FAILURE, "Cannot create mbuf pool: %s\n",

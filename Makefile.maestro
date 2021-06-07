@@ -19,27 +19,42 @@ SHELL := /bin/bash -O extglob -O globstar -c
 SRCS-y := $(shell echo $(SELF_DIR)/libvig/verified/*.c)
 SRCS-y := $(shell python3 -c "print(' '.join(list(filter(lambda k: 'packet' not in k, '$(SRCS-y)'.split(' ')))))")
 SRCS-y += $(shell echo $(SELF_DIR)/libvig/unverified/*.c)
+SRCS-y += nf.c
 SRCS-y += $(NF_FILES)
 # Compiler flags
 CFLAGS += -I $(SELF_DIR)
 CFLAGS += -std=gnu99
 CFLAGS += -DCAPACITY_POW2
-CFLAGS += -O3
-#CFLAGS += -O0 -g -rdynamic -DENABLE_LOG -Wfatal-errors
+#CFLAGS += -O3
+CFLAGS += -O0 -g -rdynamic -DENABLE_LOG -Wfatal-errors
 CFLAGS += -mrtm
+CFLAGS += -Wl,--allow-multiple-definition
 
 include $(RTE_SDK)/mk/rte.extapp.mk
 
 # Cleanup
-CLEAN_BUILD_ARTIFACTS_COMMAND := rm -rf *.bc *.os *.ll
-CLEAN_ALL_COMMAND := $(CLEAN_BUILD_ARTIFACTS_COMMAND) && rm -rf {loop,state}.{c,h} *.gen.{c,h}
-
+CLEAN_BUILD_ARTIFACTS_COMMAND := rm -rf *.bc *.os *.ll $(SELF_DIR)/maestro/nf.c
+CLEAN_ALL_COMMAND := $(CLEAN_BUILD_ARTIFACTS_COMMAND)
 # Cleanup after ourselves, but don't shadow the existing DPDK target
+clean-maestro-nf:
+	@rm -rf $(SELF_DIR)/maestro/nf.c
+
+	@for f in $(SEQ_NF_FILES_BASE); do \
+		rm -rf $(SELF_DIR)/maestro/$$f; \
+	done;
+
 clean-vigor:
 	@$(CLEAN_ALL_COMMAND)
 
-clean: clean-vigor
+clean: clean-vigor clean-maestro-nf
+
+copy_seq_nf_files:
+	@for f in $(SEQ_NF_FILES_ABS_PATH); do \
+		cp $$f $(SELF_DIR)/maestro; \
+	done;
+
+	@cp $(SELF_DIR)/maestro/build/maestro/nf.c $(SELF_DIR)/maestro/nf.c
 
 # Built-in DPDK default target, make it aware of autogen,
 # and make it clean every time because our dependency tracking is nonexistent...
-all: clean
+all: clean copy_seq_nf_files autogen clean-maestro-nf

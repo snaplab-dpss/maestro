@@ -67,7 +67,9 @@ function test_policer {
 
 
 make clean
-make ADDITIONAL_FLAGS="-DSTOP_ON_RX_0 -g" -j$(nproc)
+echo "make clean done"
+make ADDITIONAL_FLAGS="-g"
+echo "another make done"
 
 test_policer 12500 500000
 
