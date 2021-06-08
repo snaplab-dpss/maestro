@@ -466,16 +466,21 @@ void load_pkts(const char *pcap, unsigned device) {
 
 // Main worker method (for now used on a single thread...)
 static void worker_main() {
-  unsigned nb_devices = rte_eth_dev_count_avail();
-
   if (!nf_init()) {
     rte_exit(EXIT_FAILURE, "Error initializing NF");
   }
 
-  printf("Processing packets...\n");
-
+  int threshold = 0;
   for (unsigned pkti = 0; pkti < pkts.n_pkts; pkti++) {
     struct pkt pkt = pkts.pkts[pkti];
+
+    if ((int)(100 * (pkti + 1) / (double)pkts.n_pkts) >= threshold) {
+      printf("\rProcessing packets (%d%%)",
+             (int)(100 * (pkti + 1) / (double)pkts.n_pkts));
+      fflush(stdout);
+      threshold += 1;
+    }
+
     packet_state_total_length(pkt.pkt, &(pkt.pktlen));
 
     // ignore destination device, we don't forward anywhere
@@ -483,6 +488,7 @@ static void worker_main() {
     nf_return_all_chunks(pkt.pkt);
   }
 
+  printf("\n");
   free(pkts.pkts);
 
   printf("Generating report...\n");
@@ -501,15 +507,12 @@ static void worker_main() {
 }
 
 void nf_config_init(int argc, char **argv) {
-  unsigned nb_devices = rte_eth_dev_count_avail();
-
   pkts.pkts = NULL;
   pkts.n_pkts = 0;
   pkts.reserved = 0;
 
-  if (argc <= nb_devices) {
-    rte_exit(EXIT_FAILURE, "Missing path to %u pcaps as arguments.\n",
-             nb_devices);
+  if (argc <= 1) {
+    rte_exit(EXIT_FAILURE, "Provide at least 1 path to a pcap.\n");
   }
 
   for (int argi = 1; argi < argc; argi++) {
@@ -544,30 +547,6 @@ int MAIN(int argc, char **argv) {
   argv += ret;
 
   nf_config_init(argc, argv);
-
-  // Create a memory pool
-  unsigned nb_devices = rte_eth_dev_count_avail();
-  struct rte_mempool *mbuf_pool = rte_pktmbuf_pool_create(
-      "MEMPOOL",                         // name
-      MEMPOOL_BUFFER_COUNT * nb_devices, // #elements
-      0, // cache size (per-core, not useful in a single-threaded app)
-      0, // application private area size
-      RTE_MBUF_DEFAULT_BUF_SIZE, // data buffer size
-      rte_socket_id()            // socket ID
-      );
-  if (mbuf_pool == NULL) {
-    rte_exit(EXIT_FAILURE, "Cannot create pool: %s\n", rte_strerror(rte_errno));
-  }
-
-  // Initialize all devices
-  for (uint16_t device = 0; device < nb_devices; device++) {
-    ret = nf_init_device(device, mbuf_pool);
-    if (ret == 0) {
-      NF_INFO("Initialized device %" PRIu16 ".", device);
-    } else {
-      rte_exit(EXIT_FAILURE, "Cannot init device %" PRIu16 ": %d", device, ret);
-    }
-  }
 
   // Run!
   worker_main();
