@@ -37,3 +37,4 @@ klee-last
 *.vfmanifest
 fspec_gen.ml
 __pycache__
+Makefile.nf

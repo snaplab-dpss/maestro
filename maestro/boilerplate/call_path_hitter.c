@@ -8,7 +8,9 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <stddef.h>
-
+#include <getopt.h>
+#include <unistd.h>
+#include <pcap/pcap.h>
 #include <netinet/in.h>
 
 #include <rte_eal.h>
@@ -23,6 +25,15 @@
 #include <rte_errno.h>
 #include <rte_lcore.h>
 #include <rte_malloc.h>
+
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <net/if.h>
+#include <netinet/if_ether.h>
+#include <net/ethernet.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
+#include <arpa/inet.h>
 
 #include "libvig/verified/boilerplate-util.h"
 #include "libvig/verified/tcpudp_hdr.h"
@@ -42,6 +53,9 @@
 
 size_t global_total_length;
 size_t global_read_length = 0;
+
+RTE_DEFINE_PER_LCORE(bool, write_attempt);
+RTE_DEFINE_PER_LCORE(bool, write_state);
 
 void packet_state_total_length(void *p, uint32_t *len) {
   global_total_length = *len;
@@ -98,9 +112,6 @@ void *chunks_borrowed[MAX_N_CHUNKS];
 size_t chunks_borrowed_num = 0;
 
 // this is doing nothing here, just making compilation easier
-RTE_DEFINE_PER_LCORE(bool, write_attempt);
-RTE_DEFINE_PER_LCORE(bool, write_state);
-
 static inline void *nf_borrow_next_chunk(void *p, size_t length) {
   assert(chunks_borrowed_num < MAX_N_CHUNKS);
   void *chunk;
@@ -377,10 +388,105 @@ static int nf_init_device(uint16_t device, struct rte_mempool *mbuf_pool) {
   return 0;
 }
 
+struct pkt {
+  uint64_t ts;
+  uint32_t pktlen;
+  uint8_t *pkt;
+  unsigned device;
+};
+
+int cmpfunc(const void *a, const void *b) {
+  struct pkt *p1 = (struct pkt *)a;
+  struct pkt *p2 = (struct pkt *)b;
+
+  if (p1->ts > p2->ts) {
+    return 1;
+  }
+
+  if (p1->ts < p2->ts) {
+    return -1;
+  }
+
+  return 0;
+}
+
+struct pkts {
+  struct pkt *pkts;
+  unsigned n_pkts;
+  unsigned reserved;
+};
+
+struct pkts pkts;
+
 uint64_t *call_path_hit_counter_ptr;
 unsigned call_path_hit_counter_sz;
 
-void dump() {
+void packetHandler(uint8_t *userData, const struct pcap_pkthdr *pkthdr,
+                   const uint8_t *packet) {
+  if (pkts.reserved <= pkts.n_pkts) {
+    pkts.reserved = pkts.n_pkts + 1000;
+    pkts.pkts =
+        (struct pkt *)realloc(pkts.pkts, sizeof(struct pkt) * pkts.reserved);
+  }
+
+  unsigned device = *((unsigned *)userData);
+
+  pkts.pkts[pkts.n_pkts].ts =
+      ((uint64_t)pkthdr->ts.tv_sec) * 1e9 + (uint64_t)pkthdr->ts.tv_usec * 1e3;
+  pkts.pkts[pkts.n_pkts].pktlen = pkthdr->len;
+  pkts.pkts[pkts.n_pkts].pkt = (uint8_t *)malloc(sizeof(uint8_t) * pkthdr->len);
+  memcpy(pkts.pkts[pkts.n_pkts].pkt, packet, pkthdr->len);
+  pkts.pkts[pkts.n_pkts].device = device;
+  pkts.n_pkts++;
+}
+
+void load_pkts(const char *pcap, unsigned device) {
+  pcap_t *descr;
+  char errbuf[PCAP_ERRBUF_SIZE];
+
+  printf("Loading packets (device=%u, pcap=%s)\n", device, pcap);
+
+  descr = pcap_open_offline(pcap, errbuf);
+  if (descr == NULL) {
+    printf("pcap %s\n", pcap);
+    rte_exit(EXIT_FAILURE, "pcap_open_offline() failed: %s\n", errbuf);
+  }
+
+  if (pcap_loop(descr, -1, packetHandler, (uint8_t *)&device) < 0) {
+    rte_exit(EXIT_FAILURE, "pcap_loop() failed\n");
+  }
+
+  if (pkts.reserved > pkts.n_pkts) {
+    pkts.pkts =
+        (struct pkt *)realloc(pkts.pkts, sizeof(struct pkt) * pkts.n_pkts);
+  }
+
+  pcap_close(descr);
+}
+
+// Main worker method (for now used on a single thread...)
+static void worker_main() {
+  unsigned nb_devices = rte_eth_dev_count_avail();
+
+  if (!nf_init()) {
+    rte_exit(EXIT_FAILURE, "Error initializing NF");
+  }
+
+  printf("Processing packets...\n");
+
+  for (unsigned pkti = 0; pkti < pkts.n_pkts; pkti++) {
+    struct pkt pkt = pkts.pkts[pkti];
+    packet_state_total_length(pkt.pkt, &(pkt.pktlen));
+
+    // ignore destination device, we don't forward anywhere
+    nf_process(pkt.device, pkt.pkt, pkt.pktlen, pkt.ts);
+    nf_return_all_chunks(pkt.pkt);
+  }
+
+  free(pkts.pkts);
+
+  printf("Generating report...\n");
+
   FILE *report = fopen("report.txt", "w");
   for (unsigned i = 0; i < call_path_hit_counter_sz; i++) {
     if (i != 0) {
@@ -390,66 +496,40 @@ void dump() {
   }
   fprintf(report, "\n");
   fclose(report);
+
   exit(0);
 }
 
-// Main worker method (for now used on a single thread...)
-static void worker_main(void) {
-  if (!nf_init()) {
-    rte_exit(EXIT_FAILURE, "Error initializing NF");
+void nf_config_init(int argc, char **argv) {
+  unsigned nb_devices = rte_eth_dev_count_avail();
+
+  pkts.pkts = NULL;
+  pkts.n_pkts = 0;
+  pkts.reserved = 0;
+
+  if (argc <= nb_devices) {
+    rte_exit(EXIT_FAILURE, "Missing path to %u pcaps as arguments.\n",
+             nb_devices);
   }
 
-  NF_INFO("Core %u forwarding packets.", rte_lcore_id());
-
-  if (rte_eth_dev_count_avail() != 2) {
-    printf("We assume there will be exactly 2 devices for our simple batching "
-           "implementation.");
-    exit(1);
-  }
-  NF_INFO("Running with batches, this code is unverified!");
-  int no_rx = 0;
-  while (1) {
-    unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();
-    for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT;
-         VIGOR_DEVICE++) {
-      struct rte_mbuf *mbufs[VIGOR_BATCH_SIZE];
-      uint16_t rx_count =
-          rte_eth_rx_burst(VIGOR_DEVICE, 0, mbufs, VIGOR_BATCH_SIZE);
-
-      struct rte_mbuf *mbufs_to_send[VIGOR_BATCH_SIZE];
-      uint16_t tx_count = 0;
-      if (rx_count == 0) {
-        no_rx++;
-      }
-
-      if (no_rx == 10) {
-        dump();
-      }
-      for (uint16_t n = 0; n < rx_count; n++) {
-        no_rx = 0;
-        uint8_t *data = rte_pktmbuf_mtod(mbufs[n], uint8_t *);
-        packet_state_total_length(data, &(mbufs[n]->pkt_len));
-        vigor_time_t VIGOR_NOW = current_time();
-        uint16_t dst_device =
-            nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
-        nf_return_all_chunks(data);
-
-        if (dst_device == VIGOR_DEVICE) {
-          rte_pktmbuf_free(mbufs[n]);
-        } else { // includes flood when 2 devices, which is equivalent to just a
-                 // send
-          mbufs_to_send[tx_count] = mbufs[n];
-          tx_count++;
-        }
-      }
-
-      uint16_t sent_count =
-          rte_eth_tx_burst(1 - VIGOR_DEVICE, 0, mbufs_to_send, tx_count);
-      for (uint16_t n = sent_count; n < tx_count; n++) {
-        rte_pktmbuf_free(mbufs[n]); // should not happen, but we're in the
-                                    // unverified case anyway
-      }
+  for (int argi = 1; argi < argc; argi++) {
+    unsigned device = argi - 1;
+    const char *pcap = argv[argi];
+    if (access(pcap, F_OK) != 0) {
+      rte_exit(EXIT_FAILURE, "Invalid file \"%s\".\n", pcap);
     }
+
+    load_pkts(pcap, device);
+  }
+
+  printf("Sorting %u packets...\n", pkts.n_pkts);
+  qsort(pkts.pkts, pkts.n_pkts, sizeof(struct pkt), cmpfunc);
+
+  uint64_t last_ts = 0;
+  for (unsigned i = 0; i < pkts.n_pkts; i++) {
+    struct pkt pkt = pkts.pkts[i];
+    assert(pkt.ts >= last_ts);
+    last_ts = pkt.ts;
   }
 }
 
@@ -462,6 +542,8 @@ int MAIN(int argc, char **argv) {
   }
   argc -= ret;
   argv += ret;
+
+  nf_config_init(argc, argv);
 
   // Create a memory pool
   unsigned nb_devices = rte_eth_dev_count_avail();
