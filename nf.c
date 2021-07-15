@@ -157,23 +157,8 @@ static void worker_main(void) {
     uint8_t *data = rte_pktmbuf_mtod(mbuf, uint8_t *);
     packet_state_total_length(data, &(mbuf->pkt_len));
 
-    uint32_t len = mbuf->pkt_len;
-    uint32_t start_size = 14;
-    uint32_t new_hdr_len = 2;
-
-    char *added = rte_pktmbuf_append(mbuf, new_hdr_len);
-    assert(added);
-
-    for (int i = len + new_hdr_len - 1; i >= start_size + new_hdr_len; i--) {
-      rte_memcpy(data + i, data + i - new_hdr_len, 1);
-    }
-
-    data[start_size] = 0xFF;
-    data[start_size + 1] = 0xFF;
-    // assert(rte_pktmbuf_trim(mbuf, 4) != -1);
-
     uint16_t dst_device =
-        nf_process(mbuf->port, data, mbuf->pkt_len, VIGOR_NOW);
+        nf_process(mbuf->port, &data, mbuf->pkt_len, VIGOR_NOW, mbuf);
     nf_return_all_chunks(data);
 
     if (dst_device == VIGOR_DEVICE) {

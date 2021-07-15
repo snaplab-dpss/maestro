@@ -7,29 +7,21 @@ struct nf_config config;
 
 bool nf_init(void) { return true; }
 
-int nf_process(uint16_t device, uint8_t *buffer, uint16_t packet_length,
-               vigor_time_t now) {
-
-  uint16_t dst_device;
-  if (device == config.wan_device) {
-    dst_device = config.lan_main_device;
-  } else {
-    dst_device = config.wan_device;
-  }
-
+int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
+               vigor_time_t now, struct rte_mbuf *mbuf) {
   struct rte_ether_hdr *rte_ether_header = nf_then_get_rte_ether_header(buffer);
   uint8_t *ip_options;
   struct rte_ipv4_hdr *rte_ipv4_header =
       nf_then_get_rte_ipv4_header(rte_ether_header, buffer, &ip_options);
   if (rte_ipv4_header == NULL) {
-    return dst_device;
+    return device;
   }
 
-  // struct tcpudp_hdr *tcpudp_header =
-  //     nf_then_get_tcpudp_header(rte_ipv4_header, buffer);
-  // if (tcpudp_header == NULL) {
-  //   return device;
-  // }
+  struct tcpudp_hdr *tcpudp_header =
+      nf_then_get_tcpudp_header(rte_ipv4_header, buffer);
+  if (tcpudp_header == NULL) {
+    return device;
+  }
 
   NF_INFO("\n=========================================================");
   NF_INFO("---------------------------------------------------------");
@@ -68,6 +60,42 @@ int nf_process(uint16_t device, uint8_t *buffer, uint16_t packet_length,
           (rte_ipv4_header->dst_addr >> 24) & 0xff);
   NF_INFO("---------------------------------------------------------");
   NF_INFO("=========================================================");
+
+  uint16_t dst_device;
+  if (device == config.wan_device) {
+    dst_device = config.lan_main_device;
+  } else {
+    dst_device = config.wan_device;
+  }
+
+  nf_return_chunk(buffer);
+
+  // delete ip options
+  rte_ipv4_header->version_ihl = 0b01000101;
+  nf_resize_chunk(buffer, 0, mbuf);
+
+  // increase ip options
+  // rte_ipv4_header->version_ihl = 0b01000111;
+
+  // ip_options = (uint8_t*) nf_resize_chunk(buffer, 8, mbuf);
+
+  // ip_options[0] = 0xCA;
+  // ip_options[1] = 0xFE;
+  // ip_options[2] = 0xBA;
+  // ip_options[3] = 0xBE;
+
+  // ip_options[4] = 0xDE;
+  // ip_options[5] = 0xAD;
+  // ip_options[6] = 0xBE;
+  // ip_options[7] = 0xEF;
+
+
+  if (ip_options) {
+    nf_return_chunk(buffer);
+  }
+
+  nf_return_chunk(buffer);
+  nf_return_chunk(buffer);
 
   return dst_device;
 }

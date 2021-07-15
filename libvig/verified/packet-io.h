@@ -54,6 +54,9 @@ void packet_state_total_length(void *p, uint32_t *len);
 /*@ ensures packetp(p, unread, nil) &*&
             *len |-> length(unread); @*/
 
+void packet_resize_chunk(void* p, int offset);
+size_t packet_get_read_length(void *p);
+
 bool packet_receive(uint16_t src_device, void **p, uint32_t *len);
 /*@ requires *p |-> _ &*& *len |-> ?length; @*/
 /*@ ensures result ? *p |-> ?pp &*&

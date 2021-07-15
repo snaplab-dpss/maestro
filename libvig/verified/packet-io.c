@@ -100,6 +100,11 @@ void packet_return_chunk(void *p, void *chunk)
   //@ close packetp(p, append(chnk, unread), mc);
 }
 
+void packet_resize_chunk(void* p, int offset) {
+  global_read_length += offset;
+  global_total_length += offset;
+}
+
 uint32_t packet_get_unread_length(void *p)
 /*@ requires packetp(p, ?unread, ?mc); @*/
 /*@ ensures packetp(p, unread, mc) &*&
@@ -108,4 +113,8 @@ uint32_t packet_get_unread_length(void *p)
   //@ open packetp(p, unread, mc);
   return global_total_length - global_read_length;
   //@ close packetp(p, unread, mc);
+}
+
+size_t packet_get_read_length(void *p) {
+  return global_read_length;
 }
