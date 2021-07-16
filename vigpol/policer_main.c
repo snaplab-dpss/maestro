@@ -108,7 +108,8 @@ bool nf_init(void) {
   return dynamic_ft != NULL;
 }
 
-int nf_process(uint16_t device, uint8_t* buffer, uint16_t packet_length, vigor_time_t now) {
+int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
+               vigor_time_t now, struct rte_mbuf *mbuf) {
   NF_DEBUG("Received packet");
   struct rte_ether_hdr *rte_ether_header = nf_then_get_rte_ether_header(buffer);
 

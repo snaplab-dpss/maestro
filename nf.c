@@ -205,7 +205,7 @@ static void worker_main(void) {
         packet_state_total_length(data, &(mbufs[n]->pkt_len));
         vigor_time_t VIGOR_NOW = current_time();
         uint16_t dst_device =
-            nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
+            nf_process(mbufs[n]->port, &data, mbufs[n]->pkt_len, VIGOR_NOW, mbuf);
         nf_return_all_chunks(data);
 
         if (dst_device == VIGOR_DEVICE) {

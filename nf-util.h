@@ -126,6 +126,11 @@ static inline void* nf_insert_new_chunk(uint8_t **p, size_t length, struct rte_m
   return chunks_borrowed[chunks_borrowed_num - 1];
 }
 
+static inline void* nf_get_borrowed_chunk(uint32_t chunk_i) {
+  assert(chunk_i < chunks_borrowed_num);
+  return chunks_borrowed[chunk_i];
+}
+
 static inline void nf_return_all_chunks(void *p) {
   while (chunks_borrowed_num != 0) {
     packet_return_chunk(p, chunks_borrowed[chunks_borrowed_num - 1]);
