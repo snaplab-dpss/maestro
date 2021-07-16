@@ -7,6 +7,7 @@
 #include <rte_ether.h> //for sizeof(struct rte_ether_hdr)
 
 struct rte_mempool;
+struct rte_mbuf;
 
 /*@
 
@@ -53,6 +54,11 @@ void packet_state_total_length(void *p, uint32_t *len);
              *len |-> length(unread); @*/
 /*@ ensures packetp(p, unread, nil) &*&
             *len |-> length(unread); @*/
+
+void packet_shrink_chunk(void** p, size_t length, void** chunks, size_t num_chunks, struct rte_mbuf *mbuf);
+void packet_insert_new_chunk(void** p, size_t length, void** chunks, size_t *num_chunks, struct rte_mbuf *mbuf);
+
+size_t packet_get_chunk_length(void *p, void* chunk);
 
 bool packet_receive(uint16_t src_device, void **p, uint32_t *len);
 /*@ requires *p |-> _ &*& *len |-> ?length; @*/
