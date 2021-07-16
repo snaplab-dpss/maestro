@@ -10,6 +10,7 @@
 #include <rte_mbuf.h>
 #include <rte_ethdev.h>
 #include <rte_ip.h>
+
 #include "libvig/verified/packet-io.h"
 #include "libvig/verified/tcpudp_hdr.h"
 
@@ -88,61 +89,6 @@ static inline void *nf_borrow_next_chunk(uint8_t **p, size_t length) {
   return chunk;
 }
 
-static inline void* nf_resize_chunk(uint8_t **p, size_t length, struct rte_mbuf *mbuf) {
-  uint8_t* data = (uint8_t*) (*p);
-
-  assert(chunks_borrowed_num);
-  void* last_chunk = chunks_borrowed[chunks_borrowed_num - 1];
-
-  size_t all_prev_lengths[MAX_N_CHUNKS];
-
-  for (int i = 0; i < chunks_borrowed_num - 1; i++) {
-    all_prev_lengths[i] = (uint32_t)((uint8_t *)chunks_borrowed[i + 1] - (uint8_t *)chunks_borrowed[i]);
-  }
-
-  size_t read_length = packet_get_read_length(p);
-  uint8_t* last_chunk_limit = data + read_length;
-  size_t prev_length = last_chunk_limit - (uint8_t*) chunks_borrowed[chunks_borrowed_num - 1];
-
-  if (length == prev_length) {
-    return chunks_borrowed[chunks_borrowed_num - 1];
-  }
-
-  int offset = length - prev_length;
-
-  if (offset < 0) {
-    uint8_t* current = last_chunk_limit - 1;
-
-    while (current >= data - offset) {
-      rte_memcpy(current, current + offset, 1);
-      current--;
-    }
-
-    data = rte_pktmbuf_adj(mbuf, -offset);
-    assert(data);
-  } else {
-    data = rte_pktmbuf_prepend(mbuf, offset);
-    assert(data);
-
-    uint8_t* current = data;
-
-    while (current != last_chunk_limit - offset) {
-      rte_memcpy(current, current + offset, 1);
-      current++;
-    }
-  }
-
-  for (int i = 0; i < chunks_borrowed_num; i++) {
-    chunks_borrowed[i] -= offset;
-  }
-
-  packet_resize_chunk(*p, offset);
-
-  (*p) = data;
-
-  return chunks_borrowed[chunks_borrowed_num - 1];
-}
-
 #ifdef KLEE_VERIFICATION
 #  define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests, tag)   \
     packet_set_next_chunk_layout(pkt, len, fields, n_fields, nests, n_nests,   \
@@ -160,6 +106,25 @@ static inline void* nf_resize_chunk(uint8_t **p, size_t length, struct rte_mbuf 
 #define CHUNK_LAYOUT(pkt, str_name, fields)                                    \
   CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields,                      \
                     sizeof(fields) / sizeof(fields[0]), NULL, 0, #str_name);
+
+static inline void* nf_shrink_chunk(uint8_t **p, size_t length, struct rte_mbuf *mbuf) {
+  assert(chunks_borrowed_num < MAX_N_CHUNKS);
+  assert(chunks_borrowed_num);
+  packet_shrink_chunk((void**) p, length, chunks_borrowed, chunks_borrowed_num, mbuf);
+  return chunks_borrowed[chunks_borrowed_num - 1];
+}
+
+static inline void* nf_insert_new_chunk(uint8_t **p, size_t length, struct rte_mbuf *mbuf) {
+  assert(chunks_borrowed_num < MAX_N_CHUNKS);
+  assert(chunks_borrowed_num);
+
+  // Do not really trace the ip options chunk, as it's length
+  // is unknown statically
+  CHUNK_LAYOUT_IMPL(*p, 1, NULL, 0, NULL, 0, "new_hdr");
+  packet_insert_new_chunk((void**) p, length, chunks_borrowed, &chunks_borrowed_num, mbuf);
+
+  return chunks_borrowed[chunks_borrowed_num - 1];
+}
 
 static inline void nf_return_all_chunks(void *p) {
   while (chunks_borrowed_num != 0) {

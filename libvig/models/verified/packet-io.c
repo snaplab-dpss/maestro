@@ -1,17 +1,19 @@
 #include <stdlib.h>
+#include <string.h>
 #include <klee/klee.h>
 #include "libvig/models/str-descr.h"
 #include "libvig/verified/packet-io.h"
 #include "packet-io-control.h"
 
 #define MAX_CHUNK_SIZE 41
-#define PREALLOC_CHUNKS 4
+#define PREALLOC_CHUNKS 5
 
 // struct Packet {
 int global_sent;
 /* int nic; */
 /* int is_ipv4; */
 int global_n_borrowed_chunks;
+int global_total_n_borrowed_chunks;
 uint32_t global_packet_len;
 uint32_t global_tot_len_borrowed;
 uint8_t global_chunks[MAX_CHUNK_SIZE * PREALLOC_CHUNKS];
@@ -61,6 +63,7 @@ void packet_borrow_next_chunk(void *p, size_t length, void **chunk) {
   klee_assert(receive_succeded);
   klee_assert(!global_sent);
   klee_assert(global_n_borrowed_chunks < PREALLOC_CHUNKS);
+  klee_assert(global_n_borrowed_chunks <= global_total_n_borrowed_chunks);
   klee_assert(length < MAX_CHUNK_SIZE);
   klee_assert(global_tot_len_borrowed + length <= global_packet_len);
   struct ChunkLayout *layout = &global_chunk_layouts[global_n_borrowed_chunks];
@@ -88,6 +91,7 @@ void packet_borrow_next_chunk(void *p, size_t length, void **chunk) {
   }
   global_chunk_lengths[global_n_borrowed_chunks] = length;
   global_n_borrowed_chunks++;
+  global_total_n_borrowed_chunks++;
   global_tot_len_borrowed += length;
   *chunk = ret;
 }
@@ -146,6 +150,7 @@ bool packet_receive(uint16_t src_device, void **p, uint32_t *len) {
     //*p = &global_packet_buffer;
     klee_make_symbolic(global_chunks, sizeof(global_chunks), "packet_chunks");
     global_n_borrowed_chunks = 0;
+    global_total_n_borrowed_chunks = 0;
     global_tot_len_borrowed = 0;
     global_sent = false;
     global_packet_len = *len; // klee_int("packet_len");
@@ -177,4 +182,88 @@ uint32_t packet_get_unread_length(void *p) {
   klee_assert(receive_succeded);
   klee_assert(global_tot_len_borrowed <= global_packet_len);
   return (uint32_t)(global_packet_len - global_tot_len_borrowed);
+}
+
+size_t packet_get_chunk_length(void *p, void* chunk) {
+  klee_trace_ret();
+  klee_trace_param_u64((uint64_t)p, "p");
+
+  klee_assert(global_n_borrowed_chunks > 0);
+
+  uint32_t length = global_chunk_lengths[global_n_borrowed_chunks - 1];
+
+  struct ChunkLayout *layout =
+      &global_chunk_layouts[global_n_borrowed_chunks - 1];
+  klee_assert(layout->set);
+
+  klee_trace_param_tagged_ptr(chunk, layout->length, "the_chunk", layout->tname,
+                              TD_IN);
+  return length;
+}
+
+void packet_shrink_chunk(void** p, size_t length, void** chunks, size_t num_chunks, struct rte_mbuf *mbuf) {
+  klee_trace_ret();
+
+  klee_assert(receive_succeded);
+  klee_assert(!global_sent);
+  klee_assert(global_n_borrowed_chunks > 0);
+
+  klee_trace_param_ptr_directed(p, sizeof(void *), "p", TD_OUT);
+  klee_trace_param_u32(length, "length");
+
+
+  uint32_t old_length = global_chunk_lengths[global_n_borrowed_chunks - 1];
+  klee_assert(length <= old_length);
+
+  uint32_t offset = (uint32_t) old_length - (uint32_t) length;
+
+  global_tot_len_borrowed -= offset;
+  global_packet_len -= offset;
+  global_chunk_lengths[global_n_borrowed_chunks - 1] -= offset;
+}
+
+void packet_insert_new_chunk(void** p, size_t length, void** chunks, size_t* num_chunks, struct rte_mbuf *mbuf) {
+  klee_trace_ret();
+
+  klee_assert(receive_succeded);
+  klee_assert(!global_sent);
+  klee_assert(global_n_borrowed_chunks < PREALLOC_CHUNKS);
+  klee_assert(global_total_n_borrowed_chunks >= global_n_borrowed_chunks);
+  klee_assert(global_n_borrowed_chunks > 0);
+  klee_assert(length < MAX_CHUNK_SIZE);
+
+  klee_trace_param_ptr_directed(p, sizeof(void *), "p", TD_OUT);
+  klee_trace_param_u32(length, "length");
+
+  global_tot_len_borrowed += length;
+  global_packet_len += length;
+
+  global_n_borrowed_chunks++;
+  global_total_n_borrowed_chunks++;
+
+  uint32_t returned_chunks = global_total_n_borrowed_chunks - global_n_borrowed_chunks;
+
+  for (uint32_t i = 0; i < returned_chunks; i++) {
+    uint32_t next = global_total_n_borrowed_chunks - 1 - i;
+    uint32_t prev = next - 1;
+
+    global_chunk_lengths[next] = global_chunk_lengths[prev];
+    memcpy((void*) &global_chunks[next], &global_chunks[prev], MAX_CHUNK_SIZE);
+    memcpy((void*) &global_chunk_layouts[next], &global_chunk_layouts[prev], sizeof(struct ChunkLayout));
+  }
+
+  (*num_chunks)++;
+
+  struct ChunkLayout *layout = &global_chunk_layouts[global_n_borrowed_chunks - 1];
+  klee_assert(layout->set);
+  void *ret = &global_chunks[(global_n_borrowed_chunks - 1) * MAX_CHUNK_SIZE];
+  
+  klee_trace_param_tagged_ptr(chunks[(*num_chunks) - 1], sizeof(void *), "chunk", layout->tname,
+                              TD_OUT);
+
+  klee_trace_extra_ptr(ret, layout->length, "the_chunk", layout->tname, TD_OUT);
+
+  global_chunk_lengths[global_n_borrowed_chunks - 1] = length;
+
+  chunks[(*num_chunks) - 1] = ret;
 }

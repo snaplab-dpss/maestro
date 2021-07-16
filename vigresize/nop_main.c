@@ -23,43 +23,7 @@ int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
     return device;
   }
 
-  NF_INFO("\n=========================================================");
-  NF_INFO("---------------------------------------------------------");
-  NF_INFO("Src:         %0x:%0x:%0x:%0x:%0x:%0x",
-          rte_ether_header->s_addr.addr_bytes[0],
-          rte_ether_header->s_addr.addr_bytes[1],
-          rte_ether_header->s_addr.addr_bytes[2],
-          rte_ether_header->s_addr.addr_bytes[3],
-          rte_ether_header->s_addr.addr_bytes[4],
-          rte_ether_header->s_addr.addr_bytes[5]);
-  NF_INFO("Dst:         %0x:%0x:%0x:%0x:%0x:%0x",
-          rte_ether_header->d_addr.addr_bytes[0],
-          rte_ether_header->d_addr.addr_bytes[1],
-          rte_ether_header->d_addr.addr_bytes[2],
-          rte_ether_header->d_addr.addr_bytes[3],
-          rte_ether_header->d_addr.addr_bytes[4],
-          rte_ether_header->d_addr.addr_bytes[5]);
-  NF_INFO("EtherType:   %x", rte_ether_header->ether_type);
-  NF_INFO("---------------------------------------------------------");
-  NF_INFO("Version:     %x", (rte_ipv4_header->version_ihl >> 8) & 0xff);
-  NF_INFO("IHL:         %" PRIu8, rte_ipv4_header->version_ihl & 0xff);
-  NF_INFO("ToS:         0x%x", rte_ipv4_header->type_of_service);
-  NF_INFO("Length:      %" PRIu16, rte_ipv4_header->total_length);
-  NF_INFO("ID:          %" PRIu16, rte_ipv4_header->packet_id);
-  NF_INFO("Frag offset: %" PRIu16, rte_ipv4_header->fragment_offset);
-  NF_INFO("TTL:         %" PRIu8, rte_ipv4_header->time_to_live);
-  NF_INFO("Protocol:    0x%x", rte_ipv4_header->next_proto_id);
-  NF_INFO("Checksum:    0x%x", rte_ipv4_header->hdr_checksum);
-  NF_INFO("Src:         %u:%u:%u:%u", (rte_ipv4_header->src_addr >> 0) & 0xff,
-          (rte_ipv4_header->src_addr >> 8) & 0xff,
-          (rte_ipv4_header->src_addr >> 16) & 0xff,
-          (rte_ipv4_header->src_addr >> 24) & 0xff);
-  NF_INFO("Dst:         %u:%u:%u:%u", (rte_ipv4_header->dst_addr >> 0) & 0xff,
-          (rte_ipv4_header->dst_addr >> 8) & 0xff,
-          (rte_ipv4_header->dst_addr >> 16) & 0xff,
-          (rte_ipv4_header->dst_addr >> 24) & 0xff);
-  NF_INFO("---------------------------------------------------------");
-  NF_INFO("=========================================================");
+  NF_INFO("Received a packet!");
 
   uint16_t dst_device;
   if (device == config.wan_device) {
@@ -68,34 +32,55 @@ int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
     dst_device = config.wan_device;
   }
 
-  nf_return_chunk(buffer);
+  // =========================================================
+  // Example 1: shorten ip options
+  // nf_return_chunk(buffer); // return TCP/UDP
+  // nf_shrink_chunk(buffer, 2, mbuf);
+  // =========================================================
 
-  // delete ip options
-  rte_ipv4_header->version_ihl = 0b01000101;
-  nf_resize_chunk(buffer, 0, mbuf);
+  // =========================================================
+  // Example 2: remove ip options
+  // nf_return_chunk(buffer); // return TCP/UDP
+  // nf_shrink_chunk(buffer, 0, mbuf);
+  // =========================================================
 
-  // increase ip options
-  // rte_ipv4_header->version_ihl = 0b01000111;
+  // =========================================================
+  // Example 3: add new header after ip header (+ options)
+  // nf_return_chunk(buffer); // return TCP/UDP
 
-  // ip_options = (uint8_t*) nf_resize_chunk(buffer, 8, mbuf);
+  // size_t new_hdr_length = 8;
+  // uint8_t* new_hdr = (uint8_t*) nf_insert_new_chunk(buffer, new_hdr_length, mbuf);
+  
+  // new_hdr[0] = 0xCA;
+  // new_hdr[1] = 0xFE;
+  // new_hdr[2] = 0xBA;
+  // new_hdr[3] = 0xBE;
+  // new_hdr[4] = 0xDE;
+  // new_hdr[5] = 0xAD;
+  // new_hdr[6] = 0xBE;
+  // new_hdr[7] = 0xEF;
+  // =========================================================
 
-  // ip_options[0] = 0xCA;
-  // ip_options[1] = 0xFE;
-  // ip_options[2] = 0xBA;
-  // ip_options[3] = 0xBE;
-
-  // ip_options[4] = 0xDE;
-  // ip_options[5] = 0xAD;
-  // ip_options[6] = 0xBE;
-  // ip_options[7] = 0xEF;
-
-
+  // =========================================================
+  // Example 4: add new header after ethernet header
+  nf_return_chunk(buffer); // return TCP/UDP
   if (ip_options) {
-    nf_return_chunk(buffer);
+    nf_return_chunk(buffer); // return IP options
   }
+  nf_return_chunk(buffer); // return IP
 
-  nf_return_chunk(buffer);
-  nf_return_chunk(buffer);
+  size_t new_hdr_length = 8;
+  uint8_t* new_hdr = (uint8_t*) nf_insert_new_chunk(buffer, new_hdr_length, mbuf);
+  
+  new_hdr[0] = 0xCA;
+  new_hdr[1] = 0xFE;
+  new_hdr[2] = 0xBA;
+  new_hdr[3] = 0xBE;
+  new_hdr[4] = 0xDE;
+  new_hdr[5] = 0xAD;
+  new_hdr[6] = 0xBE;
+  new_hdr[7] = 0xEF;
+  // =========================================================
 
   return dst_device;
 }
