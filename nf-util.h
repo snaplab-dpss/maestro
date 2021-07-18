@@ -10,6 +10,7 @@
 #include <rte_mbuf.h>
 #include <rte_ethdev.h>
 #include <rte_ip.h>
+
 #include "libvig/verified/packet-io.h"
 #include "libvig/verified/tcpudp_hdr.h"
 
@@ -79,10 +80,10 @@ char *nf_rte_ipv4_to_str(uint32_t addr);
 extern void *chunks_borrowed[];
 extern size_t chunks_borrowed_num;
 
-static inline void *nf_borrow_next_chunk(void *p, size_t length) {
+static inline void *nf_borrow_next_chunk(uint8_t **p, size_t length) {
   assert(chunks_borrowed_num < MAX_N_CHUNKS);
   void *chunk;
-  packet_borrow_next_chunk(p, length, &chunk);
+  packet_borrow_next_chunk(*p, length, &chunk);
   chunks_borrowed[chunks_borrowed_num] = chunk;
   chunks_borrowed_num++;
   return chunk;
@@ -106,6 +107,30 @@ static inline void *nf_borrow_next_chunk(void *p, size_t length) {
   CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields,                      \
                     sizeof(fields) / sizeof(fields[0]), NULL, 0, #str_name);
 
+static inline void* nf_shrink_chunk(uint8_t **p, size_t length, struct rte_mbuf *mbuf) {
+  assert(chunks_borrowed_num < MAX_N_CHUNKS);
+  assert(chunks_borrowed_num);
+  packet_shrink_chunk((void**) p, length, chunks_borrowed, chunks_borrowed_num, mbuf);
+  return chunks_borrowed[chunks_borrowed_num - 1];
+}
+
+static inline void* nf_insert_new_chunk(uint8_t **p, size_t length, struct rte_mbuf *mbuf) {
+  assert(chunks_borrowed_num < MAX_N_CHUNKS);
+  assert(chunks_borrowed_num);
+
+  // Do not really trace the ip options chunk, as it's length
+  // is unknown statically
+  CHUNK_LAYOUT_IMPL(*p, 1, NULL, 0, NULL, 0, "new_hdr");
+  packet_insert_new_chunk((void**) p, length, chunks_borrowed, &chunks_borrowed_num, mbuf);
+
+  return chunks_borrowed[chunks_borrowed_num - 1];
+}
+
+static inline void* nf_get_borrowed_chunk(uint32_t chunk_i) {
+  assert(chunk_i < chunks_borrowed_num);
+  return chunks_borrowed[chunk_i];
+}
+
 static inline void nf_return_all_chunks(void *p) {
   while (chunks_borrowed_num != 0) {
     packet_return_chunk(p, chunks_borrowed[chunks_borrowed_num - 1]);
@@ -113,14 +138,21 @@ static inline void nf_return_all_chunks(void *p) {
   }
 }
 
-static inline struct rte_ether_hdr *nf_then_get_rte_ether_header(void *p) {
-  CHUNK_LAYOUT_N(p, rte_ether_hdr, rte_ether_fields, rte_ether_nested_fields);
+static inline void nf_return_chunk(uint8_t **p) {
+  if (chunks_borrowed_num != 0) {
+    packet_return_chunk(*p, chunks_borrowed[chunks_borrowed_num - 1]);
+    chunks_borrowed_num--;
+  }
+}
+
+static inline struct rte_ether_hdr *nf_then_get_rte_ether_header(uint8_t **p) {
+  CHUNK_LAYOUT_N(*p, rte_ether_hdr, rte_ether_fields, rte_ether_nested_fields);
   void *hdr = nf_borrow_next_chunk(p, sizeof(struct rte_ether_hdr));
   return (struct rte_ether_hdr *)hdr;
 }
 
 static inline struct rte_ipv4_hdr *
-nf_then_get_rte_ipv4_header(void *rte_ether_header_, void *p, uint8_t **ip_options) {
+nf_then_get_rte_ipv4_header(void *rte_ether_header_, uint8_t **p, uint8_t **ip_options) {
   struct rte_ether_hdr *rte_ether_header = (struct rte_ether_hdr *)rte_ether_header_;
   *ip_options = NULL;
 
@@ -144,19 +176,19 @@ nf_then_get_rte_ipv4_header(void *rte_ether_header_, void *p, uint8_t **ip_optio
       (unread_len - sizeof(struct rte_ipv4_hdr) >= ip_options_length)) {
     // Do not really trace the ip options chunk, as it's length
     // is unknown statically
-    CHUNK_LAYOUT_IMPL(p, 1, NULL, 0, NULL, 0, "ipv4_options");
+    CHUNK_LAYOUT_IMPL(*p, 1, NULL, 0, NULL, 0, "ipv4_options");
     *ip_options = (uint8_t *)nf_borrow_next_chunk(p, ip_options_length);
   }
   return hdr;
 }
 
 static inline struct tcpudp_hdr *
-nf_then_get_tcpudp_header(struct rte_ipv4_hdr *ip_header, void *p) {
+nf_then_get_tcpudp_header(struct rte_ipv4_hdr *ip_header, uint8_t **p) {
   if ((!nf_has_tcpudp_header(ip_header)) |
       (packet_get_unread_length(p) < sizeof(struct tcpudp_hdr))) {
     return NULL;
   }
-  CHUNK_LAYOUT(p, tcpudp_hdr, tcpudp_fields);
+  CHUNK_LAYOUT(*p, tcpudp_hdr, tcpudp_fields);
   return (struct tcpudp_hdr *)nf_borrow_next_chunk(p,
                                                    sizeof(struct tcpudp_hdr));
 }

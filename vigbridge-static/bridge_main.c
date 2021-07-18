@@ -220,7 +220,8 @@ bool nf_init(void) {
   return true;
 }
 
-int nf_process(uint16_t device, uint8_t* buffer, uint16_t buffer_length, vigor_time_t now) {
+int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
+               vigor_time_t now, struct rte_mbuf *mbuf) {
   struct rte_ether_hdr *rte_ether_header = nf_then_get_rte_ether_header(buffer);
 
   int forward_to = bridge_get_device(&rte_ether_header->d_addr, device);
