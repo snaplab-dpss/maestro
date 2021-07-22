@@ -180,6 +180,10 @@ struct rte_ether_hdr;
 
 #define MAX_N_CHUNKS 100
 
+// this is here just to allow compilation
+void *chunks_borrowed[MAX_N_CHUNKS];
+size_t chunks_borrowed_num = 0;
+
 RTE_DEFINE_PER_LCORE(void **, chunks_borrowed);
 RTE_DEFINE_PER_LCORE(size_t, chunks_borrowed_num);
 
