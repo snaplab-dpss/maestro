@@ -36,8 +36,11 @@ SRCS-y += $(NF_FILES)
 CFLAGS += -I $(SELF_DIR)
 CFLAGS += -std=gnu11
 CFLAGS += -DCAPACITY_POW2
-CFLAGS += -O3
-#CFLAGS += -O0 -g -rdynamic -DENABLE_LOG -Wfatal-errors
+#CFLAGS += -O3
+CFLAGS += -O0 -g -rdynamic -DENABLE_LOG -Wfatal-errors
+
+LDLIBS = -lsynapse_runtime -rpath,$(SYNAPSE_RUNTIME_DIR)/build/lib -L$(SYNAPSE_RUNTIME_DIR)/build/lib
+SRCS-y += $(shell echo $(SELF_DIR)/synapse-runtime/*.c)
 
 # GCC optimizes a checksum check in rte_ip.h into a CMOV, which is a very poor choice
 # that causes 99th percentile latency to go through the roof;

@@ -16,6 +16,14 @@
 #include "nf-util.h"
 #include "nf.h"
 
+#ifndef SYNAPSE_RUNTIME
+#  define SYNAPSE_RUNTIME
+#endif
+
+#ifdef SYNAPSE_RUNTIME
+#  include "synapse-runtime/util.h"
+#endif // SYNAPSE_RUNTIME
+
 #ifdef KLEE_VERIFICATION
 #  include "libvig/models/hardware.h"
 #  include "libvig/models/verified/vigor-time-control.h"
@@ -36,33 +44,34 @@
 
 // More elaborate loop shape with annotations for verification
 #ifdef KLEE_VERIFICATION
-#  define VIGOR_LOOP_BEGIN                                                        \
-    unsigned _vigor_lcore_id = 0; /* no multicore support for now */              \
-    vigor_time_t _vigor_start_time = start_time();                                \
-    int _vigor_loop_termination = klee_int("loop_termination");                   \
-    unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();                           \
-    while (klee_induce_invariants() & _vigor_loop_termination) {                  \
-      nf_loop_iteration_border(_vigor_lcore_id, _vigor_start_time);               \
-      vigor_time_t VIGOR_NOW = current_time();                                    \
-      /* concretize the device to avoid leaking symbols into DPDK */              \
-      uint16_t VIGOR_DEVICE = klee_range(0, VIGOR_DEVICES_COUNT, "VIGOR_DEVICE"); \
-      concretize_devices(&VIGOR_DEVICE, VIGOR_DEVICES_COUNT);                     \
+#  define VIGOR_LOOP_BEGIN                                                     \
+    unsigned _vigor_lcore_id = 0; /* no multicore support for now */           \
+    vigor_time_t _vigor_start_time = start_time();                             \
+    int _vigor_loop_termination = klee_int("loop_termination");                \
+    unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();                  \
+    while (klee_induce_invariants() & _vigor_loop_termination) {               \
+      nf_loop_iteration_border(_vigor_lcore_id, _vigor_start_time);            \
+      vigor_time_t VIGOR_NOW = current_time();                                 \
+      /* concretize the device to avoid leaking symbols into DPDK */           \
+      uint16_t VIGOR_DEVICE =                                                  \
+          klee_range(0, VIGOR_DEVICES_COUNT, "VIGOR_DEVICE");                  \
+      concretize_devices(&VIGOR_DEVICE, VIGOR_DEVICES_COUNT);                  \
       stub_hardware_receive_packet(VIGOR_DEVICE);
-#  define VIGOR_LOOP_END                                                          \
-      stub_hardware_reset_receive(VIGOR_DEVICE);                                  \
-      nf_loop_iteration_border(_vigor_lcore_id, VIGOR_NOW);                       \
+#  define VIGOR_LOOP_END                                                       \
+    stub_hardware_reset_receive(VIGOR_DEVICE);                                 \
+    nf_loop_iteration_border(_vigor_lcore_id, VIGOR_NOW);                      \
     }
 #else // KLEE_VERIFICATION
-#  define VIGOR_LOOP_BEGIN                                                                   \
-    while (1) {                                                                              \
-      vigor_time_t VIGOR_NOW = current_time();                                               \
-      unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();                                    \
-      for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT; VIGOR_DEVICE++) {
-#  define VIGOR_LOOP_END                                                                     \
-      }                                                                                      \
+#  define VIGOR_LOOP_BEGIN                                                     \
+    while (1) {                                                                \
+      vigor_time_t VIGOR_NOW = current_time();                                 \
+      unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();                \
+      for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT;      \
+           VIGOR_DEVICE++) {
+#  define VIGOR_LOOP_END                                                       \
+    }                                                                          \
     }
 #endif // KLEE_VERIFICATION
-
 
 #if VIGOR_BATCH_SIZE == 1
 // Queue sizes for receiving/transmitting packets
@@ -81,7 +90,7 @@ static const uint16_t TX_QUEUE_SIZE = 128;
 static const unsigned MEMPOOL_BUFFER_COUNT = 256;
 
 // Send the given packet to all devices except the packet's own
-void flood(struct rte_mbuf* packet, uint16_t nb_devices) {
+void flood(struct rte_mbuf *packet, uint16_t nb_devices) {
   rte_mbuf_refcnt_set(packet, nb_devices - 1);
   int total_sent = 0;
   uint16_t skip_device = packet->port;
@@ -90,7 +99,8 @@ void flood(struct rte_mbuf* packet, uint16_t nb_devices) {
       total_sent += rte_eth_tx_burst(device, 0, &packet, 1);
     }
   }
-  // should not happen, but in case we couldn't transmit, ensure the packet is freed
+  // should not happen, but in case we couldn't transmit, ensure the packet is
+  // freed
   if (total_sent != nb_devices - 1) {
     rte_mbuf_refcnt_set(packet, 1);
     rte_pktmbuf_free(packet);
@@ -98,12 +108,12 @@ void flood(struct rte_mbuf* packet, uint16_t nb_devices) {
 }
 
 // Initializes the given device using the given memory pool
-static int nf_init_device(uint16_t device, struct rte_mempool* mbuf_pool) {
+static int nf_init_device(uint16_t device, struct rte_mempool *mbuf_pool) {
   int retval;
 
   // device_conf passed to rte_eth_dev_configure cannot be NULL
-  struct rte_eth_conf device_conf = {0};
-  //device_conf.rxmode.hw_strip_crc = 1;
+  struct rte_eth_conf device_conf = { 0 };
+  // device_conf.rxmode.hw_strip_crc = 1;
 
   // Configure the device (1, 1 == number of RX/TX queues)
   retval = rte_eth_dev_configure(device, 1, 1, &device_conf);
@@ -119,9 +129,8 @@ static int nf_init_device(uint16_t device, struct rte_mempool* mbuf_pool) {
   }
 
   // Allocate and set up RX queues (NULL == default config)
-  retval = rte_eth_rx_queue_setup(device, 0, RX_QUEUE_SIZE,
-                                  rte_eth_dev_socket_id(device),
-                                  NULL, mbuf_pool);
+  retval = rte_eth_rx_queue_setup(
+      device, 0, RX_QUEUE_SIZE, rte_eth_dev_socket_id(device), NULL, mbuf_pool);
   if (retval != 0) {
     return retval;
   }
@@ -141,6 +150,77 @@ static int nf_init_device(uint16_t device, struct rte_mempool* mbuf_pool) {
   return 0;
 }
 
+#ifdef SYNAPSE_RUNTIME
+bool synapse_runtime_handle_pre_configure(env_ptr_t env) {
+  NF_INFO("Preconfiguring the switch...");
+  return nf_init() && install_multicast_group(env) && populate_tables(env);
+}
+
+bool synapse_runtime_handle_packet_received(env_ptr_t env) {
+  NOT_NULL(env);
+
+  stack_ptr_t stack = synapse_runtime_environment_stack(env);
+  NOT_NULL(stack);
+
+  assert(3 == synapse_runtime_wrappers_stack_size(stack));
+
+  string_ptr_t packet_payload = synapse_runtime_wrappers_stack_pop(stack);
+  NOT_NULL(packet_payload);
+
+  // Get the ingress port (aka. device) from the packet metadata
+  uint16_t src_device = get_packet_in_src_device(env);
+  uint8_t *buffer = (uint8_t *)packet_payload->value;
+  uint16_t packet_length = packet_payload->size;
+  vigor_time_t now = current_time();
+
+  // Read the destination address
+  string_ptr_t dst_mac_address =
+      synapse_runtime_wrappers_decode_mac_address(buffer)->address;
+  // Read the source address
+  string_ptr_t src_mac_address =
+      synapse_runtime_wrappers_decode_mac_address(buffer + 6)->address;
+
+  NF_INFO("");
+  NF_INFO("Ethernet header summary (SyNAPSE):");
+  NF_INFO("Destination:\t%.*s", (int)dst_mac_address->size,
+          dst_mac_address->value);
+  NF_INFO("Source:\t\t%.*s", (int)src_mac_address->size,
+          src_mac_address->value);
+  NF_INFO("");
+
+  // g_env = env;
+  int dst_device = nf_process(src_device - 1, buffer, packet_length, now);
+  // g_env = NULL;
+
+  if (FLOOD_FRAME == dst_device) {
+    push_packet_out_metadata(env, src_device, SYNAPSE_BROADCAST_PORT);
+
+  } else {
+    push_packet_out_metadata(env, src_device, dst_device + 1);
+  }
+
+  synapse_runtime_wrappers_stack_push(stack, packet_payload);
+  return true;
+}
+
+bool synapse_runtime_handle_idle_timeout_notification_received(env_ptr_t env) {
+  NF_INFO("Received an idle timeout notification...");
+  return true;
+}
+
+// Main worker method using the SyNAPSE Runtime
+static void worker_main(void) {
+  NF_DEBUG("Running SyNAPSE Runtime...");
+
+  conn_ptr_t conn = synapse_runtime_connector_new(SYNAPSE_GRPC_ADDR);
+  if (synapse_runtime_connector_configure(conn, SYNAPSE_JSON_PATH,
+                                          SYNAPSE_P4INFO_PATH)) {
+    synapse_runtime_connector_start_and_wait(conn);
+  }
+
+  synapse_runtime_connector_destroy(conn);
+}
+#else // !SYNAPSE_RUNTIME
 // Main worker method (for now used on a single thread...)
 static void worker_main(void) {
   if (!nf_init()) {
@@ -149,13 +229,14 @@ static void worker_main(void) {
 
   NF_INFO("Core %u forwarding packets.", rte_lcore_id());
 
-#if VIGOR_BATCH_SIZE == 1
+#  if VIGOR_BATCH_SIZE == 1
   VIGOR_LOOP_BEGIN
-    struct rte_mbuf* mbuf;
+    struct rte_mbuf *mbuf;
     if (rte_eth_rx_burst(VIGOR_DEVICE, 0, &mbuf, 1) != 0) {
-      uint8_t* data = rte_pktmbuf_mtod(mbuf, uint8_t*);
+      uint8_t *data = rte_pktmbuf_mtod(mbuf, uint8_t *);
       packet_state_total_length(data, &(mbuf->pkt_len));
-      uint16_t dst_device = nf_process(mbuf->port, data, mbuf->pkt_len, VIGOR_NOW);
+      uint16_t dst_device =
+          nf_process(mbuf->port, data, mbuf->pkt_len, VIGOR_NOW);
       nf_return_all_chunks(data);
 
       if (dst_device == VIGOR_DEVICE) {
@@ -166,60 +247,68 @@ static void worker_main(void) {
         // ensure we don't leak symbols into DPDK
         concretize_devices(&dst_device, rte_eth_dev_count_avail());
         if (rte_eth_tx_burst(dst_device, 0, &mbuf, 1) != 1) {
-#ifdef VIGOR_ALLOW_DROPS
+#    ifdef VIGOR_ALLOW_DROPS
           rte_pktmbuf_free(mbuf); // OK, we're debugging
-#else
-          printf("We assume the hardware will allways accept a packet to transmit.\n");
+#    else
+          printf("We assume the hardware will allways accept a packet to "
+                 "transmit.\n");
           abort();
-#endif
+#    endif
         }
       }
     }
   VIGOR_LOOP_END
 
-#else // if VIGOR_BATCH_SIZE != 1
+#  else // if VIGOR_BATCH_SIZE != 1
 
   if (rte_eth_dev_count_avail() != 2) {
-    printf("We assume there will be exactly 2 devices for our simple batching implementation.");
+    printf("We assume there will be exactly 2 devices for our simple batching "
+           "implementation.");
     exit(1);
   }
   NF_INFO("Running with batches, this code is unverified!");
 
-  while(1) {
+  while (1) {
     unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();
-    for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT; VIGOR_DEVICE++) {
-      struct rte_mbuf* mbufs[VIGOR_BATCH_SIZE];
-      uint16_t rx_count = rte_eth_rx_burst(VIGOR_DEVICE, 0, mbufs, VIGOR_BATCH_SIZE);
+    for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT;
+         VIGOR_DEVICE++) {
+      struct rte_mbuf *mbufs[VIGOR_BATCH_SIZE];
+      uint16_t rx_count =
+          rte_eth_rx_burst(VIGOR_DEVICE, 0, mbufs, VIGOR_BATCH_SIZE);
 
       struct rte_mbuf *mbufs_to_send[VIGOR_BATCH_SIZE];
       uint16_t tx_count = 0;
       for (uint16_t n = 0; n < rx_count; n++) {
-        uint8_t* data = rte_pktmbuf_mtod(mbufs[n], uint8_t*);
+        uint8_t *data = rte_pktmbuf_mtod(mbufs[n], uint8_t *);
         packet_state_total_length(data, &(mbufs[n]->pkt_len));
         vigor_time_t VIGOR_NOW = current_time();
-        uint16_t dst_device = nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
+        uint16_t dst_device =
+            nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
         nf_return_all_chunks(data);
 
         if (dst_device == VIGOR_DEVICE) {
           rte_pktmbuf_free(mbufs[n]);
-        } else { // includes flood when 2 devices, which is equivalent to just a send
+        } else { // includes flood when 2 devices, which is equivalent to just a
+                 // send
           mbufs_to_send[tx_count] = mbufs[n];
           tx_count++;
-       }
-     }
+        }
+      }
 
-      uint16_t sent_count = rte_eth_tx_burst(1 - VIGOR_DEVICE, 0, mbufs_to_send, tx_count);
+      uint16_t sent_count =
+          rte_eth_tx_burst(1 - VIGOR_DEVICE, 0, mbufs_to_send, tx_count);
       for (uint16_t n = sent_count; n < tx_count; n++) {
-        rte_pktmbuf_free(mbufs[n]); // should not happen, but we're in the unverified case anyway
+        rte_pktmbuf_free(mbufs[n]); // should not happen, but we're in the
+                                    // unverified case anyway
       }
     }
   }
-#endif
+#  endif
 }
-
+#endif
 
 // Entry point
-int MAIN(int argc, char** argv) {
+int MAIN(int argc, char **argv) {
   // Initialize the DPDK Environment Abstraction Layer (EAL)
   int ret = rte_eal_init(argc, argv);
   if (ret < 0) {
@@ -235,7 +324,7 @@ int MAIN(int argc, char** argv) {
   // Create a memory pool
   unsigned nb_devices = rte_eth_dev_count_avail();
   struct rte_mempool *mbuf_pool = rte_pktmbuf_pool_create(
-      "MEMPOOL", // name
+      "MEMPOOL",                         // name
       MEMPOOL_BUFFER_COUNT * nb_devices, // #elements
       0, // cache size (per-core, not useful in a single-threaded app)
       0, // application private area size
