@@ -12,19 +12,19 @@
 #define SYNAPSE_HOSTS 2
 
 string_ptr_t get_packet_in_metadata_by_name(env_ptr_t env, string_t meta_name) {
-  NOT_NULL(env);
+  SYNAPSE_NOT_NULL(env);
 
   helper_ptr_t helper = synapse_runtime_environment_helper(env);
-  NOT_NULL(helper);
+  SYNAPSE_NOT_NULL(helper);
 
   stack_ptr_t stack = synapse_runtime_environment_stack(env);
-  NOT_NULL(helper);
+  SYNAPSE_NOT_NULL(helper);
 
   assert(2 == synapse_runtime_wrappers_stack_size(stack));
   size_t *meta_size = synapse_runtime_wrappers_stack_pop(stack);
-  NOT_NULL(meta_size);
+  SYNAPSE_NOT_NULL(meta_size);
   pair_ptr_t *meta = synapse_runtime_wrappers_stack_top(stack);
-  NOT_NULL(meta);
+  SYNAPSE_NOT_NULL(meta);
 
   synapse_runtime_wrappers_stack_push(stack, meta_size); // Preserve stack
   static string_t packet_in_str = { .value = "packet_in", .size = 9 };
@@ -32,12 +32,12 @@ string_ptr_t get_packet_in_metadata_by_name(env_ptr_t env, string_t meta_name) {
   p4_packet_metadata_ptr_t packet_in_meta =
       synapse_runtime_p4_info_controller_packet_metadata_new(helper,
                                                              &packet_in_str);
-  NOT_NULL(packet_in_meta);
+  SYNAPSE_NOT_NULL(packet_in_meta);
 
   p4_info_controller_packet_metadata_metadata_ptr_t packet_in_meta_by_name =
       synapse_runtime_p4_info_controller_packet_metadata_metadata_by_name_new(
           helper, packet_in_meta, &meta_name);
-  NOT_NULL(packet_in_meta_by_name);
+  SYNAPSE_NOT_NULL(packet_in_meta_by_name);
 
   uint32_t meta_id =
       synapse_runtime_p4_info_controller_packet_metadata_metadata_id(
@@ -53,16 +53,16 @@ string_ptr_t get_packet_in_metadata_by_name(env_ptr_t env, string_t meta_name) {
 }
 
 uint16_t get_packet_in_src_device(env_ptr_t env) {
-  NOT_NULL(env);
+  SYNAPSE_NOT_NULL(env);
 
   static string_t src_device_str = { .value = "src_device", .size = 10 };
 
   string_ptr_t device_meta =
       get_packet_in_metadata_by_name(env, src_device_str);
-  NOT_NULL(device_meta);
+  SYNAPSE_NOT_NULL(device_meta);
 
   port_ptr_t src_port = synapse_runtime_wrappers_decode_port(device_meta);
-  NOT_NULL(src_port);
+  SYNAPSE_NOT_NULL(src_port);
 
   return src_port->port;
 }
@@ -70,41 +70,41 @@ uint16_t get_packet_in_src_device(env_ptr_t env) {
 void append_packet_out_metadata(env_ptr_t env, pair_ptr_t *meta,
                                 size_t *meta_size, string_t meta_name,
                                 string_ptr_t meta_value) {
-  NOT_NULL(env);
-  NOT_NULL(meta);
-  NOT_NULL(meta_size);
+  SYNAPSE_NOT_NULL(env);
+  SYNAPSE_NOT_NULL(meta);
+  SYNAPSE_NOT_NULL(meta_size);
 
   helper_ptr_t helper = synapse_runtime_environment_helper(env);
-  NOT_NULL(helper);
+  SYNAPSE_NOT_NULL(helper);
 
   static string_t packet_out_str = { .value = "packet_out", .size = 10 };
 
   p4_packet_metadata_ptr_t packet_out_meta =
       synapse_runtime_p4_info_controller_packet_metadata_new(helper,
                                                              &packet_out_str);
-  NOT_NULL(packet_out_meta);
+  SYNAPSE_NOT_NULL(packet_out_meta);
 
   p4_info_controller_packet_metadata_metadata_ptr_t packet_out_meta_by_name =
       synapse_runtime_p4_info_controller_packet_metadata_metadata_by_name_new(
           helper, packet_out_meta, &meta_name);
-  NOT_NULL(packet_out_meta_by_name);
+  SYNAPSE_NOT_NULL(packet_out_meta_by_name);
 
   uint32_t *meta_id = malloc(sizeof(uint32_t));
   *meta_id = synapse_runtime_p4_info_controller_packet_metadata_metadata_id(
       packet_out_meta_by_name);
-  NOT_NULL(meta_id);
+  SYNAPSE_NOT_NULL(meta_id);
 
   pair_ptr_t meta_pair = synapse_runtime_wrappers_pair_new(meta_id, meta_value);
-  NOT_NULL(meta_pair);
+  SYNAPSE_NOT_NULL(meta_pair);
   meta[(*meta_size)++] = meta_pair;
 }
 
 void push_packet_out_metadata(env_ptr_t env, uint16_t src_device,
                               uint16_t dst_device) {
-  NOT_NULL(env);
+  SYNAPSE_NOT_NULL(env);
 
   stack_ptr_t stack = synapse_runtime_environment_stack(env);
-  NOT_NULL(stack);
+  SYNAPSE_NOT_NULL(stack);
 
   pair_ptr_t *packet_out_meta = malloc(1 * sizeof(pair_ptr_t));
   size_t *packet_out_meta_size = malloc(sizeof(size_t));
@@ -126,14 +126,14 @@ void push_packet_out_metadata(env_ptr_t env, uint16_t src_device,
 }
 
 bool install_multicast_group(env_ptr_t env) {
-  NOT_NULL(env);
+  SYNAPSE_NOT_NULL(env);
 
   helper_ptr_t helper = synapse_runtime_environment_helper(env);
-  NOT_NULL(helper);
+  SYNAPSE_NOT_NULL(helper);
 
   p4_replica_ptr_t *replicas =
       malloc(SYNAPSE_MCAST_GROUP_SIZE * sizeof(p4_replica_ptr_t));
-  NOT_NULL(replicas);
+  SYNAPSE_NOT_NULL(replicas);
 
   for (size_t i = 0; i < SYNAPSE_MCAST_GROUP_SIZE; i++) {
     replicas[i] = synapse_runtime_p4_replica_new(helper, i + 1, i + 1);
@@ -142,21 +142,21 @@ bool install_multicast_group(env_ptr_t env) {
   p4_multicast_group_entry_ptr_t mcast_group_entry =
       synapse_runtime_p4_multicast_group_entry_new(
           helper, SYNAPSE_MCAST_GROUP_ID, replicas, SYNAPSE_MCAST_GROUP_SIZE);
-  NOT_NULL(mcast_group_entry);
+  SYNAPSE_NOT_NULL(mcast_group_entry);
 
   p4_packet_replication_engine_entry_ptr_t pre_entry =
       synapse_runtime_p4_packet_replication_engine_entry_new(helper,
                                                              mcast_group_entry);
-  NOT_NULL(pre_entry);
+  SYNAPSE_NOT_NULL(pre_entry);
 
   p4_entity_ptr_t entity =
       synapse_runtime_p4_entity_packet_replication_engine_entry_new(helper,
                                                                     pre_entry);
-  NOT_NULL(entity);
+  SYNAPSE_NOT_NULL(entity);
 
   p4_update_ptr_t update =
       synapse_runtime_p4_update_new(helper, Update_Type_INSERT, entity);
-  NOT_NULL(update);
+  SYNAPSE_NOT_NULL(update);
 
   return synapse_runtime_update_buffer_buffer(
       synapse_runtime_environment_update_buffer(env), update);
@@ -166,10 +166,10 @@ bool insert_table_entry(env_ptr_t env, string_ptr_t table_name,
                         pair_ptr_t *key_matches, size_t key_matches_size,
                         string_ptr_t action_name, pair_ptr_t *action_params,
                         size_t action_params_size, uint64_t idle_timeout_ns) {
-  NOT_NULL(env);
+  SYNAPSE_NOT_NULL(env);
 
   helper_ptr_t helper = synapse_runtime_environment_helper(env);
-  NOT_NULL(helper);
+  SYNAPSE_NOT_NULL(helper);
 
   // Get the P4 context
   p4_info_table_ptr_t table_info =
@@ -179,15 +179,15 @@ bool insert_table_entry(env_ptr_t env, string_ptr_t table_name,
 
   p4_field_match_ptr_t *matches =
       malloc(key_matches_size * sizeof(p4_field_match_ptr_t));
-  NOT_NULL(matches);
+  SYNAPSE_NOT_NULL(matches);
 
   for (size_t i = 0; i < key_matches_size; i++) {
     pair_ptr_t key_match = key_matches[i];
-    NOT_NULL(key_match);
+    SYNAPSE_NOT_NULL(key_match);
     string_ptr_t byte_name = key_match->left;
-    NOT_NULL(byte_name);
+    SYNAPSE_NOT_NULL(byte_name);
     string_ptr_t byte_val = key_match->right;
-    NOT_NULL(byte_val);
+    SYNAPSE_NOT_NULL(byte_val);
 
     // Retrieve field ID
     uint32_t field_id = synapse_runtime_p4_info_match_field_id(
@@ -201,15 +201,15 @@ bool insert_table_entry(env_ptr_t env, string_ptr_t table_name,
 
   p4_action_param_ptr_t *params =
       malloc(action_params_size * sizeof(p4_action_param_ptr_t));
-  NOT_NULL(params);
+  SYNAPSE_NOT_NULL(params);
 
   for (size_t i = 0; i < action_params_size; i++) {
     pair_ptr_t action_param = action_params[i];
-    NOT_NULL(action_param);
+    SYNAPSE_NOT_NULL(action_param);
     string_ptr_t param = action_param->left;
-    NOT_NULL(param);
+    SYNAPSE_NOT_NULL(param);
     string_ptr_t value = action_param->right;
-    NOT_NULL(value);
+    SYNAPSE_NOT_NULL(value);
 
     // Retrieve field ID
     uint32_t param_id = synapse_runtime_p4_info_action_param_id(
@@ -220,41 +220,41 @@ bool insert_table_entry(env_ptr_t env, string_ptr_t table_name,
 
   p4_info_preamble_ptr_t table_preamble =
       synapse_runtime_p4_info_table_preamble(table_info);
-  NOT_NULL(table_preamble);
+  SYNAPSE_NOT_NULL(table_preamble);
   uint32_t table_preamble_id = synapse_runtime_p4_preamble_id(table_preamble);
 
   p4_info_preamble_ptr_t action_preamble =
       synapse_runtime_p4_info_action_preamble(action_info);
-  NOT_NULL(action_preamble);
+  SYNAPSE_NOT_NULL(action_preamble);
   uint32_t action_preamble_id = synapse_runtime_p4_preamble_id(action_preamble);
 
   p4_action_ptr_t action = synapse_runtime_p4_action_new(
       helper, action_preamble_id, params, action_params_size);
-  NOT_NULL(action);
+  SYNAPSE_NOT_NULL(action);
 
   p4_table_action_ptr_t table_action =
       synapse_runtime_p4_table_action_new(helper, action);
-  NOT_NULL(table_action);
+  SYNAPSE_NOT_NULL(table_action);
 
   p4_table_entry_ptr_t table_entry = synapse_runtime_p4_table_entry_new(
       helper, table_preamble_id, matches, key_matches_size, table_action,
       idle_timeout_ns);
-  NOT_NULL(table_entry);
+  SYNAPSE_NOT_NULL(table_entry);
 
   p4_entity_ptr_t entity =
       synapse_runtime_p4_entity_table_entry_new(helper, table_entry);
-  NOT_NULL(entity);
+  SYNAPSE_NOT_NULL(entity);
 
   p4_update_ptr_t update =
       synapse_runtime_p4_update_new(helper, Update_Type_INSERT, entity);
-  NOT_NULL(update);
+  SYNAPSE_NOT_NULL(update);
 
   return synapse_runtime_update_buffer_buffer(
       synapse_runtime_environment_update_buffer(env), update);
 }
 
 bool populate_tables(env_ptr_t env) {
-  NOT_NULL(env);
+  SYNAPSE_NOT_NULL(env);
 
   static string_t tables_str[] = {
     { .value = "SyNAPSE_Ingress.map_get_35", .size = 26 },

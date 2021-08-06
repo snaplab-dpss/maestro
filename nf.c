@@ -152,20 +152,20 @@ static int nf_init_device(uint16_t device, struct rte_mempool *mbuf_pool) {
 
 #ifdef SYNAPSE_RUNTIME
 bool synapse_runtime_handle_pre_configure(env_ptr_t env) {
-  NF_INFO("Preconfiguring the switch...");
+  printf("Preconfiguring the switch...\n");
   return nf_init() && install_multicast_group(env) && populate_tables(env);
 }
 
 bool synapse_runtime_handle_packet_received(env_ptr_t env) {
-  NOT_NULL(env);
+  SYNAPSE_NOT_NULL(env);
 
   stack_ptr_t stack = synapse_runtime_environment_stack(env);
-  NOT_NULL(stack);
+  SYNAPSE_NOT_NULL(stack);
 
   assert(3 == synapse_runtime_wrappers_stack_size(stack));
 
   string_ptr_t packet_payload = synapse_runtime_wrappers_stack_pop(stack);
-  NOT_NULL(packet_payload);
+  SYNAPSE_NOT_NULL(packet_payload);
 
   // Get the ingress port (aka. device) from the packet metadata
   uint16_t src_device = get_packet_in_src_device(env);
@@ -180,24 +180,15 @@ bool synapse_runtime_handle_packet_received(env_ptr_t env) {
   string_ptr_t src_mac_address =
       synapse_runtime_wrappers_decode_mac_address(buffer + 6)->address;
 
-  NF_INFO("");
-  NF_INFO("Ethernet header summary (SyNAPSE):");
-  NF_INFO("Destination:\t%.*s", (int)dst_mac_address->size,
-          dst_mac_address->value);
-  NF_INFO("Source:\t\t%.*s", (int)src_mac_address->size,
-          src_mac_address->value);
-  NF_INFO("");
-
-  // g_env = env;
-  int dst_device =
-      nf_process(src_device - 1, &buffer, packet_length, now, NULL);
-  // g_env = NULL;
+  g_env = env;
+  int dst_device = nf_process(src_device, &buffer, packet_length, now, NULL);
+  g_env = NULL;
 
   if (FLOOD_FRAME == dst_device) {
     push_packet_out_metadata(env, src_device, SYNAPSE_BROADCAST_PORT);
 
   } else {
-    push_packet_out_metadata(env, src_device, dst_device + 1);
+    push_packet_out_metadata(env, src_device, dst_device);
   }
 
   synapse_runtime_wrappers_stack_push(stack, packet_payload);
@@ -205,13 +196,13 @@ bool synapse_runtime_handle_packet_received(env_ptr_t env) {
 }
 
 bool synapse_runtime_handle_idle_timeout_notification_received(env_ptr_t env) {
-  NF_INFO("Received an idle timeout notification...");
+  printf("Received an idle timeout notification...\n");
   return true;
 }
 
 // Main worker method using the SyNAPSE Runtime
 static void worker_main(void) {
-  NF_DEBUG("Running SyNAPSE Runtime...");
+  printf("Running SyNAPSE Runtime...\n");
 
   conn_ptr_t conn = synapse_runtime_connector_new(SYNAPSE_GRPC_ADDR);
   if (synapse_runtime_connector_configure(conn, SYNAPSE_JSON_PATH,
