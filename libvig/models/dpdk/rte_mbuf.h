@@ -181,4 +181,28 @@ static void rte_mbuf_refcnt_set(struct rte_mbuf *m, uint16_t new_value) {
   m->refcnt = new_value;
 }
 
+static char* rte_pktmbuf_adj(struct rte_mbuf *m, uint16_t len) {
+  if (len > m->data_len) {
+    return NULL; 
+  }
+
+  m->data_len = (uint16_t)(m->data_len - len);
+  m->data_off = (uint16_t)(m->data_off + len);
+  m->pkt_len  = (m->pkt_len - len);
+
+  return (char *)m->buf_addr + m->data_off;
+}
+
+static char* rte_pktmbuf_prepend(struct rte_mbuf* m, uint16_t len) {
+  if (len > m->data_off) {
+    return NULL;
+  }
+ 
+  m->data_off = (uint16_t)(m->data_off - len);
+  m->data_len = (uint16_t)(m->data_len + len);
+  m->pkt_len  = (m->pkt_len + len);
+
+  return (char *)m->buf_addr + m->data_off;
+}
+
 #endif

@@ -189,7 +189,8 @@ bool synapse_runtime_handle_packet_received(env_ptr_t env) {
   NF_INFO("");
 
   // g_env = env;
-  int dst_device = nf_process(src_device - 1, buffer, packet_length, now);
+  int dst_device =
+      nf_process(src_device - 1, &buffer, packet_length, now, NULL);
   // g_env = NULL;
 
   if (FLOOD_FRAME == dst_device) {
@@ -235,8 +236,9 @@ static void worker_main(void) {
     if (rte_eth_rx_burst(VIGOR_DEVICE, 0, &mbuf, 1) != 0) {
       uint8_t *data = rte_pktmbuf_mtod(mbuf, uint8_t *);
       packet_state_total_length(data, &(mbuf->pkt_len));
+
       uint16_t dst_device =
-          nf_process(mbuf->port, data, mbuf->pkt_len, VIGOR_NOW);
+          nf_process(mbuf->port, &data, mbuf->pkt_len, VIGOR_NOW, mbuf);
       nf_return_all_chunks(data);
 
       if (dst_device == VIGOR_DEVICE) {
@@ -282,8 +284,8 @@ static void worker_main(void) {
         uint8_t *data = rte_pktmbuf_mtod(mbufs[n], uint8_t *);
         packet_state_total_length(data, &(mbufs[n]->pkt_len));
         vigor_time_t VIGOR_NOW = current_time();
-        uint16_t dst_device =
-            nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
+        uint16_t dst_device = nf_process(mbufs[n]->port, &data,
+                                         mbufs[n]->pkt_len, VIGOR_NOW, mbuf);
         nf_return_all_chunks(data);
 
         if (dst_device == VIGOR_DEVICE) {
@@ -305,7 +307,7 @@ static void worker_main(void) {
   }
 #  endif
 }
-#endif
+#endif // SYNAPSE_RUNTIME
 
 // Entry point
 int MAIN(int argc, char **argv) {
