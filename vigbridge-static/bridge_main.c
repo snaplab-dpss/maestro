@@ -1,6 +1,6 @@
 #ifdef KLEE_VERIFICATION
 #  include "libvig/models/verified/map-control.h" //for map_reset
-#endif                                            // KLEE_VERIFICATION
+#endif                                                  // KLEE_VERIFICATION
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
@@ -223,24 +223,6 @@ bool nf_init(void) {
 int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
                vigor_time_t now, struct rte_mbuf *mbuf) {
   struct rte_ether_hdr *rte_ether_header = nf_then_get_rte_ether_header(buffer);
-
-  NF_INFO("");
-  NF_INFO("Ethernet header summary (Vigor):");
-  NF_INFO("Destination:\t%02hhX:%02hhX:%02hhX:%02hhX:%02hhX:%02hhX",
-          rte_ether_header->d_addr.addr_bytes[0],
-          rte_ether_header->d_addr.addr_bytes[1],
-          rte_ether_header->d_addr.addr_bytes[2],
-          rte_ether_header->d_addr.addr_bytes[3],
-          rte_ether_header->d_addr.addr_bytes[4],
-          rte_ether_header->d_addr.addr_bytes[5]);
-  NF_INFO("Source:\t\t%02hhX:%02hhX:%02hhX:%02hhX:%02hhX:%02hhX",
-          rte_ether_header->s_addr.addr_bytes[0],
-          rte_ether_header->s_addr.addr_bytes[1],
-          rte_ether_header->s_addr.addr_bytes[2],
-          rte_ether_header->s_addr.addr_bytes[3],
-          rte_ether_header->s_addr.addr_bytes[4],
-          rte_ether_header->s_addr.addr_bytes[5]);
-  NF_INFO("");
 
   int forward_to = bridge_get_device(&rte_ether_header->d_addr, device);
 

@@ -54,15 +54,13 @@ include $(SELF_DIR)/Makefile.click
 else ifeq (nfos-,$(findstring nfos-,$(MAKECMDGOALS)))
 # NFOS-related targets
 include $(SELF_DIR)/Makefile.nfos
-else ifeq (maestro,$(findstring maestro,$(shell pwd)))
-# Maestro NFs
-include $(SELF_DIR)/Makefile.maestro
+else ifeq (synthesized,$(findstring synthesized,$(shell pwd)))
+# synthesized NFs
+include $(SELF_DIR)/Makefile.synthesized
 else ifeq (,$(findstring moonpol,$(abspath $(NF_DIR))))
 # DPDK-based NFs
 include $(SELF_DIR)/Makefile.dpdk
 endif
-
-
 
 # =======
 # Autogen

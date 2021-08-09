@@ -22,11 +22,13 @@ elif not KLEE_DIR:
   print("Missing KLEE_DIR env var. Exiting.")
   exit(1)
 
-MAESTRO_DIR=pathlib.Path(__file__).parent.absolute()
+SYNTHESIZED_DIR=pathlib.Path(__file__).parent.absolute()
 
-BUILD_DIR = f"{MAESTRO_DIR}/build/maestro"
+BUILD_DIR = f"{SYNTHESIZED_DIR}/build/maestro"
+BUILD_SYNTHESIZED_DIR = f"{SYNTHESIZED_DIR}/build/synthesized"
 
 subprocess.call([ "mkdir", "-p", BUILD_DIR ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+subprocess.call([ "mkdir", "-p", BUILD_SYNTHESIZED_DIR ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 CHOICE_SEQUENTIAL     = "seq"
 CHOICE_SHARED_NOTHING = "sn"
@@ -35,16 +37,16 @@ CHOICE_TM             = "tm"
 CHOICE_CPH            = "cph"
 
 BOILERPLATE = {
-  CHOICE_SEQUENTIAL:      f"{MAESTRO_DIR}/boilerplate/sequential.c",
-  CHOICE_CPH:             f"{MAESTRO_DIR}/boilerplate/call_path_hitter.c",
-  CHOICE_SHARED_NOTHING:	f"{MAESTRO_DIR}/boilerplate/shared-nothing.c",
-  CHOICE_LOCKS:           f"{MAESTRO_DIR}/boilerplate/locks.c",
-  CHOICE_TM:              f"{MAESTRO_DIR}/boilerplate/tm.c",
+  CHOICE_SEQUENTIAL:      f"{SYNTHESIZED_DIR}/boilerplate/sequential.c",
+  CHOICE_CPH:             f"{SYNTHESIZED_DIR}/boilerplate/call_path_hitter.c",
+  CHOICE_SHARED_NOTHING:	f"{SYNTHESIZED_DIR}/boilerplate/shared-nothing.c",
+  CHOICE_LOCKS:           f"{SYNTHESIZED_DIR}/boilerplate/locks.c",
+  CHOICE_TM:              f"{SYNTHESIZED_DIR}/boilerplate/tm.c",
 }
 
-SYNTHESIZED       = f"{BUILD_DIR}/nf_process.gen.c"
-SYNTHESIZED_XML   = f"{BUILD_DIR}/nf_process.gen.xml"
-FINAL_CODE        = f"{BUILD_DIR}/nf.c"
+SYNTHESIZED       = f"{BUILD_SYNTHESIZED_DIR}/nf_process.gen.c"
+SYNTHESIZED_XML   = f"{BUILD_SYNTHESIZED_DIR}/nf_process.gen.xml"
+FINAL_CODE        = f"{BUILD_SYNTHESIZED_DIR}/nf.c"
 LVA               = f"{BUILD_DIR}/report.lva"
 LVA_DEBUG         = f"{BUILD_DIR}/report.txt"
 RSS_CONF          = f"{BUILD_DIR}/rss_conf.txt"
@@ -244,7 +246,7 @@ def bundle_everything(nf):
 
   MAKEFILE += f"\ninclude {os.path.abspath(nf)}/Makefile\n"
 
-  makefile = open(f"{MAESTRO_DIR}/Makefile.nf", mode='w')
+  makefile = open(f"{SYNTHESIZED_DIR}/Makefile.nf", mode='w')
   makefile.write(MAKEFILE)
   makefile.close()
 

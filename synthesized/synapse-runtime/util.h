@@ -13,7 +13,7 @@
 #define SYNAPSE_CPU_PORT (uint16_t)509
 
 #define SYNAPSE_GRPC_ADDR "10.0.2.5:50051"
-#define SYNAPSE_ARGS_PATH "/home/user/vigor/synapse-runtime/controller"
+#define SYNAPSE_ARGS_PATH "/home/fcp/Documents/vigor/synapse-runtime/controller"
 #define SYNAPSE_P4INFO_PATH SYNAPSE_ARGS_PATH "/program.p4info.txt"
 #define SYNAPSE_JSON_PATH SYNAPSE_ARGS_PATH "/program.json"
 
