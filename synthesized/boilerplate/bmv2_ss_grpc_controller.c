@@ -821,10 +821,6 @@ int MAIN(int argc, char **argv) {
   argc -= ret;
   argv += ret;
 
-  // NF-specific config
-  nf_config_init(argc, argv);
-  nf_config_print();
-
   // Run!
   worker_main();
 
