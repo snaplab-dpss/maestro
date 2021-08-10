@@ -59,353 +59,8 @@ uint32_t packet_get_unread_length(void *p) {
  *
  **********************************************/
 
-#include "synapse/runtime/p4runtime/stream/handler/custom.hpp"
-#include "synapse/runtime/wrapper/p4runtime/stream/handler/environment.hpp"
+#include "synapse-runtime/util.h"
 #include "synapse/runtime/wrapper/connector.hpp"
-
-#define SYNAPSE_NOT_NULL(exp) assert(NULL != (exp))
-
-#define SYNAPSE_BROADCAST_PORT (uint16_t)511
-#define SYNAPSE_DROP_PORT (uint16_t)510
-#define SYNAPSE_CPU_PORT (uint16_t)509
-
-#define SYNAPSE_GRPC_ADDR "10.0.2.5:50051"
-#define SYNAPSE_ARGS_PATH "/home/fcp/Documents/vigor/synapse-runtime/controller"
-#define SYNAPSE_P4INFO_PATH SYNAPSE_ARGS_PATH "/program.p4info.txt"
-#define SYNAPSE_JSON_PATH SYNAPSE_ARGS_PATH "/program.json"
-
-env_ptr_t g_env;
-
-// Constants
-#define SYNAPSE_MCAST_GROUP_ID 1
-#define SYNAPSE_MCAST_GROUP_SIZE 2
-
-#define SYNAPSE_TABLES 2
-#define SYNAPSE_HOSTS 2
-
-string_ptr_t get_packet_in_metadata_by_name(env_ptr_t env, string_t meta_name) {
-  SYNAPSE_NOT_NULL(env);
-
-  helper_ptr_t helper = synapse_runtime_environment_helper(env);
-  SYNAPSE_NOT_NULL(helper);
-
-  stack_ptr_t stack = synapse_runtime_environment_stack(env);
-  SYNAPSE_NOT_NULL(helper);
-
-  assert(2 == synapse_runtime_wrappers_stack_size(stack));
-  size_t *meta_size = synapse_runtime_wrappers_stack_pop(stack);
-  SYNAPSE_NOT_NULL(meta_size);
-  pair_ptr_t *meta = synapse_runtime_wrappers_stack_top(stack);
-  SYNAPSE_NOT_NULL(meta);
-
-  synapse_runtime_wrappers_stack_push(stack, meta_size); // Preserve stack
-  static string_t packet_in_str = { .value = "packet_in", .size = 9 };
-
-  p4_packet_metadata_ptr_t packet_in_meta =
-      synapse_runtime_p4_info_controller_packet_metadata_new(helper,
-                                                             &packet_in_str);
-  SYNAPSE_NOT_NULL(packet_in_meta);
-
-  p4_info_controller_packet_metadata_metadata_ptr_t packet_in_meta_by_name =
-      synapse_runtime_p4_info_controller_packet_metadata_metadata_by_name_new(
-          helper, packet_in_meta, &meta_name);
-  SYNAPSE_NOT_NULL(packet_in_meta_by_name);
-
-  uint32_t meta_id =
-      synapse_runtime_p4_info_controller_packet_metadata_metadata_id(
-          packet_in_meta_by_name);
-
-  for (size_t i = 0; i < *meta_size; i++) {
-    if (meta_id == *((uint32_t *)meta[i]->left)) {
-      return meta[i]->right;
-    }
-  }
-
-  return NULL;
-}
-
-uint16_t get_packet_in_src_device(env_ptr_t env) {
-  SYNAPSE_NOT_NULL(env);
-
-  static string_t src_device_str = { .value = "src_device", .size = 10 };
-
-  string_ptr_t device_meta =
-      get_packet_in_metadata_by_name(env, src_device_str);
-  SYNAPSE_NOT_NULL(device_meta);
-
-  port_ptr_t src_port = synapse_runtime_wrappers_decode_port(device_meta);
-  SYNAPSE_NOT_NULL(src_port);
-
-  return src_port->port;
-}
-
-void append_packet_out_metadata(env_ptr_t env, pair_ptr_t *meta,
-                                size_t *meta_size, string_t meta_name,
-                                string_ptr_t meta_value) {
-  SYNAPSE_NOT_NULL(env);
-  SYNAPSE_NOT_NULL(meta);
-  SYNAPSE_NOT_NULL(meta_size);
-
-  helper_ptr_t helper = synapse_runtime_environment_helper(env);
-  SYNAPSE_NOT_NULL(helper);
-
-  static string_t packet_out_str = { .value = "packet_out", .size = 10 };
-
-  p4_packet_metadata_ptr_t packet_out_meta =
-      synapse_runtime_p4_info_controller_packet_metadata_new(helper,
-                                                             &packet_out_str);
-  SYNAPSE_NOT_NULL(packet_out_meta);
-
-  p4_info_controller_packet_metadata_metadata_ptr_t packet_out_meta_by_name =
-      synapse_runtime_p4_info_controller_packet_metadata_metadata_by_name_new(
-          helper, packet_out_meta, &meta_name);
-  SYNAPSE_NOT_NULL(packet_out_meta_by_name);
-
-  uint32_t *meta_id = malloc(sizeof(uint32_t));
-  *meta_id = synapse_runtime_p4_info_controller_packet_metadata_metadata_id(
-      packet_out_meta_by_name);
-  SYNAPSE_NOT_NULL(meta_id);
-
-  pair_ptr_t meta_pair = synapse_runtime_wrappers_pair_new(meta_id, meta_value);
-  SYNAPSE_NOT_NULL(meta_pair);
-  meta[(*meta_size)++] = meta_pair;
-}
-
-void push_packet_out_metadata(env_ptr_t env, uint16_t src_device,
-                              uint16_t dst_device) {
-  SYNAPSE_NOT_NULL(env);
-
-  stack_ptr_t stack = synapse_runtime_environment_stack(env);
-  SYNAPSE_NOT_NULL(stack);
-
-  pair_ptr_t *packet_out_meta = malloc(1 * sizeof(pair_ptr_t));
-  size_t *packet_out_meta_size = malloc(sizeof(size_t));
-  *packet_out_meta_size = 0;
-
-  static string_t src_device_str = { .value = "src_device", .size = 10 };
-  port_ptr_t src_port = synapse_runtime_wrappers_port_new(src_device);
-  append_packet_out_metadata(env, packet_out_meta, packet_out_meta_size,
-                             src_device_str, src_port->raw);
-
-  static string_t dst_device_str = { .value = "dst_device", .size = 10 };
-  port_ptr_t dst_port = synapse_runtime_wrappers_port_new(dst_device);
-  append_packet_out_metadata(env, packet_out_meta, packet_out_meta_size,
-                             dst_device_str, dst_port->raw);
-
-  synapse_runtime_wrappers_stack_clear(stack);
-  synapse_runtime_wrappers_stack_push(stack, packet_out_meta);
-  synapse_runtime_wrappers_stack_push(stack, packet_out_meta_size);
-}
-
-bool install_multicast_group(env_ptr_t env) {
-  SYNAPSE_NOT_NULL(env);
-
-  helper_ptr_t helper = synapse_runtime_environment_helper(env);
-  SYNAPSE_NOT_NULL(helper);
-
-  p4_replica_ptr_t *replicas =
-      malloc(SYNAPSE_MCAST_GROUP_SIZE * sizeof(p4_replica_ptr_t));
-  SYNAPSE_NOT_NULL(replicas);
-
-  for (size_t i = 0; i < SYNAPSE_MCAST_GROUP_SIZE; i++) {
-    replicas[i] = synapse_runtime_p4_replica_new(helper, i + 1, i + 1);
-  }
-
-  p4_multicast_group_entry_ptr_t mcast_group_entry =
-      synapse_runtime_p4_multicast_group_entry_new(
-          helper, SYNAPSE_MCAST_GROUP_ID, replicas, SYNAPSE_MCAST_GROUP_SIZE);
-  SYNAPSE_NOT_NULL(mcast_group_entry);
-
-  p4_packet_replication_engine_entry_ptr_t pre_entry =
-      synapse_runtime_p4_packet_replication_engine_entry_new(helper,
-                                                             mcast_group_entry);
-  SYNAPSE_NOT_NULL(pre_entry);
-
-  p4_entity_ptr_t entity =
-      synapse_runtime_p4_entity_packet_replication_engine_entry_new(helper,
-                                                                    pre_entry);
-  SYNAPSE_NOT_NULL(entity);
-
-  p4_update_ptr_t update =
-      synapse_runtime_p4_update_new(helper, Update_Type_INSERT, entity);
-  SYNAPSE_NOT_NULL(update);
-
-  return synapse_runtime_update_buffer_buffer(
-      synapse_runtime_environment_update_buffer(env), update);
-}
-
-bool insert_table_entry(env_ptr_t env, string_ptr_t table_name,
-                        pair_ptr_t *key_matches, size_t key_matches_size,
-                        string_ptr_t action_name, pair_ptr_t *action_params,
-                        size_t action_params_size, uint64_t idle_timeout_ns) {
-  SYNAPSE_NOT_NULL(env);
-
-  helper_ptr_t helper = synapse_runtime_environment_helper(env);
-  SYNAPSE_NOT_NULL(helper);
-
-  // Get the P4 context
-  p4_info_table_ptr_t table_info =
-      synapse_runtime_p4_info_table_new(helper, table_name);
-  p4_info_action_ptr_t action_info =
-      synapse_runtime_p4_info_action_new(helper, action_name);
-
-  p4_field_match_ptr_t *matches =
-      malloc(key_matches_size * sizeof(p4_field_match_ptr_t));
-  SYNAPSE_NOT_NULL(matches);
-
-  for (size_t i = 0; i < key_matches_size; i++) {
-    pair_ptr_t key_match = key_matches[i];
-    SYNAPSE_NOT_NULL(key_match);
-    string_ptr_t byte_name = key_match->left;
-    SYNAPSE_NOT_NULL(byte_name);
-    string_ptr_t byte_val = key_match->right;
-    SYNAPSE_NOT_NULL(byte_val);
-
-    // Retrieve field ID
-    uint32_t field_id = synapse_runtime_p4_info_match_field_id(
-        synapse_runtime_p4_info_match_field_new(helper, table_info, byte_name));
-
-    // Append to the key matches
-    matches[i] = synapse_runtime_p4_field_match_new(
-        helper, field_id,
-        synapse_runtime_p4_field_match_exact_new(helper, byte_val));
-  }
-
-  p4_action_param_ptr_t *params =
-      malloc(action_params_size * sizeof(p4_action_param_ptr_t));
-  SYNAPSE_NOT_NULL(params);
-
-  for (size_t i = 0; i < action_params_size; i++) {
-    pair_ptr_t action_param = action_params[i];
-    SYNAPSE_NOT_NULL(action_param);
-    string_ptr_t param = action_param->left;
-    SYNAPSE_NOT_NULL(param);
-    string_ptr_t value = action_param->right;
-    SYNAPSE_NOT_NULL(value);
-
-    // Retrieve field ID
-    uint32_t param_id = synapse_runtime_p4_info_action_param_id(
-        synapse_runtime_p4_info_action_param_new(helper, action_info, param));
-
-    params[i] = synapse_runtime_p4_action_param_new(helper, param_id, value);
-  }
-
-  p4_info_preamble_ptr_t table_preamble =
-      synapse_runtime_p4_info_table_preamble(table_info);
-  SYNAPSE_NOT_NULL(table_preamble);
-  uint32_t table_preamble_id = synapse_runtime_p4_preamble_id(table_preamble);
-
-  p4_info_preamble_ptr_t action_preamble =
-      synapse_runtime_p4_info_action_preamble(action_info);
-  SYNAPSE_NOT_NULL(action_preamble);
-  uint32_t action_preamble_id = synapse_runtime_p4_preamble_id(action_preamble);
-
-  p4_action_ptr_t action = synapse_runtime_p4_action_new(
-      helper, action_preamble_id, params, action_params_size);
-  SYNAPSE_NOT_NULL(action);
-
-  p4_table_action_ptr_t table_action =
-      synapse_runtime_p4_table_action_new(helper, action);
-  SYNAPSE_NOT_NULL(table_action);
-
-  p4_table_entry_ptr_t table_entry = synapse_runtime_p4_table_entry_new(
-      helper, table_preamble_id, matches, key_matches_size, table_action,
-      idle_timeout_ns);
-  SYNAPSE_NOT_NULL(table_entry);
-
-  p4_entity_ptr_t entity =
-      synapse_runtime_p4_entity_table_entry_new(helper, table_entry);
-  SYNAPSE_NOT_NULL(entity);
-
-  p4_update_ptr_t update =
-      synapse_runtime_p4_update_new(helper, Update_Type_INSERT, entity);
-  SYNAPSE_NOT_NULL(update);
-
-  return synapse_runtime_update_buffer_buffer(
-      synapse_runtime_environment_update_buffer(env), update);
-}
-
-bool populate_tables(env_ptr_t env) {
-  SYNAPSE_NOT_NULL(env);
-
-  static string_t tables_str[] = {
-    { .value = "SyNAPSE_Ingress.map_get_35", .size = 26 },
-    { .value = "SyNAPSE_Ingress.map_get_53", .size = 26 }
-  };
-
-  static string_t actions_str[] = {
-    { .value = "SyNAPSE_Ingress.map_get_35_populate", .size = 35 },
-    { .value = "SyNAPSE_Ingress.map_get_53_populate", .size = 35 }
-  };
-
-  static string_t key_byte_strs[] = { { .value = "key_byte_0", .size = 10 },
-                                      { .value = "key_byte_1", .size = 10 },
-                                      { .value = "key_byte_2", .size = 10 },
-                                      { .value = "key_byte_3", .size = 10 },
-                                      { .value = "key_byte_4", .size = 10 },
-                                      { .value = "key_byte_5", .size = 10 },
-                                      { .value = "key_byte_6", .size = 10 },
-                                      { .value = "key_byte_7", .size = 10 } };
-
-  static string_t param_0_str = { .value = "param_0", .size = 7 };
-
-  size_t table_id, host_i_id, host_j_id;
-  char buffer[18];
-
-  // Populate two tables
-  for (table_id = 0; table_id < SYNAPSE_TABLES; table_id++) {
-    for (host_i_id = 1; host_i_id <= SYNAPSE_HOSTS; host_i_id++) {
-      // Generate the MAC address
-      sprintf(buffer, "%s%1d", "00:00:00:00:00:0", (int)host_i_id);
-      mac_addr_ptr_t mac = synapse_runtime_wrappers_mac_address_new(buffer);
-      char *mac_ptr;
-
-      port_ptr_t device = synapse_runtime_wrappers_port_new(host_i_id);
-      char *device_ptr = (char *)device->raw->value;
-
-      pair_ptr_t *action_params = malloc(1 * sizeof(pair_ptr_t));
-      *action_params =
-          synapse_runtime_wrappers_pair_new(&param_0_str, device->raw);
-
-      for (host_j_id = 1; host_j_id <= SYNAPSE_HOSTS; host_j_id++) {
-        if (host_i_id == host_j_id) {
-          continue;
-        }
-
-        // The key is made up of 8 bytes
-        pair_ptr_t *key_matches = malloc(8 * sizeof(pair_ptr_t));
-
-        // Populate the most significant 6 bytes with the MAC address
-        mac_ptr = (char *)mac->raw->value;
-
-        size_t i = 6;
-        while (i--) {
-          key_matches[i] = synapse_runtime_wrappers_pair_new(
-              &key_byte_strs[i],
-              synapse_runtime_wrappers_string_new(mac_ptr++, 1));
-        }
-
-        // Populate the least significant 2 bytes with the device
-        port_ptr_t device_j = synapse_runtime_wrappers_port_new(host_j_id);
-        char *device_j_ptr = (char *)device_j->raw->value;
-
-        i = 8;
-        while (i-- > 6) {
-          key_matches[i] = synapse_runtime_wrappers_pair_new(
-              &key_byte_strs[i],
-              synapse_runtime_wrappers_string_new(device_j_ptr++, 1));
-        }
-
-        if (!insert_table_entry(env, &tables_str[table_id], key_matches, 8,
-                                &actions_str[table_id], action_params, 1, 0)) {
-          return false;
-        }
-      }
-    }
-  }
-
-  return true;
-}
 
 /**********************************************
  *
@@ -435,7 +90,7 @@ static inline void *nf_borrow_next_chunk(void *p, size_t length) {
 }
 
 #define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests, tag)     \
-/*nothing*/
+  /*nothing*/
 
 #define CHUNK_LAYOUT_N(pkt, str_name, fields, nests)                           \
   CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields,                      \
@@ -609,7 +264,7 @@ bool nf_parse_ipv4addr(const char *str, uint32_t *addr) {
  *
  **********************************************/
 
-#define FLOOD_FRAME ((uint16_t) - 1)
+#define FLOOD_FRAME ((uint16_t)-1)
 
 struct nf_config;
 struct rte_mbuf;
@@ -624,52 +279,52 @@ void nf_config_usage(void);
 void nf_config_print(void);
 
 #ifdef KLEE_VERIFICATION
-#include "libvig/models/hardware.h"
-#include "libvig/models/verified/vigor-time-control.h"
-#include <klee/klee.h>
+#  include "libvig/models/hardware.h"
+#  include "libvig/models/verified/vigor-time-control.h"
+#  include <klee/klee.h>
 #endif // KLEE_VERIFICATION
 
 // NFOS declares its own main method
 #ifdef NFOS
-#define MAIN nf_main
+#  define MAIN nf_main
 #else // NFOS
-#define MAIN main
+#  define MAIN main
 #endif // NFOS
 
 // Unverified support for batching, useful for performance comparisons
 #ifndef VIGOR_BATCH_SIZE
-#define VIGOR_BATCH_SIZE 1
+#  define VIGOR_BATCH_SIZE 1
 #endif
 
 // More elaborate loop shape with annotations for verification
 #ifdef KLEE_VERIFICATION
-#define VIGOR_LOOP_BEGIN                                                       \
-  unsigned _vigor_lcore_id = 0; /* no multicore support for now */             \
-  vigor_time_t _vigor_start_time = start_time();                               \
-  int _vigor_loop_termination = klee_int("loop_termination");                  \
-  unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();                    \
-  while (klee_induce_invariants() & _vigor_loop_termination) {                 \
-    nf_loop_iteration_border(_vigor_lcore_id, _vigor_start_time);              \
-    vigor_time_t VIGOR_NOW = current_time();                                   \
-    /* concretize the device to avoid leaking symbols into DPDK */             \
-    uint16_t VIGOR_DEVICE =                                                    \
-        klee_range(0, VIGOR_DEVICES_COUNT, "VIGOR_DEVICE");                    \
-    concretize_devices(&VIGOR_DEVICE, VIGOR_DEVICES_COUNT);                    \
-    stub_hardware_receive_packet(VIGOR_DEVICE);
-#define VIGOR_LOOP_END                                                         \
-  stub_hardware_reset_receive(VIGOR_DEVICE);                                   \
-  nf_loop_iteration_border(_vigor_lcore_id, VIGOR_NOW);                        \
-  }
-#else // KLEE_VERIFICATION
-#define VIGOR_LOOP_BEGIN                                                       \
-  while (1) {                                                                  \
-    vigor_time_t VIGOR_NOW = current_time();                                   \
+#  define VIGOR_LOOP_BEGIN                                                     \
+    unsigned _vigor_lcore_id = 0; /* no multicore support for now */           \
+    vigor_time_t _vigor_start_time = start_time();                             \
+    int _vigor_loop_termination = klee_int("loop_termination");                \
     unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();                  \
-    for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT;        \
-         VIGOR_DEVICE++) {
-#define VIGOR_LOOP_END                                                         \
-  }                                                                            \
-  }
+    while (klee_induce_invariants() & _vigor_loop_termination) {               \
+      nf_loop_iteration_border(_vigor_lcore_id, _vigor_start_time);            \
+      vigor_time_t VIGOR_NOW = current_time();                                 \
+      /* concretize the device to avoid leaking symbols into DPDK */           \
+      uint16_t VIGOR_DEVICE =                                                  \
+          klee_range(0, VIGOR_DEVICES_COUNT, "VIGOR_DEVICE");                  \
+      concretize_devices(&VIGOR_DEVICE, VIGOR_DEVICES_COUNT);                  \
+      stub_hardware_receive_packet(VIGOR_DEVICE);
+#  define VIGOR_LOOP_END                                                       \
+    stub_hardware_reset_receive(VIGOR_DEVICE);                                 \
+    nf_loop_iteration_border(_vigor_lcore_id, VIGOR_NOW);                      \
+    }
+#else // KLEE_VERIFICATION
+#  define VIGOR_LOOP_BEGIN                                                     \
+    while (1) {                                                                \
+      vigor_time_t VIGOR_NOW = current_time();                                 \
+      unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();                \
+      for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT;      \
+           VIGOR_DEVICE++) {
+#  define VIGOR_LOOP_END                                                       \
+    }                                                                          \
+    }
 #endif // KLEE_VERIFICATION
 
 #if VIGOR_BATCH_SIZE == 1
@@ -749,59 +404,95 @@ static int nf_init_device(uint16_t device, struct rte_mempool *mbuf_pool) {
   return 0;
 }
 
-bool synapse_runtime_handle_pre_configure(env_ptr_t env) {
-  printf("Preconfiguring the switch...\n");
-  return nf_init() && install_multicast_group(env) && populate_tables(env);
-}
+bool synapse_runtime_handle_pre_configure(env_ptr_t env) { return nf_init(); }
 
 bool synapse_runtime_handle_packet_received(env_ptr_t env) {
-  SYNAPSE_NOT_NULL(env);
+  stack_ptr_t stack = NULL;
+  if (!synapse_get_stack_from_environment(env, &stack, 3)) {
+    SYNAPSE_ERROR("The environment is corrupted");
+    return false;
+  }
 
-  stack_ptr_t stack = synapse_runtime_environment_stack(env);
-  SYNAPSE_NOT_NULL(stack);
+  string_ptr_t payload = NULL;
+  pair_ptr_t *meta = NULL;
+  size_t *meta_size = NULL;
+  if (!synapse_extract_from_stack(stack, &payload, &meta, &meta_size)) {
+    SYNAPSE_ERROR("The environment stack is corrupted");
+    return false;
+  }
 
-  assert(3 == synapse_runtime_wrappers_stack_size(stack));
+  // Get the code ID from the metadata
+  static string_t code_id_str = { .str = "code_id", .sz = 7 };
+  string_ptr_t code_id_encoded = NULL;
+  if (!synapse_get_packet_in_metadata(meta, meta_size, code_id_str,
+                                      &code_id_encoded)) {
+    SYNAPSE_ERROR("Incoming packets must contain the code ID");
+    return false;
+  }
 
-  string_ptr_t packet_payload = synapse_runtime_wrappers_stack_pop(stack);
-  SYNAPSE_NOT_NULL(packet_payload);
+  // Get the source device from the metadata
+  static string_t src_device_str = { .str = "src_device", .sz = 10 };
+  string_ptr_t src_device_encoded = NULL;
+  if (!synapse_get_packet_in_metadata(meta, meta_size, src_device_str,
+                                      &src_device_encoded)) {
+    SYNAPSE_ERROR("Incoming packets must contain the ingress port");
+    return false;
+  }
 
-  // Get the ingress port (aka. device) from the packet metadata
-  uint16_t src_device = get_packet_in_src_device(env);
-  uint8_t *buffer = (uint8_t *)packet_payload->value;
-  uint16_t packet_length = packet_payload->size;
+  uint16_t src_device = synapse_decode_port(src_device_encoded);
+  uint8_t *buffer = (uint8_t *)payload->str;
+  uint16_t packet_length = payload->sz;
   vigor_time_t now = current_time();
-
-  // Read the destination address
-  string_ptr_t dst_mac_address =
-      synapse_runtime_wrappers_decode_mac_address(buffer)->address;
-  // Read the source address
-  string_ptr_t src_mac_address =
-      synapse_runtime_wrappers_decode_mac_address(buffer + 6)->address;
 
   g_env = env;
   int dst_device = nf_process(src_device, &buffer, packet_length, now, NULL);
   g_env = NULL;
 
-  if (FLOOD_FRAME == dst_device) {
-    push_packet_out_metadata(env, src_device, SYNAPSE_BROADCAST_PORT);
-
-  } else {
-    push_packet_out_metadata(env, src_device, dst_device);
+  // Push metadata here
+  pair_ptr_t *meta;
+  if (NULL == (meta = synapse_alloc_meta(stack, 2))) {
+    SYNAPSE_ERROR("Could not allocate space for the metadata");
+    return false;
   }
 
-  synapse_runtime_wrappers_stack_push(stack, packet_payload);
+  if (!synapse_add_meta(meta, src_device_str, *src_device_encoded)) {
+    SYNAPSE_ERROR("Could not add metadata `src_device`");
+    return false;
+  }
+
+  string_ptr_t dst_device_encoded;
+  if (FLOOD_FRAME == dst_device) {
+    dst_device_encoded = synapse_encode_port(SYNAPSE_BROADCAST_PORT);
+
+  } else {
+    dst_device_encoded = synapse_encode_port(dst_device);
+  }
+
+  static string_t dst_device_str = { .str = "dst_device", .sz = 10 };
+  if (!synapse_add_meta(meta, dst_device_str, *dst_device_encoded)) {
+    SYNAPSE_ERROR("Could not add metadata `dst_device`");
+    return false;
+  }
+
+  // TODO Push tags here (no tags for now)
+  pair_ptr_t *tags = synapse_alloc_tags(stack, 0);
+
   return true;
 }
 
 bool synapse_runtime_handle_idle_timeout_notification_received(env_ptr_t env) {
-  printf("Received an idle timeout notification...\n");
+  stack_ptr_t stack = NULL;
+  if (!synapse_get_stack_from_environment(env, &stack, 2)) {
+    SYNAPSE_ERROR("The environment is corrupted");
+    return false;
+  }
+
+  synapse_runtime_wrappers_stack_clear(stack);
   return true;
 }
 
 // Main worker method using the SyNAPSE Runtime
 static void worker_main(void) {
-  printf("Running SyNAPSE Runtime...\n");
-
   conn_ptr_t conn = synapse_runtime_connector_new(SYNAPSE_GRPC_ADDR);
   if (synapse_runtime_connector_configure(conn, SYNAPSE_JSON_PATH,
                                           SYNAPSE_P4INFO_PATH)) {
