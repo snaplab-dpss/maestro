@@ -43,18 +43,136 @@
 size_t global_total_length;
 size_t global_read_length = 0;
 
-void packet_state_total_length(void *p, uint32_t *len) {
+void packet_state_total_length(void *p, uint32_t *len)
+/*@ requires packetp(p, ?unread, nil) &*&
+ *len |-> length(unread); @*/
+/*@ ensures packetp(p, unread, nil) &*&
+ *len |-> length(unread); @*/
+{
+  //@ open packetp(p, unread, nil);
+  // IGNORE(p);
   global_total_length = *len;
+  //@ close packetp(p, unread, nil);
 }
+
+/*@
+  lemma void borrowed_len_nonneg(list<pair<int8_t*, int> > missing_chunks,
+                                 int8_t* start, int8_t* beginning)
+  requires true == missing_chunks(missing_chunks, start, beginning);
+  ensures 0 <= borrowed_len(missing_chunks);
+  {
+    switch(missing_chunks) {
+      case nil:
+      case cons(h,t):
+        switch(h) { case pair(beg, span):
+          borrowed_len_nonneg(t, start, beg);
+        }
+    }
+  }
+@*/
 
 // The main IO primitive.
-void packet_borrow_next_chunk(void *p, size_t length, void **chunk) {
+void packet_borrow_next_chunk(void *p, size_t length, void **chunk)
+/*@ requires packetp(p, ?unread, ?mc) &*&
+             length <= length(unread) &*&
+             0 < length &*& length < INT_MAX &*&
+             length + borrowed_len(mc) < INT_MAX &*&
+             *chunk |-> _; @*/
+/*@ ensures *chunk |-> ?ptr &*&
+            ptr != 0 &*&
+            packetp(p, drop(length, unread), cons(pair(ptr, length), mc)) &*&
+            chars(ptr, length, take(length, unread)); @*/
+{
+  //@ open packetp(p, unread, mc);
+  //@ borrowed_len_nonneg(mc, p, p + borrowed_len(mc));
+  //@ assert 0 <= global_read_length;
+  //@ assert p > 0;
+  //@ assert p + global_read_length > 0;
+  // TODO: support mbuf chains.
   *chunk = (char *)p + global_read_length;
+  //@ chars_split(*chunk, length);
   global_read_length += length;
+  //@ assert *chunk |-> ?ptr;
+  //@ close packetp(p, drop(length, unread), cons(pair(ptr, length), mc));
 }
 
-void packet_return_chunk(void *p, void *chunk) {
+void packet_return_chunk(void *p, void *chunk)
+/*@ requires packetp(p, ?unread, cons(pair(chunk, ?len), ?mc)) &*&
+             chars(chunk, len, ?chnk); @*/
+/*@ ensures packetp(p, append(chnk, unread), mc); @*/
+{
+  //@ open packetp(p, unread, cons(pair(chunk, len), mc));
   global_read_length = (uint32_t)((int8_t *)chunk - (int8_t *)p);
+  //@ close packetp(p, append(chnk, unread), mc);
+}
+
+size_t packet_get_chunk_length(void *p, void *chunk) {
+  return (uint32_t)(((char *)p + global_read_length) - (char *)chunk);
+}
+
+void packet_shrink_chunk(void **p, size_t length, void **chunks,
+                         size_t num_chunks, struct rte_mbuf *mbuf) {
+  uint8_t *data = (uint8_t *)(*p);
+
+  void *last_chunk = chunks[num_chunks - 1];
+  size_t last_chunk_length = packet_get_chunk_length(data, last_chunk);
+  uint8_t *last_chunk_limit = last_chunk + last_chunk_length;
+
+  assert(length <= last_chunk_length);
+  size_t offset = last_chunk_length - length;
+
+  if (offset == 0) {
+    return;
+  }
+
+  uint8_t *current = last_chunk_limit - 1;
+
+  while (current >= data + offset) {
+    rte_memcpy(current, current - offset, 1);
+    current--;
+  }
+
+  data = (uint8_t *)rte_pktmbuf_adj(mbuf, offset);
+  assert(data);
+
+  global_read_length -= offset;
+  global_total_length -= offset;
+
+  for (int i = 0; i < num_chunks; i++) {
+    chunks[i] += offset;
+  }
+
+  (*p) = data;
+}
+
+void packet_insert_new_chunk(void **p, size_t length, void **chunks,
+                             size_t *num_chunks, struct rte_mbuf *mbuf) {
+  uint8_t *data = (uint8_t *)(*p);
+  uint8_t *last_chunk_limit = data + global_read_length;
+
+  data = (uint8_t *)rte_pktmbuf_prepend(mbuf, length);
+  assert(data);
+
+  uint8_t *current = data;
+
+  while (current + length < last_chunk_limit) {
+    rte_memcpy(current, current + length, 1);
+    current++;
+  }
+
+  for (int i = 0; i < (*num_chunks); i++) {
+    chunks[i] -= length;
+  }
+
+  assert(chunks[0] == data);
+
+  (*num_chunks)++;
+  (*p) = data;
+
+  chunks[(*num_chunks) - 1] = data + global_read_length;
+
+  global_read_length += length;
+  global_total_length += length;
 }
 
 uint32_t packet_get_unread_length(void *p) {
@@ -67,8 +185,12 @@ uint32_t packet_get_unread_length(void *p) {
  *
  **********************************************/
 
-#include "synapse-runtime/util.h"
+#include "synthesized/synapse-runtime/util.h"
 #include "synapse/runtime/wrapper/connector.hpp"
+#include "synapse/runtime/wrapper/p4runtime/stream/handler/environment.hpp"
+
+#define SYNAPSE_MCAST_GROUP_ID 1
+#define SYNAPSE_MCAST_GROUP_SIZE 2
 
 /**********************************************
  *
@@ -81,24 +203,10 @@ struct rte_ether_addr;
 struct rte_ether_hdr;
 
 #define IP_MIN_SIZE_WORDS 5
+#define MAX_N_CHUNKS 100
 #define WORD_SIZE 4
 
-#define MAX_N_CHUNKS 100
-
-void *chunks_borrowed[MAX_N_CHUNKS];
-size_t chunks_borrowed_num = 0;
-
-static inline void *nf_borrow_next_chunk(void *p, size_t length) {
-  assert(chunks_borrowed_num < MAX_N_CHUNKS);
-  void *chunk;
-  packet_borrow_next_chunk(p, length, &chunk);
-  chunks_borrowed[chunks_borrowed_num] = chunk;
-  chunks_borrowed_num++;
-  return chunk;
-}
-
-#define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests, tag)     \
-  /*nothing*/
+#define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests, tag)
 
 #define CHUNK_LAYOUT_N(pkt, str_name, fields, nests)                           \
   CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields,                      \
@@ -109,18 +217,8 @@ static inline void *nf_borrow_next_chunk(void *p, size_t length) {
   CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields,                      \
                     sizeof(fields) / sizeof(fields[0]), NULL, 0, #str_name);
 
-static inline void nf_return_all_chunks(void *p) {
-  while (chunks_borrowed_num != 0) {
-    packet_return_chunk(p, chunks_borrowed[chunks_borrowed_num - 1]);
-    chunks_borrowed_num--;
-  }
-}
-
-static inline struct rte_ether_hdr *nf_then_get_rte_ether_header(void *p) {
-  CHUNK_LAYOUT_N(p, rte_ether_hdr, rte_ether_fields, rte_ether_nested_fields);
-  void *hdr = nf_borrow_next_chunk(p, sizeof(struct rte_ether_hdr));
-  return (struct rte_ether_hdr *)hdr;
-}
+void *chunks_borrowed[MAX_N_CHUNKS];
+size_t chunks_borrowed_num = 0;
 
 bool nf_has_rte_ipv4_header(struct rte_ether_hdr *header) {
   return header->ether_type == rte_be_to_cpu_16(RTE_ETHER_TYPE_IPV4);
@@ -132,50 +230,6 @@ bool nf_has_tcpudp_header(struct rte_ipv4_hdr *header) {
   //       one
   return header->next_proto_id == IPPROTO_TCP |
          header->next_proto_id == IPPROTO_UDP;
-}
-
-static inline struct rte_ipv4_hdr *
-nf_then_get_rte_ipv4_header(void *rte_ether_header_, void *p,
-                            uint8_t **ip_options) {
-  struct rte_ether_hdr *rte_ether_header =
-      (struct rte_ether_hdr *)rte_ether_header_;
-  *ip_options = NULL;
-
-  uint16_t unread_len = packet_get_unread_length(p);
-  if ((!nf_has_rte_ipv4_header(rte_ether_header)) |
-      (unread_len < sizeof(struct rte_ipv4_hdr))) {
-    return NULL;
-  }
-
-  CHUNK_LAYOUT(p, rte_ipv4_hdr, rte_ipv4_fields);
-  struct rte_ipv4_hdr *hdr = (struct rte_ipv4_hdr *)nf_borrow_next_chunk(
-      p, sizeof(struct rte_ipv4_hdr));
-
-  uint8_t ihl = hdr->version_ihl & 0x0f;
-  if ((ihl < IP_MIN_SIZE_WORDS) |
-      (unread_len < rte_be_to_cpu_16(hdr->total_length))) {
-    return NULL;
-  }
-  uint16_t ip_options_length = (ihl - IP_MIN_SIZE_WORDS) * WORD_SIZE;
-  if ((ip_options_length != 0) &
-      (unread_len - sizeof(struct rte_ipv4_hdr) >= ip_options_length)) {
-    // Do not really trace the ip options chunk, as it's length
-    // is unknown statically
-    CHUNK_LAYOUT_IMPL(p, 1, NULL, 0, NULL, 0, "ipv4_options");
-    *ip_options = (uint8_t *)nf_borrow_next_chunk(p, ip_options_length);
-  }
-  return hdr;
-}
-
-static inline struct tcpudp_hdr *
-nf_then_get_tcpudp_header(struct rte_ipv4_hdr *ip_header, void *p) {
-  if ((!nf_has_tcpudp_header(ip_header)) |
-      (packet_get_unread_length(p) < sizeof(struct tcpudp_hdr))) {
-    return NULL;
-  }
-  CHUNK_LAYOUT(p, tcpudp_hdr, tcpudp_fields);
-  return (struct tcpudp_hdr *)nf_borrow_next_chunk(p,
-                                                   sizeof(struct tcpudp_hdr));
 }
 
 void nf_set_rte_ipv4_udptcp_checksum(struct rte_ipv4_hdr *ip_header,
@@ -241,6 +295,107 @@ char *nf_rte_ipv4_to_str(uint32_t addr) {
            addr & 0xFF, (addr >> 8) & 0xFF, (addr >> 16) & 0xFF,
            (addr >> 24) & 0xFF);
   return buffer;
+}
+
+static inline void *nf_borrow_next_chunk(uint8_t **p, size_t length) {
+  assert(chunks_borrowed_num < MAX_N_CHUNKS);
+  void *chunk;
+  packet_borrow_next_chunk(*p, length, &chunk);
+  chunks_borrowed[chunks_borrowed_num] = chunk;
+  chunks_borrowed_num++;
+  return chunk;
+}
+
+static inline void *nf_shrink_chunk(uint8_t **p, size_t length,
+                                    struct rte_mbuf *mbuf) {
+  assert(chunks_borrowed_num < MAX_N_CHUNKS);
+  assert(chunks_borrowed_num);
+  packet_shrink_chunk((void **)p, length, chunks_borrowed, chunks_borrowed_num,
+                      mbuf);
+  return chunks_borrowed[chunks_borrowed_num - 1];
+}
+
+static inline void *nf_insert_new_chunk(uint8_t **p, size_t length,
+                                        struct rte_mbuf *mbuf) {
+  assert(chunks_borrowed_num < MAX_N_CHUNKS);
+  assert(chunks_borrowed_num);
+
+  // Do not really trace the ip options chunk, as it's length
+  // is unknown statically
+  CHUNK_LAYOUT_IMPL(*p, 1, NULL, 0, NULL, 0, "new_hdr");
+  packet_insert_new_chunk((void **)p, length, chunks_borrowed,
+                          &chunks_borrowed_num, mbuf);
+
+  return chunks_borrowed[chunks_borrowed_num - 1];
+}
+
+static inline void *nf_get_borrowed_chunk(uint32_t chunk_i) {
+  assert(chunk_i < chunks_borrowed_num);
+  return chunks_borrowed[chunk_i];
+}
+
+static inline void nf_return_all_chunks(void *p) {
+  while (chunks_borrowed_num != 0) {
+    packet_return_chunk(p, chunks_borrowed[chunks_borrowed_num - 1]);
+    chunks_borrowed_num--;
+  }
+}
+
+static inline void nf_return_chunk(uint8_t **p) {
+  if (chunks_borrowed_num != 0) {
+    packet_return_chunk(*p, chunks_borrowed[chunks_borrowed_num - 1]);
+    chunks_borrowed_num--;
+  }
+}
+
+static inline struct rte_ether_hdr *nf_then_get_rte_ether_header(uint8_t **p) {
+  CHUNK_LAYOUT_N(*p, rte_ether_hdr, rte_ether_fields, rte_ether_nested_fields);
+  void *hdr = nf_borrow_next_chunk(p, sizeof(struct rte_ether_hdr));
+  return (struct rte_ether_hdr *)hdr;
+}
+
+static inline struct rte_ipv4_hdr *
+nf_then_get_rte_ipv4_header(void *rte_ether_header_, uint8_t **p,
+                            uint8_t **ip_options) {
+  struct rte_ether_hdr *rte_ether_header =
+      (struct rte_ether_hdr *)rte_ether_header_;
+  *ip_options = NULL;
+
+  uint16_t unread_len = packet_get_unread_length(p);
+  if ((!nf_has_rte_ipv4_header(rte_ether_header)) |
+      (unread_len < sizeof(struct rte_ipv4_hdr))) {
+    return NULL;
+  }
+
+  CHUNK_LAYOUT(p, rte_ipv4_hdr, rte_ipv4_fields);
+  struct rte_ipv4_hdr *hdr = (struct rte_ipv4_hdr *)nf_borrow_next_chunk(
+      p, sizeof(struct rte_ipv4_hdr));
+
+  uint8_t ihl = hdr->version_ihl & 0x0f;
+  if ((ihl < IP_MIN_SIZE_WORDS) |
+      (unread_len < rte_be_to_cpu_16(hdr->total_length))) {
+    return NULL;
+  }
+  uint16_t ip_options_length = (ihl - IP_MIN_SIZE_WORDS) * WORD_SIZE;
+  if ((ip_options_length != 0) &
+      (unread_len - sizeof(struct rte_ipv4_hdr) >= ip_options_length)) {
+    // Do not really trace the ip options chunk, as it's length
+    // is unknown statically
+    CHUNK_LAYOUT_IMPL(*p, 1, NULL, 0, NULL, 0, "ipv4_options");
+    *ip_options = (uint8_t *)nf_borrow_next_chunk(p, ip_options_length);
+  }
+  return hdr;
+}
+
+static inline struct tcpudp_hdr *
+nf_then_get_tcpudp_header(struct rte_ipv4_hdr *ip_header, uint8_t **p) {
+  if ((!nf_has_tcpudp_header(ip_header)) |
+      (packet_get_unread_length(p) < sizeof(struct tcpudp_hdr))) {
+    return NULL;
+  }
+  CHUNK_LAYOUT(*p, tcpudp_hdr, tcpudp_fields);
+  return (struct tcpudp_hdr *)nf_borrow_next_chunk(p,
+                                                   sizeof(struct tcpudp_hdr));
 }
 
 /**********************************************
@@ -412,7 +567,60 @@ static int nf_init_device(uint16_t device, struct rte_mempool *mbuf_pool) {
   return 0;
 }
 
-bool synapse_runtime_handle_pre_configure(env_ptr_t env) { return nf_init(); }
+bool synapse_runtime_handle_pre_configure(env_ptr_t env) {
+  stack_ptr_t stack = NULL;
+  helper_ptr_t helper = NULL;
+
+  if (!synapse_get_stack_from_environment(env, &stack, 0) ||
+      !synapse_get_helper_from_environment(env, &helper)) {
+    SYNAPSE_ERROR("The environment is corrupted");
+    return false;
+  }
+
+  p4_replica_ptr_t *replicas =
+      malloc(SYNAPSE_MCAST_GROUP_SIZE * sizeof(p4_replica_ptr_t));
+  for (size_t i = 0; i < SYNAPSE_MCAST_GROUP_SIZE; i++) {
+    replicas[i] =
+        synapse_runtime_p4_replica_new(helper, (uint32_t)i, (uint32_t)i);
+  }
+
+  p4_multicast_group_entry_ptr_t mcast_entry =
+      synapse_runtime_p4_multicast_group_entry_new(
+          helper, SYNAPSE_MCAST_GROUP_ID, replicas, SYNAPSE_MCAST_GROUP_SIZE);
+
+  p4_packet_replication_engine_entry_ptr_t pre_entry =
+      synapse_runtime_p4_packet_replication_engine_entry_new(helper,
+                                                             mcast_entry);
+
+  p4_entity_ptr_t entity = synapse_runtime_p4_entity_new(
+      helper, Entity_PacketReplicationEngineEntry, pre_entry);
+
+  p4_update_ptr_t update =
+      synapse_runtime_p4_update_new(helper, Update_Insert, entity);
+
+  // Push tags here
+  pair_ptr_t *tags = NULL;
+  if (NULL == (tags = synapse_alloc_tags(stack, 2))) {
+    SYNAPSE_ERROR("Could not allocate space for the tags");
+    return false;
+  }
+
+  static string_t map_get_35_tag_str = { .str = "map_get_35_tag", .sz = 14 };
+  if (NULL == (tags = synapse_add_tag(tags, map_get_35_tag_str, 0))) {
+    SYNAPSE_ERROR("Could not add tag `map_get_35_tag`");
+    return false;
+  }
+
+  static string_t map_get_53_tag_str = { .str = "map_get_53_tag", .sz = 14 };
+  if (NULL == (tags = synapse_add_tag(tags, map_get_53_tag_str, 0))) {
+    SYNAPSE_ERROR("Could not add tag `map_get_53_tag`");
+    return false;
+  }
+
+  return nf_init() &&
+         synapse_runtime_update_buffer_buffer(
+             synapse_runtime_environment_update_buffer(env), update);
+}
 
 bool synapse_runtime_handle_packet_received(env_ptr_t env) {
   stack_ptr_t stack = NULL;
@@ -422,26 +630,17 @@ bool synapse_runtime_handle_packet_received(env_ptr_t env) {
   }
 
   string_ptr_t payload = NULL;
-  pair_ptr_t *meta = NULL;
-  size_t *meta_size = NULL;
-  if (!synapse_extract_from_stack(stack, &payload, &meta, &meta_size)) {
+  meta_in = NULL;
+  meta_in_size = NULL;
+  if (!synapse_extract_from_stack(stack, &payload, &meta_in, &meta_in_size)) {
     SYNAPSE_ERROR("The environment stack is corrupted");
-    return false;
-  }
-
-  // Get the code ID from the metadata
-  static string_t code_id_str = { .str = "code_id", .sz = 7 };
-  string_ptr_t code_id_encoded = NULL;
-  if (!synapse_get_packet_in_metadata(meta, meta_size, code_id_str,
-                                      &code_id_encoded)) {
-    SYNAPSE_ERROR("Incoming packets must contain the code ID");
     return false;
   }
 
   // Get the source device from the metadata
   static string_t src_device_str = { .str = "src_device", .sz = 10 };
   string_ptr_t src_device_encoded = NULL;
-  if (!synapse_get_packet_in_metadata(meta, meta_size, src_device_str,
+  if (!synapse_get_packet_in_metadata(meta_in, meta_in_size, src_device_str,
                                       &src_device_encoded)) {
     SYNAPSE_ERROR("Incoming packets must contain the ingress port");
     return false;
@@ -454,16 +653,23 @@ bool synapse_runtime_handle_packet_received(env_ptr_t env) {
 
   g_env = env;
   int dst_device = nf_process(src_device, &buffer, packet_length, now, NULL);
+  puts("out");
+
+  meta_in = NULL;
+  meta_in_size = NULL;
   g_env = NULL;
 
+  synapse_runtime_wrappers_stack_clear(stack);
+
   // Push metadata here
-  pair_ptr_t *meta;
-  if (NULL == (meta = synapse_alloc_meta(stack, 2))) {
+  pair_ptr_t *meta_out = NULL;
+  if (NULL == (meta_out = synapse_alloc_meta(stack, 2))) {
     SYNAPSE_ERROR("Could not allocate space for the metadata");
     return false;
   }
 
-  if (!synapse_add_meta(meta, src_device_str, *src_device_encoded)) {
+  if (NULL == (meta_out = synapse_add_meta(meta_out, src_device_str,
+                                           *src_device_encoded))) {
     SYNAPSE_ERROR("Could not add metadata `src_device`");
     return false;
   }
@@ -477,14 +683,18 @@ bool synapse_runtime_handle_packet_received(env_ptr_t env) {
   }
 
   static string_t dst_device_str = { .str = "dst_device", .sz = 10 };
-  if (!synapse_add_meta(meta, dst_device_str, *dst_device_encoded)) {
+  if (NULL == (meta_out = synapse_add_meta(meta_out, dst_device_str,
+                                           *dst_device_encoded))) {
     SYNAPSE_ERROR("Could not add metadata `dst_device`");
     return false;
   }
 
-  // TODO Push tags here (no tags for now)
-  pair_ptr_t *tags = synapse_alloc_tags(stack, 0);
+  if (NULL == synapse_runtime_wrappers_stack_push(stack, payload)) {
+    SYNAPSE_ERROR("Could not add payload");
+    return false;
+  }
 
+  assert(3 == synapse_runtime_wrappers_stack_size(stack));
   return true;
 }
 

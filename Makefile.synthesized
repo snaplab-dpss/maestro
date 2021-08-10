@@ -18,9 +18,9 @@ SHELL := /bin/bash -O extglob -O globstar -c
 # so we ask echo to expand those
 SRCS-y := $(shell echo $(SELF_DIR)/libvig/verified/*.c)
 SRCS-y := $(shell python3 -c "print(' '.join(list(filter(lambda k: 'packet' not in k, '$(SRCS-y)'.split(' ')))))")
-SRCS-y += $(NF_FILES)
 SRCS-y += $(EXTRA-SRCS-y)
 SRCS-y += $(SYNTHESIZED_FILE)
+SRCS-y += $(NF_FILES)
 # Compiler flags
 CFLAGS += -I $(SELF_DIR)
 CFLAGS += -std=gnu99
