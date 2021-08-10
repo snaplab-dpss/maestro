@@ -1,20 +1,28 @@
-#include <inttypes.h>
-// DPDK uses these but doesn't include them. :|
 #include <linux/limits.h>
 #include <sys/types.h>
 
-#include <rte_common.h>
-#include <rte_eal.h>
-#include <rte_errno.h>
-#include <rte_ethdev.h>
-#include <rte_lcore.h>
-#include <rte_mbuf.h>
-
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
-#include <stdio.h>
+#include <inttypes.h>
+#include <stddef.h>
+
+#include <netinet/in.h>
+
+#include <rte_eal.h>
+#include <rte_common.h>
+#include <rte_byteorder.h>
+#include <rte_mbuf.h>
+#include <rte_ethdev.h>
+#include <rte_ip.h>
+#include <rte_ether.h>
+#include <rte_tcp.h>
+#include <rte_udp.h>
+#include <rte_errno.h>
+#include <rte_lcore.h>
+#include <rte_malloc.h>
 
 #include "libvig/verified/boilerplate-util.h"
 #include "libvig/verified/tcpudp_hdr.h"

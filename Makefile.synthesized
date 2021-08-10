@@ -18,9 +18,9 @@ SHELL := /bin/bash -O extglob -O globstar -c
 # so we ask echo to expand those
 SRCS-y := $(shell echo $(SELF_DIR)/libvig/verified/*.c)
 SRCS-y := $(shell python3 -c "print(' '.join(list(filter(lambda k: 'packet' not in k, '$(SRCS-y)'.split(' ')))))")
+SRCS-y += $(NF_FILES)
 SRCS-y += $(EXTRA-SRCS-y)
 SRCS-y += $(SYNTHESIZED_FILE)
-SRCS-y += $(NF_FILES)
 # Compiler flags
 CFLAGS += -I $(SELF_DIR)
 CFLAGS += -std=gnu99
@@ -36,17 +36,21 @@ CLEAN_BUILD_ARTIFACTS_COMMAND := rm -rf *.bc *.os *.ll $(SELF_DIR)/synthesized/n
 CLEAN_ALL_COMMAND := $(CLEAN_BUILD_ARTIFACTS_COMMAND)
 # Cleanup after ourselves, but don't shadow the existing DPDK target
 clean-synthesized-nf:
-	@rm -rf $(SELF_DIR)/synthesized/nf.c
+	@for f in $(ORIGINAL_NF_FILES); do \
+		rm -rf $(SELF_DIR)/synthesized/build/bundle/$$f; \
+	done;
 
-	@for f in $(ORIGINAL_NF_FILES_BASE); do \
-		rm -rf $(SELF_DIR)/synthesized/$$f; \
+cp-original_nf:
+	@for f in $(ORIGINAL_NF_FILES_ABS_PATH); do \
+	  filename="$(basename $$f)"; \
+		cp $$f $(SELF_DIR)/synthesized/build/bundle/$(filename); \
 	done;
 
 clean-vigor:
 	@$(CLEAN_ALL_COMMAND)
 
-clean: clean-vigor clean-synthesized-nf
+clean: clean-vigor
 
 # Built-in DPDK default target, make it aware of autogen,
 # and make it clean every time because our dependency tracking is nonexistent...
-all: clean autogen clean-synthesized-nf
+all: clean autogen cp-original_nf
