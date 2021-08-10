@@ -1,6 +1,6 @@
-MAESTRO_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+SYNTHESIZED_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 MAESTRO_CC=g++ -std=c++11
-MAESTRO_SRCS_DIR := $(MAESTRO_DIR)/rss-config-from-lvas
+MAESTRO_SRCS_DIR := $(SYNTHESIZED_DIR)/rss-config-from-lvas
 
 Z3_INCLUDE := -I$(Z3_DIR)/build/include
 R3S_INCLUDE := -I$(R3S_DIR)/include
@@ -9,9 +9,7 @@ Z3_LIB_FLAGS := -lz3 -Wl,-rpath,$(Z3_DIR)/build/lib -L$(Z3_DIR)/build/lib
 R3S_LIB_FLAGS := -lr3s -Wl,-rpath,$(R3S_DIR)/build/libs -L$(R3S_DIR)/build/libs
 
 KLEE_DIR := $(VIGOR_DIR)/klee
-BUILD := $(MAESTRO_DIR)/build/maestro
-
-include $(abspath $(dir $(lastword $(MAKEFILE_LIST))))/Makefile.nf
+BUILD := $(SYNTHESIZED_DIR)/build/maestro
 
 before-maestro:
 	@mkdir -p $(BUILD)
