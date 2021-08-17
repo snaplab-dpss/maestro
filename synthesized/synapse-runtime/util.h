@@ -107,7 +107,12 @@ uint16_t synapse_decode_port(string_ptr_t encoded);
 bool synapse_queue_configure_multicast_group(env_ptr_t env,
                                              synapse_config_t *config);
 
-bool synapse_queue_insert_table_entry(env_ptr_t env);
+bool synapse_queue_insert_table_entry(env_ptr_t env, string_t table_name,
+                                      pair_t *key, size_t key_sz,
+                                      string_t action_name,
+                                      pair_t *action_params,
+                                      size_t action_params_sz, int32_t priority,
+                                      uint64_t idle_timeout_ns);
 
 bool synapse_queue_modify_table_entry(env_ptr_t env);
 

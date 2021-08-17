@@ -187,7 +187,6 @@ uint32_t packet_get_unread_length(void *p) {
 
 #include "synthesized/synapse-runtime/util.h"
 #include "synapse/runtime/wrapper/connector.hpp"
-#include "synapse/runtime/wrapper/p4runtime/stream/handler/environment.hpp"
 
 /**********************************************
  *
@@ -586,6 +585,22 @@ bool synapse_runtime_handle_pre_configure(env_ptr_t env) {
       return false;
     }
   }
+
+  // FIXME Remove lines in-between
+  string_t table_name = {.str = "SyNAPSE_Ingress.example_tbl", .sz = 27};
+  string_t match_name = {.str = "hdr.ethernet.dstAddr", .sz = 20};
+  string_t action_name = {.str = "SyNAPSE_Ingress.forward_act", .sz = 27};
+  string_t action_param = {.str = "port", .sz = 4};
+
+  mac_addr_ptr_t addr = synapse_runtime_wrappers_mac_address_new("12:34:56:78:9a:bc");
+  port_ptr_t port = synapse_runtime_wrappers_port_new(10);
+
+  pair_t key[1] = {{.left = &match_name, .right = addr->raw}};
+
+  pair_t action_params[1] = {{.left = &action_param, .right = port->raw}};
+
+  assert(synapse_queue_insert_table_entry(env, table_name, key, 1, action_name, action_params, 1, 0, 0));
+  // FIXME Remove lines in-between
 
   // Push modification to the stack
   return synapse_pkt_out_flush(env, &synapse_pkt_out) && nf_init();

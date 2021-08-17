@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <inttypes.h>
-#include "synapse/runtime/wrapper/p4runtime/stream/handler/environment.hpp"
 
 #define LOOP_START_META(sz)                                                    \
   printf("Metadata (%lu):\n", sz);                                             \
@@ -126,20 +125,17 @@ void synapse_runtime_pkt_out_print(synapse_pkt_out_t *pkt_out) {
 // Environment manipulation
 
 bool synapse_get_helper_from_environment(env_ptr_t env, helper_ptr_t *helper) {
-  return NULL != helper &&
-         NULL != (*helper = synapse_runtime_environment_helper(env));
+  return NULL != helper && NULL != (*helper = env->helper);
 }
 
 bool synapse_get_queue_from_environment(env_ptr_t env,
                                         update_queue_ptr_t *queue) {
-  return NULL != env &&
-         NULL != (*queue = synapse_runtime_environment_queue(env));
+  return NULL != env && NULL != (*queue = env->queue);
 }
 
 bool synapse_get_stack_from_environment(env_ptr_t env, stack_ptr_t *stack,
                                         size_t expected_stack_size) {
-  return NULL != env &&
-         NULL != (*stack = synapse_runtime_environment_stack(env)) &&
+  return NULL != env && NULL != (*stack = env->stack) &&
          expected_stack_size == synapse_runtime_wrappers_stack_size(*stack);
 }
 
@@ -318,8 +314,104 @@ bool synapse_queue_configure_multicast_group(env_ptr_t env,
                                    config->devices_sz)))));
 }
 
-bool synapse_queue_insert_table_entry(env_ptr_t env) { return false; }
+bool synapse_queue_insert_table_entry(env_ptr_t env, string_t table_name,
+                                      pair_t *key, size_t key_sz,
+                                      string_t action_name,
+                                      pair_t *action_params,
+                                      size_t action_params_sz, int32_t priority,
+                                      uint64_t idle_timeout_ns) {
+  helper_ptr_t helper;
+  update_queue_ptr_t queue;
+
+  if (!synapse_get_helper_from_environment(env, &helper) ||
+      !synapse_get_queue_from_environment(env, &queue)) {
+    return false;
+  }
+
+  p4_info_table_ptr_t table_info =
+      synapse_runtime_p4_info_table_new(helper, &table_name);
+  p4_info_preamble_ptr_t table_info_preamble =
+      synapse_runtime_p4_info_table_preamble(table_info);
+  uint32_t table_id = synapse_runtime_p4_preamble_id(table_info_preamble);
+
+  p4_info_action_ptr_t action_info =
+      synapse_runtime_p4_info_action_new(helper, &action_name);
+  p4_info_preamble_ptr_t action_info_preamble =
+      synapse_runtime_p4_info_action_preamble(action_info);
+  uint32_t action_id = synapse_runtime_p4_preamble_id(action_info_preamble);
+
+  p4_field_match_ptr_t *match = malloc(key_sz * sizeof(p4_field_match_ptr_t));
+  for (size_t i = 0; i < key_sz; i++) {
+    pair_t entry = key[i];
+
+    p4_info_match_field_ptr_t match_info =
+        synapse_runtime_p4_info_match_field_new(helper, table_info,
+                                                (string_ptr_t)entry.left);
+    p4_info_match_field_match_type_t field_type =
+        synapse_runtime_p4_info_match_field_type(match_info);
+    uint32_t field_id = synapse_runtime_p4_info_match_field_id(match_info);
+
+    switch (field_type) {
+      case MatchField_Exact: {
+        string_ptr_t value = entry.right;
+
+        match[i] = synapse_runtime_p4_field_match_new(
+            helper, field_id, FieldMatch_Exact,
+            synapse_runtime_p4_field_match_exact_new(helper, value));
+
+      } break;
+
+      case MatchField_Range: {
+        pair_ptr_t range = entry.right;
+
+        match[i] = synapse_runtime_p4_field_match_new(
+            helper, field_id, FieldMatch_Range,
+            synapse_runtime_p4_field_match_range_new(helper, range->left,
+                                                     range->right));
+
+      } break;
+
+      default:
+        SYNAPSE_ERROR("Unsupported match field type");
+        return false;
+    }
+  }
+
+  p4_action_param_ptr_t *params =
+      malloc(action_params_sz * sizeof(p4_action_param_ptr_t));
+  for (size_t i = 0; i < action_params_sz; i++) {
+    pair_t entry = action_params[i];
+
+    p4_info_action_param_ptr_t param_info =
+        synapse_runtime_p4_info_action_param_new(helper, action_info,
+                                                 entry.left);
+    uint32_t param_id = synapse_runtime_p4_info_action_param_id(param_info);
+
+    params[i] =
+        synapse_runtime_p4_action_param_new(helper, param_id, entry.right);
+  }
+
+  return synapse_runtime_update_queue_queue(
+      queue,
+      synapse_runtime_p4_update_new(
+          helper, Update_Insert,
+          synapse_runtime_p4_entity_new(
+              helper, Entity_TableEntry,
+              synapse_runtime_p4_table_entry_new(
+                  helper, table_id, match, key_sz,
+                  synapse_runtime_p4_table_action_new(
+                      helper, synapse_runtime_p4_action_new(
+                                  helper, action_id, params, action_params_sz)),
+                  priority, idle_timeout_ns))));
+}
 
 bool synapse_queue_modify_table_entry(env_ptr_t env) { return false; }
 
 bool synapse_queue_delete_table_entry(env_ptr_t env) { return false; }
+
+/**
+ * table name (string_t)
+ * key (pair<string_t, string_t>)
+ * action name (string_t)
+ * action params (pair<string_t, string_t>)
+ */
