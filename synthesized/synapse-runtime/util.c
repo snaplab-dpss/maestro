@@ -4,17 +4,19 @@
 #include <stdio.h>
 #include <inttypes.h>
 
-#define LOOP_START_META(sz)                                                    \
+#define SYNAPSE_LOOP_START_META(sz)                                            \
   printf("Metadata (%lu):\n", sz);                                             \
   for (size_t i = 0; i < sz; i++) {
 
-#define LOOP_START_TAGS(sz)                                                    \
+#define SYNAPSE_LOOP_START_TAGS(sz)                                            \
   printf("Tags (%lu):\n", sz);                                                 \
   for (size_t i = 0; i < sz; i++) {
 
 #define LOOP_END                                                               \
   }                                                                            \
   puts("")
+
+#define SYNAPSE_MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 
 // Runtime configuration
 
@@ -45,6 +47,7 @@ void synapse_runtime_config_clear(synapse_config_t *config) {
   config->tags_names = NULL;
   config->tags_sz = 0;
   config->tags = NULL;
+  config->tags_updated = false;
 }
 
 void synapse_runtime_config_print(synapse_config_t *config) {
@@ -58,7 +61,7 @@ void synapse_runtime_config_print(synapse_config_t *config) {
   puts("");
 
   if (config->tags_sz > 0) {
-    LOOP_START_TAGS(config->tags_sz)
+    SYNAPSE_LOOP_START_TAGS(config->tags_sz)
     print_tag(config->tags_names[i], config->tags[i]);
     LOOP_END;
   }
@@ -68,6 +71,39 @@ void synapse_runtime_pkt_in_clear(synapse_pkt_in_t *pkt_in) {
   pkt_in->meta = NULL;
   pkt_in->meta_sz = 0;
   pkt_in->payload = NULL;
+}
+
+uint32_t *
+synapse_runtime_config_get_tag_by_table_name(synapse_config_t *config,
+                                             string_t table_name,
+                                             string_ptr_t *field_match_name) {
+  size_t alias_sz = table_name.sz - 16;
+  size_t field_sz = alias_sz + 5 /* meta. */ + 4 /* _tag */;
+
+  char buffer[field_sz];
+  strncpy(buffer, "meta.", 5);
+  strncpy(buffer + 5, table_name.str + 16, alias_sz);
+  strncpy(buffer + 5 + alias_sz, "_tag", 4);
+
+  if (NULL == (*field_match_name =
+                   synapse_runtime_wrappers_string_new(buffer, field_sz))) {
+    return NULL;
+  }
+
+  // Search the tag
+  string_t tag_name = { .str = buffer + 5, .sz = field_sz - 5 };
+  string_t tag_name_cmp;
+
+  for (size_t i = 0; i < config->tags_sz; i++) {
+    tag_name_cmp = config->tags_names[i];
+
+    if (0 == strncmp(tag_name_cmp.str, tag_name.str,
+                     SYNAPSE_MIN(tag_name_cmp.sz, tag_name.sz))) {
+      return &config->tags[i];
+    }
+  }
+
+  return NULL;
 }
 
 void synapse_runtime_pkt_in_print(synapse_pkt_in_t *pkt_in) {
@@ -82,7 +118,7 @@ void synapse_runtime_pkt_in_print(synapse_pkt_in_t *pkt_in) {
   }
 
   if (pkt_in->meta_sz > 0) {
-    LOOP_START_META(pkt_in->meta_sz)
+    SYNAPSE_LOOP_START_META(pkt_in->meta_sz)
     print_meta_entry(pkt_in->meta[i]);
     LOOP_END;
   }
@@ -110,13 +146,13 @@ void synapse_runtime_pkt_out_print(synapse_pkt_out_t *pkt_out) {
   }
 
   if (pkt_out->meta_sz > 0) {
-    LOOP_START_META(pkt_out->meta_sz)
+    SYNAPSE_LOOP_START_META(pkt_out->meta_sz)
     print_meta_entry(pkt_out->meta[i]);
     LOOP_END;
   }
 
   if (pkt_out->tags_sz > 0) {
-    LOOP_START_TAGS(pkt_out->tags_sz)
+    SYNAPSE_LOOP_START_TAGS(pkt_out->tags_sz)
     print_tag_entry(pkt_out->tags[i]);
     LOOP_END;
   }
@@ -134,9 +170,9 @@ bool synapse_get_queue_from_environment(env_ptr_t env,
 }
 
 bool synapse_get_stack_from_environment(env_ptr_t env, stack_ptr_t *stack,
-                                        size_t expected_stack_size) {
+                                        size_t expected_stack_sz) {
   return NULL != env && NULL != (*stack = env->stack) &&
-         expected_stack_size == synapse_runtime_wrappers_stack_size(*stack);
+         expected_stack_sz == synapse_runtime_wrappers_stack_size(*stack);
 }
 
 // Stack manipulation
@@ -252,14 +288,26 @@ bool synapse_pkt_out_flush(env_ptr_t env, synapse_pkt_out_t *pkt_out) {
 
 // Encoders
 
+string_ptr_t synapse_encode_mac_address(const char *value) {
+  return synapse_runtime_wrappers_mac_address_new(value)->bytes;
+}
+
+string_ptr_t synapse_encode_p4_uint32(uint32_t value) {
+  return synapse_runtime_wrappers_p4_uint32_new(value)->bytes;
+}
+
 string_ptr_t synapse_encode_port(uint16_t value) {
-  return synapse_runtime_wrappers_port_new(value)->raw;
+  return synapse_runtime_wrappers_port_new(value)->bytes;
 }
 
 // Decoders
 
+string_ptr_t synapse_decode_mac_address(string_ptr_t encoded) {
+  return synapse_runtime_wrappers_decode_mac_address(encoded)->address;
+}
+
 uint32_t synapse_decode_p4_uint32(string_ptr_t encoded) {
-  return synapse_runtime_wrappers_decode_p4_uint32(encoded);
+  return synapse_runtime_wrappers_decode_p4_uint32(encoded)->value;
 }
 
 uint16_t synapse_decode_port(string_ptr_t encoded) {
@@ -314,15 +362,23 @@ bool synapse_queue_configure_multicast_group(env_ptr_t env,
                                    config->devices_sz)))));
 }
 
-bool synapse_queue_insert_table_entry(env_ptr_t env, string_t table_name,
-                                      pair_t *key, size_t key_sz,
-                                      string_t action_name,
+bool synapse_queue_insert_table_entry_match_tag(synapse_config_t *config,
+                                                string_t table_name,
+                                                helper_ptr_t helper,
+                                                p4_info_table_ptr_t table_info,
+                                                p4_field_match_ptr_t *match) {
+
+  return true;
+}
+
+bool synapse_queue_insert_table_entry(env_ptr_t env, synapse_config_t *config,
+                                      string_t table_name, pair_t *key,
+                                      size_t key_sz, string_t action_name,
                                       pair_t *action_params,
                                       size_t action_params_sz, int32_t priority,
                                       uint64_t idle_timeout_ns) {
   helper_ptr_t helper;
   update_queue_ptr_t queue;
-
   if (!synapse_get_helper_from_environment(env, &helper) ||
       !synapse_get_queue_from_environment(env, &queue)) {
     return false;
@@ -340,55 +396,90 @@ bool synapse_queue_insert_table_entry(env_ptr_t env, string_t table_name,
       synapse_runtime_p4_info_action_preamble(action_info);
   uint32_t action_id = synapse_runtime_p4_preamble_id(action_info_preamble);
 
-  p4_field_match_ptr_t *match = malloc(key_sz * sizeof(p4_field_match_ptr_t));
-  for (size_t i = 0; i < key_sz; i++) {
-    pair_t entry = key[i];
+  p4_field_match_ptr_t *match = NULL;
+  if (key_sz > 0) {
+    if (NULL == (match = malloc((key_sz + 1) * sizeof(p4_field_match_ptr_t)))) {
+      return false;
+    }
 
-    p4_info_match_field_ptr_t match_info =
-        synapse_runtime_p4_info_match_field_new(helper, table_info,
-                                                (string_ptr_t)entry.left);
-    p4_info_match_field_match_type_t field_type =
-        synapse_runtime_p4_info_match_field_type(match_info);
-    uint32_t field_id = synapse_runtime_p4_info_match_field_id(match_info);
+    uint32_t *tag = NULL;
+    string_ptr_t tag_match = NULL;
+    if (NULL == (tag = synapse_runtime_config_get_tag_by_table_name(
+                     config, table_name, &tag_match))) {
+      SYNAPSE_ERROR("Could not locate tag");
+      return false;
+    }
 
-    switch (field_type) {
-      case MatchField_Exact: {
-        string_ptr_t value = entry.right;
+    p4_info_match_field_ptr_t tag_match_info =
+        synapse_runtime_p4_info_match_field_new(helper, table_info, tag_match);
+    uint32_t tag_match_field_id =
+        synapse_runtime_p4_info_match_field_id(tag_match_info);
 
-        match[i] = synapse_runtime_p4_field_match_new(
-            helper, field_id, FieldMatch_Exact,
-            synapse_runtime_p4_field_match_exact_new(helper, value));
+    string_ptr_t range_low = synapse_encode_p4_uint32(++*tag);
+    config->tags_updated = true;
+    string_ptr_t range_high = synapse_encode_p4_uint32(UINT32_MAX);
 
-      } break;
+    p4_field_match_range_ptr_t range =
+        synapse_runtime_p4_field_match_range_new(helper, range_low, range_high);
 
-      case MatchField_Range: {
-        pair_ptr_t range = entry.right;
+    match[0] = synapse_runtime_p4_field_match_new(helper, tag_match_field_id,
+                                                  FieldMatch_Range, range);
 
-        match[i] = synapse_runtime_p4_field_match_new(
-            helper, field_id, FieldMatch_Range,
-            synapse_runtime_p4_field_match_range_new(helper, range->left,
-                                                     range->right));
+    for (size_t i = 1; i < key_sz + 1; i++) {
+      pair_t entry = key[i - 1];
 
-      } break;
+      p4_info_match_field_ptr_t match_info =
+          synapse_runtime_p4_info_match_field_new(helper, table_info,
+                                                  (string_ptr_t)entry.left);
+      p4_info_match_field_match_type_t field_type =
+          synapse_runtime_p4_info_match_field_type(match_info);
+      uint32_t field_id = synapse_runtime_p4_info_match_field_id(match_info);
 
-      default:
-        SYNAPSE_ERROR("Unsupported match field type");
-        return false;
+      switch (field_type) {
+        case MatchField_Exact: {
+          string_ptr_t value = entry.right;
+
+          match[i] = synapse_runtime_p4_field_match_new(
+              helper, field_id, FieldMatch_Exact,
+              synapse_runtime_p4_field_match_exact_new(helper, value));
+
+        } break;
+
+        case MatchField_Range: {
+          pair_ptr_t range = entry.right;
+
+          match[i] = synapse_runtime_p4_field_match_new(
+              helper, field_id, FieldMatch_Range,
+              synapse_runtime_p4_field_match_range_new(helper, range->left,
+                                                       range->right));
+
+        } break;
+
+        default:
+          SYNAPSE_ERROR("Unsupported match field type");
+          return false;
+      }
     }
   }
 
-  p4_action_param_ptr_t *params =
-      malloc(action_params_sz * sizeof(p4_action_param_ptr_t));
-  for (size_t i = 0; i < action_params_sz; i++) {
-    pair_t entry = action_params[i];
+  p4_action_param_ptr_t *params = NULL;
+  if (action_params_sz > 0) {
+    if (NULL ==
+        (params = malloc(action_params_sz * sizeof(p4_action_param_ptr_t)))) {
+      return false;
+    }
 
-    p4_info_action_param_ptr_t param_info =
-        synapse_runtime_p4_info_action_param_new(helper, action_info,
-                                                 entry.left);
-    uint32_t param_id = synapse_runtime_p4_info_action_param_id(param_info);
+    for (size_t i = 0; i < action_params_sz; i++) {
+      pair_t entry = action_params[i];
 
-    params[i] =
-        synapse_runtime_p4_action_param_new(helper, param_id, entry.right);
+      p4_info_action_param_ptr_t param_info =
+          synapse_runtime_p4_info_action_param_new(helper, action_info,
+                                                   entry.left);
+      uint32_t param_id = synapse_runtime_p4_info_action_param_id(param_info);
+
+      params[i] =
+          synapse_runtime_p4_action_param_new(helper, param_id, entry.right);
+    }
   }
 
   return synapse_runtime_update_queue_queue(
@@ -398,7 +489,7 @@ bool synapse_queue_insert_table_entry(env_ptr_t env, string_t table_name,
           synapse_runtime_p4_entity_new(
               helper, Entity_TableEntry,
               synapse_runtime_p4_table_entry_new(
-                  helper, table_id, match, key_sz,
+                  helper, table_id, match, key_sz + 1,
                   synapse_runtime_p4_table_action_new(
                       helper, synapse_runtime_p4_action_new(
                                   helper, action_id, params, action_params_sz)),

@@ -565,7 +565,10 @@ static int nf_init_device(uint16_t device, struct rte_mempool *mbuf_pool) {
 
 bool synapse_runtime_handle_pre_configure(env_ptr_t env) {
   // Get a valid configuration for the runtime (i.e. devices, and tags)
-  if (!synapse_runtime_config(&synapse_config)) {
+  synapse_runtime_config_clear(&synapse_config);
+  if (!synapse_runtime_config(&synapse_config) ||
+      NULL == (synapse_config.tags =
+                   malloc(synapse_config.tags_sz * sizeof(uint32_t)))) {
     SYNAPSE_DEBUG("Failed to configure the runtime");
     return false;
   }
@@ -577,30 +580,13 @@ bool synapse_runtime_handle_pre_configure(env_ptr_t env) {
   }
 
   synapse_runtime_pkt_out_clear(&synapse_pkt_out);
-  // Initialize all tags with 0
   for (size_t i = 0; i < synapse_config.tags_sz; i++) {
     if (!synapse_pkt_out_set_tag(&synapse_pkt_out, synapse_config.tags_names[i],
-                                 synapse_config.tags[i])) {
+                                 synapse_config.tags[i] = 0)) {
       SYNAPSE_ERROR("Could not set tag value");
       return false;
     }
   }
-
-  // FIXME Remove lines in-between
-  string_t table_name = {.str = "SyNAPSE_Ingress.example_tbl", .sz = 27};
-  string_t match_name = {.str = "hdr.ethernet.dstAddr", .sz = 20};
-  string_t action_name = {.str = "SyNAPSE_Ingress.forward_act", .sz = 27};
-  string_t action_param = {.str = "port", .sz = 4};
-
-  mac_addr_ptr_t addr = synapse_runtime_wrappers_mac_address_new("12:34:56:78:9a:bc");
-  port_ptr_t port = synapse_runtime_wrappers_port_new(10);
-
-  pair_t key[1] = {{.left = &match_name, .right = addr->raw}};
-
-  pair_t action_params[1] = {{.left = &action_param, .right = port->raw}};
-
-  assert(synapse_queue_insert_table_entry(env, table_name, key, 1, action_name, action_params, 1, 0, 0));
-  // FIXME Remove lines in-between
 
   // Push modification to the stack
   return synapse_pkt_out_flush(env, &synapse_pkt_out) && nf_init();
@@ -617,7 +603,6 @@ bool synapse_runtime_handle_packet_received(env_ptr_t env) {
     SYNAPSE_ERROR("The environment stack is corrupted");
     return false;
   }
-  synapse_runtime_pkt_in_print(&synapse_pkt_in);
 
   // Get the source device from the metadata
   static string_t src_device_str = { .str = "src_device", .sz = 10 };
@@ -662,7 +647,19 @@ bool synapse_runtime_handle_packet_received(env_ptr_t env) {
     return false;
   }
 
-  synapse_runtime_pkt_out_print(&synapse_pkt_out);
+  if (synapse_config.tags_updated) {
+    SYNAPSE_DEBUG("Updating tags");
+    synapse_config.tags_updated = false;
+
+    for (size_t i = 0; i < synapse_config.tags_sz; i++) {
+      if (!synapse_pkt_out_set_tag(&synapse_pkt_out,
+                                   synapse_config.tags_names[i],
+                                   synapse_config.tags[i])) {
+        return false;
+      }
+    }
+  }
+
   return synapse_pkt_out_flush(env, &synapse_pkt_out);
 }
 
