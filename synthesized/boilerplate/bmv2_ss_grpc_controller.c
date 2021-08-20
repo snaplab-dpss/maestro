@@ -187,10 +187,6 @@ uint32_t packet_get_unread_length(void *p) {
 
 #include "synthesized/synapse-runtime/util.h"
 #include "synapse/runtime/wrapper/connector.hpp"
-#include "synapse/runtime/wrapper/p4runtime/stream/handler/environment.hpp"
-
-#define SYNAPSE_MCAST_GROUP_ID 1
-#define SYNAPSE_MCAST_GROUP_SIZE 2
 
 /**********************************************
  *
@@ -568,58 +564,32 @@ static int nf_init_device(uint16_t device, struct rte_mempool *mbuf_pool) {
 }
 
 bool synapse_runtime_handle_pre_configure(env_ptr_t env) {
-  stack_ptr_t stack = NULL;
-  helper_ptr_t helper = NULL;
-
-  if (!synapse_get_stack_from_environment(env, &stack, 0) ||
-      !synapse_get_helper_from_environment(env, &helper)) {
-    SYNAPSE_ERROR("The environment is corrupted");
+  // Get a valid configuration for the runtime (i.e. devices, and tags)
+  synapse_runtime_config_clear(&synapse_config);
+  if (!synapse_runtime_config(&synapse_config) ||
+      NULL == (synapse_config.tags =
+                   malloc(synapse_config.tags_sz * sizeof(uint32_t)))) {
+    SYNAPSE_DEBUG("Failed to configure the runtime");
     return false;
   }
 
-  p4_replica_ptr_t *replicas =
-      malloc(SYNAPSE_MCAST_GROUP_SIZE * sizeof(p4_replica_ptr_t));
-  for (size_t i = 0; i < SYNAPSE_MCAST_GROUP_SIZE; i++) {
-    replicas[i] =
-        synapse_runtime_p4_replica_new(helper, (uint32_t)i, (uint32_t)i);
-  }
-
-  p4_multicast_group_entry_ptr_t mcast_entry =
-      synapse_runtime_p4_multicast_group_entry_new(
-          helper, SYNAPSE_MCAST_GROUP_ID, replicas, SYNAPSE_MCAST_GROUP_SIZE);
-
-  p4_packet_replication_engine_entry_ptr_t pre_entry =
-      synapse_runtime_p4_packet_replication_engine_entry_new(helper,
-                                                             mcast_entry);
-
-  p4_entity_ptr_t entity = synapse_runtime_p4_entity_new(
-      helper, Entity_PacketReplicationEngineEntry, pre_entry);
-
-  p4_update_ptr_t update =
-      synapse_runtime_p4_update_new(helper, Update_Insert, entity);
-
-  // Push tags here
-  pair_ptr_t *tags = NULL;
-  if (NULL == (tags = synapse_alloc_tags(stack, 2))) {
-    SYNAPSE_ERROR("Could not allocate space for the tags");
+  // Install singleton multicast group (the request is queued)
+  if (!synapse_queue_configure_multicast_group(env, &synapse_config)) {
+    SYNAPSE_ERROR("Could not queue multicast group");
     return false;
   }
 
-  static string_t map_get_35_tag_str = { .str = "map_get_35_tag", .sz = 14 };
-  if (NULL == (tags = synapse_add_tag(tags, map_get_35_tag_str, 0))) {
-    SYNAPSE_ERROR("Could not add tag `map_get_35_tag`");
-    return false;
+  synapse_runtime_pkt_out_clear(&synapse_pkt_out);
+  for (size_t i = 0; i < synapse_config.tags_sz; i++) {
+    if (!synapse_pkt_out_set_tag(&synapse_pkt_out, synapse_config.tags_names[i],
+                                 synapse_config.tags[i] = 0)) {
+      SYNAPSE_ERROR("Could not set tag value");
+      return false;
+    }
   }
 
-  static string_t map_get_53_tag_str = { .str = "map_get_53_tag", .sz = 14 };
-  if (NULL == (tags = synapse_add_tag(tags, map_get_53_tag_str, 0))) {
-    SYNAPSE_ERROR("Could not add tag `map_get_53_tag`");
-    return false;
-  }
-
-  return nf_init() &&
-         synapse_runtime_update_buffer_buffer(
-             synapse_runtime_environment_update_buffer(env), update);
+  // Push modification to the stack
+  return synapse_pkt_out_flush(env, &synapse_pkt_out) && nf_init();
 }
 
 bool synapse_runtime_handle_packet_received(env_ptr_t env) {
@@ -629,10 +599,7 @@ bool synapse_runtime_handle_packet_received(env_ptr_t env) {
     return false;
   }
 
-  string_ptr_t payload = NULL;
-  meta_in = NULL;
-  meta_in_size = NULL;
-  if (!synapse_extract_from_stack(stack, &payload, &meta_in, &meta_in_size)) {
+  if (!synapse_populate_pkt_in_from_stack(stack, &synapse_pkt_in)) {
     SYNAPSE_ERROR("The environment stack is corrupted");
     return false;
   }
@@ -640,42 +607,28 @@ bool synapse_runtime_handle_packet_received(env_ptr_t env) {
   // Get the source device from the metadata
   static string_t src_device_str = { .str = "src_device", .sz = 10 };
   string_ptr_t src_device_encoded = NULL;
-  if (!synapse_get_packet_in_metadata(meta_in, meta_in_size, src_device_str,
-                                      &src_device_encoded)) {
+  if (!synapse_get_pkt_in_metadata(&synapse_pkt_in, src_device_str,
+                                   &src_device_encoded)) {
     SYNAPSE_ERROR("Incoming packets must contain the ingress port");
     return false;
   }
 
   uint16_t src_device = synapse_decode_port(src_device_encoded);
-  uint8_t *buffer = (uint8_t *)payload->str;
-  uint16_t packet_length = payload->sz;
+  uint8_t *buffer = (uint8_t *)synapse_pkt_in.payload->str;
+  uint16_t packet_length = synapse_pkt_in.payload->sz;
   vigor_time_t now = current_time();
 
-  g_env = env;
   int dst_device = nf_process(src_device, &buffer, packet_length, now, NULL);
-  puts("out");
 
-  meta_in = NULL;
-  meta_in_size = NULL;
-  g_env = NULL;
-
-  synapse_runtime_wrappers_stack_clear(stack);
-
-  // Push metadata here
-  pair_ptr_t *meta_out = NULL;
-  if (NULL == (meta_out = synapse_alloc_meta(stack, 2))) {
-    SYNAPSE_ERROR("Could not allocate space for the metadata");
-    return false;
-  }
-
-  if (NULL == (meta_out = synapse_add_meta(meta_out, src_device_str,
-                                           *src_device_encoded))) {
+  if (!synapse_pkt_out_set_meta(&synapse_pkt_out, src_device_str,
+                                *src_device_encoded)) {
     SYNAPSE_ERROR("Could not add metadata `src_device`");
     return false;
   }
 
   string_ptr_t dst_device_encoded;
   if (FLOOD_FRAME == dst_device) {
+    SYNAPSE_INFO("Flooding");
     dst_device_encoded = synapse_encode_port(SYNAPSE_BROADCAST_PORT);
 
   } else {
@@ -683,19 +636,31 @@ bool synapse_runtime_handle_packet_received(env_ptr_t env) {
   }
 
   static string_t dst_device_str = { .str = "dst_device", .sz = 10 };
-  if (NULL == (meta_out = synapse_add_meta(meta_out, dst_device_str,
-                                           *dst_device_encoded))) {
+  if (!synapse_pkt_out_set_meta(&synapse_pkt_out, dst_device_str,
+                                *dst_device_encoded)) {
     SYNAPSE_ERROR("Could not add metadata `dst_device`");
     return false;
   }
 
-  if (NULL == synapse_runtime_wrappers_stack_push(stack, payload)) {
+  if (!synapse_pkt_out_set_payload(&synapse_pkt_out, synapse_pkt_in.payload)) {
     SYNAPSE_ERROR("Could not add payload");
     return false;
   }
 
-  assert(3 == synapse_runtime_wrappers_stack_size(stack));
-  return true;
+  if (synapse_config.tags_updated) {
+    SYNAPSE_DEBUG("Updating tags");
+    synapse_config.tags_updated = false;
+
+    for (size_t i = 0; i < synapse_config.tags_sz; i++) {
+      if (!synapse_pkt_out_set_tag(&synapse_pkt_out,
+                                   synapse_config.tags_names[i],
+                                   synapse_config.tags[i])) {
+        return false;
+      }
+    }
+  }
+
+  return synapse_pkt_out_flush(env, &synapse_pkt_out);
 }
 
 bool synapse_runtime_handle_idle_timeout_notification_received(env_ptr_t env) {
