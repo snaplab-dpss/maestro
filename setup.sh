@@ -412,8 +412,8 @@ opam install lablgtk -y
 if [ ! -e "$BUILDDIR/verifast" ]; then
   git clone --depth 1 https://github.com/vigor-nf/verifast "$BUILDDIR/verifast"
   pushd "$BUILDDIR/verifast/src"
-    make verifast # should be just "make",
-                  # but the verifast checks fail due to a non auto lemma
+    make verifast || true # should be just "make",
+                          # but the verifast checks fail due to a non auto lemma
     echo 'PATH='"$BUILDDIR/verifast/bin"':$PATH' >> "$PATHSFILE"
     . "$PATHSFILE"
   popd
