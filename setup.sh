@@ -3,7 +3,7 @@
 #     or no argument to install everything
 
 # Bash "strict mode"
-set -euo pipefail
+set -xeuo pipefail
 
 
 # =====
