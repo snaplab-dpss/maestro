@@ -3,7 +3,7 @@
 #     or no argument to install everything
 
 # Bash "strict mode"
-set -xeuo pipefail
+set -euo pipefail
 
 
 # =====
@@ -406,14 +406,19 @@ sudo apt-get install -y --no-install-recommends \
                      liblablgtk2-ocaml-dev liblablgtksourceview2-ocaml-dev
 # Not mentioned by VeriFast's readme, required anyway
 opam install ocamlfind camlp4 -y
+
+# For some reason this, was breaking our vagranfile provision.
+# We removed it, and couldn't see any visible repercussions.
+#           |
+#           V
 # VFIDE dependency
-opam install lablgtk -y
+#opam install lablgtk -y
 
 if [ ! -e "$BUILDDIR/verifast" ]; then
   git clone --depth 1 https://github.com/vigor-nf/verifast "$BUILDDIR/verifast"
   pushd "$BUILDDIR/verifast/src"
-    make verifast || true # should be just "make",
-                          # but the verifast checks fail due to a non auto lemma
+    make verifast # should be just "make",
+                  # but the verifast checks fail due to a non auto lemma
     echo 'PATH='"$BUILDDIR/verifast/bin"':$PATH' >> "$PATHSFILE"
     . "$PATHSFILE"
   popd
