@@ -407,7 +407,7 @@ sudo apt-get install -y --no-install-recommends \
 # Not mentioned by VeriFast's readme, required anyway
 opam install ocamlfind camlp4 -y
 
-# For some reason this, was breaking our vagranfile provision.
+# For some reason this was breaking our vagranfile provision.
 # We removed it, and couldn't see any visible repercussions.
 #           |
 #           V
