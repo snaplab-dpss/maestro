@@ -23,6 +23,7 @@ fullpage.sty
 *.bin
 *.d
 *.cmd
+*.tmp
 build/
 TAGS
 .vagrant
