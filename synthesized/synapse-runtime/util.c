@@ -282,9 +282,9 @@ bool synapse_runtime_pkt_out_update_tags_if_needed() {
 
 // Environment manipulation
 
-bool synapse_environment_flush_pkt_out(env_ptr_t env) {
+bool synapse_environment_flush_pkt_out() {
   stack_ptr_t stack;
-  if (!synapse_environment_get_stack(env, &stack, 0)) {
+  if (!synapse_environment_get_stack(&stack, 0)) {
     SYNAPSE_ERROR("The environment is corrupted");
     return false;
   }
@@ -318,29 +318,29 @@ bool synapse_environment_flush_pkt_out(env_ptr_t env) {
   return true;
 }
 
-bool synapse_environment_get_helper(env_ptr_t env, helper_ptr_t *helper) {
-  return NULL != helper && NULL != (*helper = env->helper);
+bool synapse_environment_get_helper(helper_ptr_t *helper) {
+  return NULL != helper && NULL != (*helper = synapse_env->helper);
 }
 
-bool synapse_environment_get_stack(env_ptr_t env, stack_ptr_t *stack,
+bool synapse_environment_get_stack(stack_ptr_t *stack,
                                    size_t expected_stack_sz) {
-  return NULL != env && NULL != (*stack = env->stack) &&
+  return NULL != synapse_env && NULL != (*stack = synapse_env->stack) &&
          expected_stack_sz == synapse_runtime_wrappers_stack_size(*stack);
 }
 
-bool synapse_environment_get_queue(env_ptr_t env, update_queue_ptr_t *queue) {
-  return NULL != env && NULL != (*queue = env->queue);
+bool synapse_environment_get_queue(update_queue_ptr_t *queue) {
+  return NULL != synapse_env && NULL != (*queue = synapse_env->queue);
 }
 
-bool synapse_environment_queue_configure_multicast_group(env_ptr_t env) {
+bool synapse_environment_queue_configure_multicast_group() {
   if (0 == synapse_config.devices_sz) {
     return true;
   }
 
   helper_ptr_t helper = NULL;
   update_queue_ptr_t queue = NULL;
-  if (!synapse_environment_get_helper(env, &helper) ||
-      !synapse_environment_get_queue(env, &queue)) {
+  if (!synapse_environment_get_helper(&helper) ||
+      !synapse_environment_get_queue(&queue)) {
     return false;
   }
 
@@ -371,14 +371,14 @@ bool synapse_environment_queue_configure_multicast_group(env_ptr_t env) {
 }
 
 bool synapse_environment_queue_insert_table_entry(
-    env_ptr_t env, string_t table_name, pair_t *key, size_t key_sz,
-    string_t action_name, pair_t *action_params, size_t action_params_sz,
-    int32_t priority, uint64_t idle_timeout_ns) {
+    string_t table_name, pair_t *key, size_t key_sz, string_t action_name,
+    pair_t *action_params, size_t action_params_sz, int32_t priority,
+    uint64_t idle_timeout_ns) {
 
   helper_ptr_t helper;
   update_queue_ptr_t queue;
-  if (!synapse_environment_get_helper(env, &helper) ||
-      !synapse_environment_get_queue(env, &queue)) {
+  if (!synapse_environment_get_helper(&helper) ||
+      !synapse_environment_get_queue(&queue)) {
     return false;
   }
 

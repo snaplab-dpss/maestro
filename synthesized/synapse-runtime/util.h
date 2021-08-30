@@ -130,6 +130,7 @@ bool synapse_runtime_pkt_out_update_tags_if_needed();
 synapse_config_t synapse_config;
 synapse_pkt_in_t synapse_pkt_in;
 synapse_pkt_out_t synapse_pkt_out;
+env_ptr_t synapse_env;
 
 /**
  * These functions manipulate the handler environment either by
@@ -138,21 +139,21 @@ synapse_pkt_out_t synapse_pkt_out;
  * 2) updating its contents (i.e. flush elements to the environment stack).
  */
 
-bool synapse_environment_flush_pkt_out(env_ptr_t env);
+bool synapse_environment_flush_pkt_out();
 
-bool synapse_environment_get_helper(env_ptr_t env, helper_ptr_t *helper);
+bool synapse_environment_get_helper(helper_ptr_t *helper);
 
-bool synapse_environment_get_stack(env_ptr_t env, stack_ptr_t *stack,
+bool synapse_environment_get_stack(stack_ptr_t *stack,
                                    size_t expected_stack_sz);
 
-bool synapse_environment_get_queue(env_ptr_t env, update_queue_ptr_t *queue);
+bool synapse_environment_get_queue(update_queue_ptr_t *queue);
 
-bool synapse_environment_queue_configure_multicast_group(env_ptr_t env);
+bool synapse_environment_queue_configure_multicast_group();
 
 bool synapse_environment_queue_insert_table_entry(
-    env_ptr_t env, string_t table_name, pair_t *key, size_t key_sz,
-    string_t action_name, pair_t *action_params, size_t action_params_sz,
-    int32_t priority, uint64_t idle_timeout_ns);
+    string_t table_name, pair_t *key, size_t key_sz, string_t action_name,
+    pair_t *action_params, size_t action_params_sz, int32_t priority,
+    uint64_t idle_timeout_ns);
 
 // Encoders
 

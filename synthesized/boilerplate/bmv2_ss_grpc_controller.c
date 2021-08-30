@@ -564,6 +564,7 @@ static int nf_init_device(uint16_t device, struct rte_mempool *mbuf_pool) {
 }
 
 bool synapse_runtime_handle_pre_configure(env_ptr_t env) {
+  synapse_env = env;
   synapse_runtime_config_reset();
 
   // Get a valid configuration for the runtime (i.e. devices, and bmv2 tables)
@@ -573,7 +574,7 @@ bool synapse_runtime_handle_pre_configure(env_ptr_t env) {
   }
 
   // Install singleton multicast group (the request is queued)
-  if (!synapse_environment_queue_configure_multicast_group(env)) {
+  if (!synapse_environment_queue_configure_multicast_group()) {
     SYNAPSE_ERROR("Could not queue multicast group");
     return false;
   }
@@ -584,44 +585,13 @@ bool synapse_runtime_handle_pre_configure(env_ptr_t env) {
     synapse_config.bmv2_tables[i].tag = 0;
   }
 
-  // FIXME Remove lines inbetween
-  string_t table_name = { .str = "SyNAPSE_Ingress.map_get_35", .sz = 26 };
-  string_t action_name = { .str = "NoAction", .sz = 8 };
-
-  string_t k0 = { .str = "key_byte_0", .sz = 10 };
-  string_t k1 = { .str = "key_byte_1", .sz = 10 };
-  string_t k2 = { .str = "key_byte_2", .sz = 10 };
-  string_t k3 = { .str = "key_byte_3", .sz = 10 };
-  string_t k4 = { .str = "key_byte_4", .sz = 10 };
-  string_t k5 = { .str = "key_byte_5", .sz = 10 };
-  string_t k6 = { .str = "key_byte_6", .sz = 10 };
-  string_t k7 = { .str = "key_byte_7", .sz = 10 };
-
-  size_t key_sz = 8;
-  pair_t key[8] = { { .left = &k0, .right = synapse_encode_p4_uint32(10) },
-                    { .left = &k1, .right = synapse_encode_p4_uint32(10) },
-                    { .left = &k2, .right = synapse_encode_p4_uint32(10) },
-                    { .left = &k3, .right = synapse_encode_p4_uint32(10) },
-                    { .left = &k4, .right = synapse_encode_p4_uint32(10) },
-                    { .left = &k5, .right = synapse_encode_p4_uint32(10) },
-                    { .left = &k6, .right = synapse_encode_p4_uint32(10) },
-                    { .left = &k7, .right = synapse_encode_p4_uint32(10) } };
-
-  if (!synapse_environment_queue_insert_table_entry(
-          env, table_name, key, key_sz, action_name, NULL, 0, 1, 1000000000)) {
-    SYNAPSE_ERROR("Could not queue insertion");
-    return false;
-  }
-
-  // FIXME Remove lines inbetween
-
   return synapse_runtime_pkt_out_update_tags_if_needed() &&
-         synapse_environment_flush_pkt_out(env) && nf_init();
+         synapse_environment_flush_pkt_out() && nf_init();
 }
 
-bool synapse_runtime_handle_packet_received(env_ptr_t env) {
+bool synapse_runtime_handle_packet_received() {
   stack_ptr_t stack = NULL;
-  if (!synapse_environment_get_stack(env, &stack, 3)) {
+  if (!synapse_environment_get_stack(&stack, 3)) {
     SYNAPSE_ERROR("The environment is corrupted");
     return false;
   }
@@ -673,12 +643,12 @@ bool synapse_runtime_handle_packet_received(env_ptr_t env) {
   }
 
   return synapse_runtime_pkt_out_update_tags_if_needed() &&
-         synapse_environment_flush_pkt_out(env);
+         synapse_environment_flush_pkt_out();
 }
 
-bool synapse_runtime_handle_idle_timeout_notification_received(env_ptr_t env) {
+bool synapse_runtime_handle_idle_timeout_notification_received() {
   stack_ptr_t stack = NULL;
-  if (!synapse_environment_get_stack(env, &stack, 2)) {
+  if (!synapse_environment_get_stack(&stack, 2)) {
     SYNAPSE_ERROR("The environment is corrupted");
     return false;
   }
