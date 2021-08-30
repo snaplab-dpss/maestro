@@ -14,18 +14,63 @@
 
 #define SYNAPSE_MCAST_GROUP_ID 1
 
-// Runtime configuration
+/**
+ * This structure provides the runtime with valuable information:
+ * - network topology (i.e. the identifiers of network devices, used to
+ * configure broadcasts issued by the dataplane);
+ * - existing BMv2 tables (their name identifiers, tag value, and how they are
+ * mapped onto one or more libvig objects).
+ */
+
+typedef enum { LIBVIG_VECTOR, LIBVIG_DCHAIN, LIBVIG_MAP } libvig_obj_type_t;
+
+typedef struct {
+  void *ptr;
+  libvig_obj_type_t type;
+
+} libvig_obj_t;
+
+typedef struct {
+  string_t name;
+  uint32_t tag;
+
+  libvig_obj_t *libvig_objs;
+  size_t libvig_objs_sz;
+
+} synapse_bmv2_table_t;
 
 typedef struct {
   uint32_t *devices;
   size_t devices_sz;
 
-  string_t *tags_names;
-  uint32_t *tags;
-  size_t tags_sz;
-  bool tags_updated;
+  synapse_bmv2_table_t *bmv2_tables;
+  size_t bmv2_tables_sz;
+  bool bmv2_tables_modified;
 
 } synapse_config_t;
+
+bool synapse_runtime_config(synapse_config_t *config);
+
+// FIXME Replace `void **` with `struct ? **`
+bool synapse_runtime_config_get_libvig_objs_by_table_name(string_t table_name,
+                                                          void **vector,
+                                                          void **dchain,
+                                                          void **map);
+
+// Additionally, `field_match_name` is set to the appropriate key field
+bool synapse_runtime_config_get_tag_by_table_name(
+    string_t table_name, uint32_t **tag, string_ptr_t *field_match_name);
+
+void synapse_runtime_config_print();
+
+void synapse_runtime_config_reset();
+
+/**
+ * Wrapper used to represent packets arriving at the controller:
+ * - payload is the string representation of the packet's payload;
+ * - meta(_sz) is an array of <meta name, meta value> pairs populated by the
+ * dataplane.
+ */
 
 typedef struct {
   string_ptr_t payload;
@@ -34,6 +79,25 @@ typedef struct {
   size_t meta_sz;
 
 } synapse_pkt_in_t;
+
+void synapse_runtime_pkt_in_print();
+
+void synapse_runtime_pkt_in_reset();
+
+bool synapse_runtime_pkt_in_get_meta_by_name(string_t meta_name,
+                                             string_ptr_t *value);
+
+bool synapse_runtime_pkt_in_populate_from_stack(stack_ptr_t stack);
+
+/**
+ * Wrapper used to represent packets leaving the controller:
+ * - payload is the string representation of the packet's payload (usually left
+ * unmodified by the controller);
+ * - meta(_sz) is an array of <meta name, meta value> pairs populated by the
+ * controller;
+ * - tags(_sz) is an array of <tag name, new tag value> populated by the
+ * controller.
+ */
 
 typedef struct {
   string_ptr_t payload;
@@ -46,57 +110,49 @@ typedef struct {
 
 } synapse_pkt_out_t;
 
-bool synapse_runtime_config(synapse_config_t *config);
+void synapse_runtime_pkt_out_print();
 
-void synapse_runtime_config_clear(synapse_config_t *config);
+void synapse_runtime_pkt_out_reset();
 
-uint32_t *
-synapse_runtime_config_get_tag_by_table_name(synapse_config_t *config,
-                                             string_t table_name,
-                                             string_ptr_t *field_match_name);
+bool synapse_runtime_pkt_out_set_meta(string_t name, string_t value);
 
-void synapse_runtime_config_print(synapse_config_t *config);
+bool synapse_runtime_pkt_out_set_payload(string_ptr_t payload);
 
-void synapse_runtime_pkt_in_clear(synapse_pkt_in_t *pkt_in);
+bool synapse_runtime_pkt_out_set_tag(string_t table_name, uint32_t value);
 
-void synapse_runtime_pkt_in_print(synapse_pkt_in_t *pkt_in);
+bool synapse_runtime_pkt_out_update_tags_if_needed();
 
-void synapse_runtime_pkt_out_clear(synapse_pkt_out_t *pkt_out);
+/**
+ * For easy of access, and memory management purposes, keep exactly one instance
+ * of each runtime structure.
+ */
 
-void synapse_runtime_pkt_out_print(synapse_pkt_out_t *pkt_out);
+synapse_config_t synapse_config;
+synapse_pkt_in_t synapse_pkt_in;
+synapse_pkt_out_t synapse_pkt_out;
 
-static synapse_config_t synapse_config;
-static synapse_pkt_in_t synapse_pkt_in;
-static synapse_pkt_out_t synapse_pkt_out;
+/**
+ * These functions manipulate the handler environment either by
+ * 1) retrieving elements (such as the P4 helper, the stack, or the updates
+ * queue) - additional checks are sometimes performed after retrieval; OR
+ * 2) updating its contents (i.e. flush elements to the environment stack).
+ */
 
-// Environment manipulation
+bool synapse_environment_flush_pkt_out(env_ptr_t env);
 
-bool synapse_get_helper_from_environment(env_ptr_t env, helper_ptr_t *helper);
+bool synapse_environment_get_helper(env_ptr_t env, helper_ptr_t *helper);
 
-bool synapse_get_stack_from_environment(env_ptr_t env, stack_ptr_t *stack,
-                                        size_t expected_stack_sz);
+bool synapse_environment_get_stack(env_ptr_t env, stack_ptr_t *stack,
+                                   size_t expected_stack_sz);
 
-bool synapse_get_queue_from_environment(env_ptr_t env,
-                                        update_queue_ptr_t *queue);
+bool synapse_environment_get_queue(env_ptr_t env, update_queue_ptr_t *queue);
 
-// Stack manipulation
+bool synapse_environment_queue_configure_multicast_group(env_ptr_t env);
 
-bool synapse_populate_pkt_in_from_stack(stack_ptr_t stack,
-                                        synapse_pkt_in_t *pkt_in);
-
-bool synapse_get_pkt_in_metadata(synapse_pkt_in_t *pkt_in, string_t meta_name,
-                                 string_ptr_t *result);
-
-bool synapse_pkt_out_set_payload(synapse_pkt_out_t *pkt_out,
-                                 string_ptr_t payload);
-
-bool synapse_pkt_out_set_meta(synapse_pkt_out_t *pkt_out, string_t name,
-                              string_t value);
-
-bool synapse_pkt_out_set_tag(synapse_pkt_out_t *pkt_out, string_t name,
-                             uint32_t value);
-
-bool synapse_pkt_out_flush(env_ptr_t env, synapse_pkt_out_t *pkt_out);
+bool synapse_environment_queue_insert_table_entry(
+    env_ptr_t env, string_t table_name, pair_t *key, size_t key_sz,
+    string_t action_name, pair_t *action_params, size_t action_params_sz,
+    int32_t priority, uint64_t idle_timeout_ns);
 
 // Encoders
 
@@ -113,21 +169,5 @@ string_ptr_t synapse_decode_mac_address(string_ptr_t encoded);
 uint32_t synapse_decode_p4_uint32(string_ptr_t encoded);
 
 uint16_t synapse_decode_port(string_ptr_t encoded);
-
-// Helpers
-
-bool synapse_queue_configure_multicast_group(env_ptr_t env,
-                                             synapse_config_t *config);
-
-bool synapse_queue_insert_table_entry(env_ptr_t env, synapse_config_t *config,
-                                      string_t table_name, pair_t *key,
-                                      size_t key_sz, string_t action_name,
-                                      pair_t *action_params,
-                                      size_t action_params_sz, int32_t priority,
-                                      uint64_t idle_timeout_ns);
-
-bool synapse_queue_modify_table_entry(env_ptr_t env);
-
-bool synapse_queue_delete_table_entry(env_ptr_t env);
 
 #endif // VIGOR_SYNAPSE_RUNTIME_UTIL_H_

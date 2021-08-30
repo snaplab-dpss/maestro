@@ -16,9 +16,7 @@
   }                                                                            \
   puts("")
 
-#define SYNAPSE_MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
-
-// Runtime configuration
+// Debuggers
 
 void print_meta(string_ptr_t name, string_ptr_t value) {
   printf("<%.*s, \"", (int)name->sz, name->str);
@@ -41,172 +39,123 @@ void print_tag_entry(pair_ptr_t entry) {
             ((p4_uint32_ptr_t)entry->right)->value);
 }
 
-void synapse_runtime_config_clear(synapse_config_t *config) {
-  config->devices = NULL;
-  config->devices_sz = 0;
-  config->tags_names = NULL;
-  config->tags_sz = 0;
-  config->tags = NULL;
-  config->tags_updated = false;
-}
+// Runtime configuration
 
-void synapse_runtime_config_print(synapse_config_t *config) {
-  puts(":: Configuration summary ::\n");
+// FIXME Replace `void **` with `struct ? **`
+bool synapse_runtime_config_get_libvig_objs_by_table_name(string_t table_name,
+                                                          void **vector,
+                                                          void **dchain,
+                                                          void **map) {
+  for (size_t i = 0; i < synapse_config.bmv2_tables_sz; i++) {
+    synapse_bmv2_table_t table = synapse_config.bmv2_tables[i];
 
-  printf("Devices (%lu):\t", config->devices_sz);
-  for (size_t i = 0; i < config->devices_sz; i++) {
-    printf("%" SCNu32 "%s", config->devices[i],
-           i < config->devices_sz - 1 ? ", " : "");
+    if (synapse_runtime_wrappers_string_equals(&table_name, &(table.name))) {
+      for (size_t i = 0; i < table.libvig_objs_sz; i++) {
+        switch (table.libvig_objs[i].type) {
+          case LIBVIG_VECTOR: {
+            *vector = (struct Vector *)table.libvig_objs[i].ptr;
+          } break;
+
+          case LIBVIG_DCHAIN: {
+            *dchain = (struct DoubleChain *)table.libvig_objs[i].ptr;
+          } break;
+
+          case LIBVIG_MAP: {
+            *map = (struct Map *)table.libvig_objs[i].ptr;
+          } break;
+
+          default:
+            SYNAPSE_ERROR("Unknown libvig object");
+            return false;
+        }
+      }
+
+      return true;
+    }
   }
-  puts("");
 
-  if (config->tags_sz > 0) {
-    SYNAPSE_LOOP_START_TAGS(config->tags_sz)
-    print_tag(config->tags_names[i], config->tags[i]);
-    LOOP_END;
-  }
+  return false;
 }
 
-void synapse_runtime_pkt_in_clear(synapse_pkt_in_t *pkt_in) {
-  pkt_in->meta = NULL;
-  pkt_in->meta_sz = 0;
-  pkt_in->payload = NULL;
-}
-
-uint32_t *
-synapse_runtime_config_get_tag_by_table_name(synapse_config_t *config,
-                                             string_t table_name,
-                                             string_ptr_t *field_match_name) {
-  size_t alias_sz = table_name.sz - 16;
+bool synapse_runtime_config_get_tag_by_table_name(
+    string_t table_name, uint32_t **tag, string_ptr_t *field_match_name) {
+  size_t alias_sz = table_name.sz - 16; // Remove prefix `SyNAPSE_Ingress.`
   size_t field_sz = alias_sz + 5 /* meta. */ + 4 /* _tag */;
 
   char buffer[field_sz];
   strncpy(buffer, "meta.", 5);
   strncpy(buffer + 5, table_name.str + 16, alias_sz);
   strncpy(buffer + 5 + alias_sz, "_tag", 4);
+  *field_match_name = synapse_runtime_wrappers_string_new(buffer, field_sz);
 
-  if (NULL == (*field_match_name =
-                   synapse_runtime_wrappers_string_new(buffer, field_sz))) {
-    return NULL;
-  }
-
-  // Search the tag
-  string_t tag_name = { .str = buffer + 5, .sz = field_sz - 5 };
-  string_t tag_name_cmp;
-
-  for (size_t i = 0; i < config->tags_sz; i++) {
-    tag_name_cmp = config->tags_names[i];
-
-    if (0 == strncmp(tag_name_cmp.str, tag_name.str,
-                     SYNAPSE_MIN(tag_name_cmp.sz, tag_name.sz))) {
-      return &config->tags[i];
+  for (size_t i = 0; i < synapse_config.bmv2_tables_sz; i++) {
+    if (synapse_runtime_wrappers_string_equals(
+            &table_name, &(synapse_config.bmv2_tables[i].name))) {
+      *tag = &(synapse_config.bmv2_tables[i].tag);
+      return true;
     }
   }
 
-  return NULL;
+  return false;
 }
 
-void synapse_runtime_pkt_in_print(synapse_pkt_in_t *pkt_in) {
+void synapse_runtime_config_print(synapse_config_t *config) {
+  puts(":: Configuration summary ::\n");
+
+  printf("Devices (%lu):\t", synapse_config.devices_sz);
+  for (size_t i = 0; i < synapse_config.devices_sz; i++) {
+    printf("%" SCNu32 "%s", synapse_config.devices[i],
+           i < synapse_config.devices_sz - 1 ? ", " : "");
+  }
+  puts("");
+
+  printf("BMv2 tables (%lu):\n", synapse_config.bmv2_tables_sz);
+}
+
+void synapse_runtime_config_reset(synapse_config_t *config) {
+  synapse_config.devices = NULL;
+  synapse_config.devices_sz = 0;
+
+  synapse_config.bmv2_tables = NULL;
+  synapse_config.bmv2_tables_sz = 0;
+  synapse_config.bmv2_tables_modified = false;
+}
+
+// Runtime packet-in
+
+void synapse_runtime_pkt_in_print() {
   puts(":: Packet-in summary ::\n");
 
-  if (NULL != pkt_in->payload) {
-    printf("Payload (%lu B):\t\"", pkt_in->payload->sz);
-    for (size_t i = 0; i < pkt_in->payload->sz; i++) {
-      printf("\\0%02x", pkt_in->payload->str[i]);
+  if (NULL != synapse_pkt_in.payload) {
+    printf("Payload (%lu B):\t\"", synapse_pkt_in.payload->sz);
+    for (size_t i = 0; i < synapse_pkt_in.payload->sz; i++) {
+      printf("\\0%02x", synapse_pkt_in.payload->str[i]);
     }
     puts("\"");
   }
 
-  if (pkt_in->meta_sz > 0) {
-    SYNAPSE_LOOP_START_META(pkt_in->meta_sz)
-    print_meta_entry(pkt_in->meta[i]);
+  if (synapse_pkt_in.meta_sz > 0) {
+    SYNAPSE_LOOP_START_META(synapse_pkt_in.meta_sz)
+    print_meta_entry(synapse_pkt_in.meta[i]);
     LOOP_END;
   }
 }
 
-void synapse_runtime_pkt_out_clear(synapse_pkt_out_t *pkt_out) {
-  pkt_out->payload = NULL;
+void synapse_runtime_pkt_in_reset() {
+  synapse_pkt_in.meta = NULL;
+  synapse_pkt_in.meta_sz = 0;
 
-  pkt_out->meta = NULL;
-  pkt_out->meta_sz = 0;
-
-  pkt_out->tags = NULL;
-  pkt_out->tags_sz = 0;
+  synapse_pkt_in.payload = NULL;
 }
 
-void synapse_runtime_pkt_out_print(synapse_pkt_out_t *pkt_out) {
-  puts(":: Packet-out summary ::\n");
+bool synapse_runtime_pkt_in_get_meta_by_name(string_t meta_name,
+                                             string_ptr_t *result) {
+  pair_ptr_t entry = NULL;
+  string_ptr_t name = NULL;
 
-  if (NULL != pkt_out->payload) {
-    printf("Payload (%lu B):\t\"", pkt_out->payload->sz);
-    for (size_t i = 0; i < pkt_out->payload->sz; i++) {
-      printf("\\0%02x", pkt_out->payload->str[i]);
-    }
-    puts("\"");
-  }
-
-  if (pkt_out->meta_sz > 0) {
-    SYNAPSE_LOOP_START_META(pkt_out->meta_sz)
-    print_meta_entry(pkt_out->meta[i]);
-    LOOP_END;
-  }
-
-  if (pkt_out->tags_sz > 0) {
-    SYNAPSE_LOOP_START_TAGS(pkt_out->tags_sz)
-    print_tag_entry(pkt_out->tags[i]);
-    LOOP_END;
-  }
-}
-
-// Environment manipulation
-
-bool synapse_get_helper_from_environment(env_ptr_t env, helper_ptr_t *helper) {
-  return NULL != helper && NULL != (*helper = env->helper);
-}
-
-bool synapse_get_queue_from_environment(env_ptr_t env,
-                                        update_queue_ptr_t *queue) {
-  return NULL != env && NULL != (*queue = env->queue);
-}
-
-bool synapse_get_stack_from_environment(env_ptr_t env, stack_ptr_t *stack,
-                                        size_t expected_stack_sz) {
-  return NULL != env && NULL != (*stack = env->stack) &&
-         expected_stack_sz == synapse_runtime_wrappers_stack_size(*stack);
-}
-
-// Stack manipulation
-
-bool synapse_populate_pkt_in_from_stack(stack_ptr_t stack,
-                                        synapse_pkt_in_t *pkt_in) {
-  if (NULL == stack) {
-    return false;
-  }
-
-  if (NULL == (pkt_in->payload = synapse_runtime_wrappers_stack_pop(stack))) {
-    return false;
-  }
-
-  pkt_in->meta_sz = *(size_t *)synapse_runtime_wrappers_stack_pop(stack);
-
-  if (NULL == (pkt_in->meta = synapse_runtime_wrappers_stack_pop(stack))) {
-    return false;
-  }
-
-  return true;
-}
-
-bool synapse_get_pkt_in_metadata(synapse_pkt_in_t *pkt_in, string_t meta_name,
-                                 string_ptr_t *result) {
-  if (NULL == pkt_in) {
-    return false;
-  }
-
-  pair_ptr_t entry;
-  string_ptr_t name;
-
-  for (size_t i = 0; i < pkt_in->meta_sz && NULL != (entry = pkt_in->meta[i]) &&
-                     NULL != (name = entry->left);
+  for (size_t i = 0;
+       i < synapse_pkt_in.meta_sz && NULL != (entry = synapse_pkt_in.meta[i]) &&
+       NULL != (name = entry->left);
        i++) {
     if (0 == strcmp(name->str, meta_name.str)) {
       return NULL != (*result = entry->right);
@@ -216,43 +165,126 @@ bool synapse_get_pkt_in_metadata(synapse_pkt_in_t *pkt_in, string_t meta_name,
   return false;
 }
 
-bool synapse_pkt_out_set_payload(synapse_pkt_out_t *pkt_out,
-                                 string_ptr_t payload) {
-  return NULL != pkt_out && NULL != (pkt_out->payload = payload);
+bool synapse_runtime_pkt_in_populate_from_stack(stack_ptr_t stack) {
+  if (NULL == stack) {
+    return false;
+  }
+
+  if (NULL == (synapse_pkt_in.payload =
+                   (string_ptr_t)synapse_runtime_wrappers_stack_pop(stack))) {
+    return false;
+  }
+
+  synapse_pkt_in.meta_sz = *(size_t *)synapse_runtime_wrappers_stack_pop(stack);
+
+  if (NULL == (synapse_pkt_in.meta =
+                   (pair_ptr_t *)synapse_runtime_wrappers_stack_pop(stack))) {
+    return false;
+  }
+
+  return true;
 }
 
-bool synapse_pkt_out_set_meta(synapse_pkt_out_t *pkt_out, string_t name,
-                              string_t value) {
-  if (NULL == pkt_out ||
-      NULL == (pkt_out->meta = realloc(pkt_out->meta, pkt_out->meta_sz + 1))) {
+// Runtime packet-out
+
+void synapse_runtime_pkt_out_print() {
+  puts(":: Packet-out summary ::\n");
+
+  if (NULL != synapse_pkt_out.payload) {
+    printf("Payload (%lu B):\t\"", synapse_pkt_out.payload->sz);
+    for (size_t i = 0; i < synapse_pkt_out.payload->sz; i++) {
+      printf("\\0%02x", synapse_pkt_out.payload->str[i]);
+    }
+    puts("\"");
+  }
+
+  if (synapse_pkt_out.meta_sz > 0) {
+    SYNAPSE_LOOP_START_META(synapse_pkt_out.meta_sz)
+    print_meta_entry(synapse_pkt_out.meta[i]);
+    LOOP_END;
+  }
+
+  if (synapse_pkt_out.tags_sz > 0) {
+    SYNAPSE_LOOP_START_TAGS(synapse_pkt_out.tags_sz)
+    print_tag_entry(synapse_pkt_out.tags[i]);
+    LOOP_END;
+  }
+}
+
+void synapse_runtime_pkt_out_reset() {
+  synapse_pkt_out.payload = NULL;
+
+  synapse_pkt_out.meta = NULL;
+  synapse_pkt_out.meta_sz = 0;
+
+  synapse_pkt_out.tags = NULL;
+  synapse_pkt_out.tags_sz = 0;
+}
+
+bool synapse_runtime_pkt_out_set_meta(string_t name, string_t value) {
+  SYNAPSE_DEBUG("Setting out meta `%.*s` to `%.*s`", (int)name.sz, name.str,
+                (int)value.sz, value.str);
+
+  if (NULL == (synapse_pkt_out.meta = realloc(synapse_pkt_out.meta,
+                                              synapse_pkt_out.meta_sz + 1))) {
 
     SYNAPSE_ERROR("Could not allocate space for more metadata");
     return false;
   }
 
   return NULL !=
-         (pkt_out->meta[pkt_out->meta_sz++] = synapse_runtime_wrappers_pair_new(
-              synapse_runtime_wrappers_string_new(name.str, name.sz),
-              synapse_runtime_wrappers_string_new(value.str, value.sz)));
+         (synapse_pkt_out.meta[synapse_pkt_out.meta_sz++] =
+              synapse_runtime_wrappers_pair_new(
+                  synapse_runtime_wrappers_string_new(name.str, name.sz),
+                  synapse_runtime_wrappers_string_new(value.str, value.sz)));
 }
 
-bool synapse_pkt_out_set_tag(synapse_pkt_out_t *pkt_out, string_t name,
-                             uint32_t value) {
-  if (NULL == pkt_out ||
-      NULL == (pkt_out->tags = realloc(pkt_out->tags, pkt_out->tags_sz + 1))) {
+bool synapse_runtime_pkt_out_set_payload(string_ptr_t payload) {
+  return NULL != (synapse_pkt_out.payload = payload);
+}
+
+bool synapse_runtime_pkt_out_set_tag(string_t table_name, uint32_t value) {
+  SYNAPSE_DEBUG("Setting out tag `%.*s` to `%" SCNu32 "`", (int)table_name.sz,
+                table_name.str, value);
+
+  if (NULL == (synapse_pkt_out.tags = realloc(synapse_pkt_out.tags,
+                                              synapse_pkt_out.tags_sz + 1))) {
     SYNAPSE_ERROR("Could not allocate space for more tags");
     return false;
   }
 
-  return NULL !=
-         (pkt_out->tags[pkt_out->tags_sz++] = synapse_runtime_wrappers_pair_new(
-              synapse_runtime_wrappers_string_new(name.str, name.sz),
-              synapse_runtime_wrappers_p4_uint32_new(value)));
+  size_t alias_sz = table_name.sz - 16; // Remove prefix `SyNAPSE_Ingress.`
+  size_t tag_sz = alias_sz + 4 /* _tag */;
+
+  char buffer[tag_sz];
+  strncpy(buffer, table_name.str + 16, alias_sz);
+  strncpy(buffer + alias_sz, "_tag", 4);
+
+  return NULL != (synapse_pkt_out.tags[synapse_pkt_out.tags_sz++] =
+                      synapse_runtime_wrappers_pair_new(
+                          synapse_runtime_wrappers_string_new(buffer, tag_sz),
+                          synapse_runtime_wrappers_p4_uint32_new(value)));
 }
 
-bool synapse_pkt_out_flush(env_ptr_t env, synapse_pkt_out_t *pkt_out) {
+bool synapse_runtime_pkt_out_update_tags_if_needed() {
+  if (synapse_config.bmv2_tables_modified) {
+    for (size_t i = 0; i < synapse_config.bmv2_tables_sz; i++) {
+      if (!synapse_runtime_pkt_out_set_tag(synapse_config.bmv2_tables[i].name,
+                                           synapse_config.bmv2_tables[i].tag)) {
+        SYNAPSE_ERROR("Could not set tag");
+        return false;
+      }
+    }
+  }
+
+  return !(synapse_config.bmv2_tables_modified = false);
+}
+
+// Environment manipulation
+
+bool synapse_environment_flush_pkt_out(env_ptr_t env) {
   stack_ptr_t stack;
-  if (!synapse_get_stack_from_environment(env, &stack, 0)) {
+  if (!synapse_environment_get_stack(env, &stack, 0)) {
     SYNAPSE_ERROR("The environment is corrupted");
     return false;
   }
@@ -272,115 +304,81 @@ bool synapse_pkt_out_flush(env_ptr_t env, synapse_pkt_out_t *pkt_out) {
     return false;
   }
 
-  synapse_runtime_wrappers_stack_push(stack, pkt_out->meta);
-  *meta_sz = pkt_out->meta_sz;
+  synapse_runtime_wrappers_stack_push(stack, synapse_pkt_out.meta);
+  *meta_sz = synapse_pkt_out.meta_sz;
   synapse_runtime_wrappers_stack_push(stack, meta_sz);
 
-  synapse_runtime_wrappers_stack_push(stack, pkt_out->payload);
+  synapse_runtime_wrappers_stack_push(stack, synapse_pkt_out.payload);
 
-  synapse_runtime_wrappers_stack_push(stack, pkt_out->tags);
-  *tags_sz = pkt_out->tags_sz;
+  synapse_runtime_wrappers_stack_push(stack, synapse_pkt_out.tags);
+  *tags_sz = synapse_pkt_out.tags_sz;
   synapse_runtime_wrappers_stack_push(stack, tags_sz);
 
-  synapse_runtime_pkt_out_clear(pkt_out);
+  synapse_runtime_pkt_out_reset();
   return true;
 }
 
-// Encoders
-
-string_ptr_t synapse_encode_mac_address(const char *value) {
-  return synapse_runtime_wrappers_mac_address_new(value)->bytes;
+bool synapse_environment_get_helper(env_ptr_t env, helper_ptr_t *helper) {
+  return NULL != helper && NULL != (*helper = env->helper);
 }
 
-string_ptr_t synapse_encode_p4_uint32(uint32_t value) {
-  return synapse_runtime_wrappers_p4_uint32_new(value)->bytes;
+bool synapse_environment_get_stack(env_ptr_t env, stack_ptr_t *stack,
+                                   size_t expected_stack_sz) {
+  return NULL != env && NULL != (*stack = env->stack) &&
+         expected_stack_sz == synapse_runtime_wrappers_stack_size(*stack);
 }
 
-string_ptr_t synapse_encode_port(uint16_t value) {
-  return synapse_runtime_wrappers_port_new(value)->bytes;
+bool synapse_environment_get_queue(env_ptr_t env, update_queue_ptr_t *queue) {
+  return NULL != env && NULL != (*queue = env->queue);
 }
 
-// Decoders
-
-string_ptr_t synapse_decode_mac_address(string_ptr_t encoded) {
-  return synapse_runtime_wrappers_decode_mac_address(encoded)->address;
-}
-
-uint32_t synapse_decode_p4_uint32(string_ptr_t encoded) {
-  return synapse_runtime_wrappers_decode_p4_uint32(encoded)->value;
-}
-
-uint16_t synapse_decode_port(string_ptr_t encoded) {
-  return synapse_runtime_wrappers_decode_port(encoded)->port;
-}
-
-// Helpers
-
-bool synapse_queue_update(env_ptr_t env, p4_update_ptr_t update) {
-  update_queue_ptr_t queue = NULL;
-  if (!synapse_get_queue_from_environment(env, &queue)) {
-    return false;
-  }
-
-  return synapse_runtime_update_queue_queue(queue, update);
-}
-
-bool synapse_queue_configure_multicast_group(env_ptr_t env,
-                                             synapse_config_t *config) {
-  if (0 == config->devices_sz) {
+bool synapse_environment_queue_configure_multicast_group(env_ptr_t env) {
+  if (0 == synapse_config.devices_sz) {
     return true;
   }
 
   helper_ptr_t helper = NULL;
-  if (!synapse_get_helper_from_environment(env, &helper)) {
+  update_queue_ptr_t queue = NULL;
+  if (!synapse_environment_get_helper(env, &helper) ||
+      !synapse_environment_get_queue(env, &queue)) {
     return false;
   }
 
   p4_replica_ptr_t *replicas;
-  if ((0 != config->devices_sz && NULL == config->devices) ||
-      (NULL ==
-       (replicas = malloc(config->devices_sz * sizeof(p4_replica_ptr_t))))) {
+  if ((0 != synapse_config.devices_sz && NULL == synapse_config.devices) ||
+      (NULL == (replicas = malloc(synapse_config.devices_sz *
+                                  sizeof(p4_replica_ptr_t))))) {
     return false;
   }
 
   size_t counter = 0;
-  for (size_t i = 0; i < config->devices_sz; i++) {
+  for (size_t i = 0; i < synapse_config.devices_sz; i++) {
     if (NULL == (replicas[i] = synapse_runtime_p4_replica_new(
-                     helper, config->devices[i], ++counter))) {
+                     helper, synapse_config.devices[i], ++counter))) {
       return false;
     }
   }
 
-  return synapse_queue_update(
-      env, synapse_runtime_p4_update_new(
-               helper, Update_Insert,
-               synapse_runtime_p4_entity_new(
-                   helper, Entity_PacketReplicationEngineEntry,
-                   synapse_runtime_p4_packet_replication_engine_entry_new(
-                       helper, synapse_runtime_p4_multicast_group_entry_new(
-                                   helper, SYNAPSE_MCAST_GROUP_ID, replicas,
-                                   config->devices_sz)))));
+  return synapse_runtime_update_queue_queue(
+      queue, synapse_runtime_p4_update_new(
+                 helper, Update_Insert,
+                 synapse_runtime_p4_entity_new(
+                     helper, Entity_PacketReplicationEngineEntry,
+                     synapse_runtime_p4_packet_replication_engine_entry_new(
+                         helper, synapse_runtime_p4_multicast_group_entry_new(
+                                     helper, SYNAPSE_MCAST_GROUP_ID, replicas,
+                                     synapse_config.devices_sz)))));
 }
 
-bool synapse_queue_insert_table_entry_match_tag(synapse_config_t *config,
-                                                string_t table_name,
-                                                helper_ptr_t helper,
-                                                p4_info_table_ptr_t table_info,
-                                                p4_field_match_ptr_t *match) {
+bool synapse_environment_queue_insert_table_entry(
+    env_ptr_t env, string_t table_name, pair_t *key, size_t key_sz,
+    string_t action_name, pair_t *action_params, size_t action_params_sz,
+    int32_t priority, uint64_t idle_timeout_ns) {
 
-  return true;
-}
-
-bool synapse_queue_insert_table_entry(env_ptr_t env, synapse_config_t *config,
-                                      string_t table_name, pair_t *key,
-                                      size_t key_sz, string_t action_name,
-                                      pair_t *action_params,
-                                      size_t action_params_sz, int32_t priority,
-                                      uint64_t idle_timeout_ns) {
   helper_ptr_t helper;
   update_queue_ptr_t queue;
-  if (!synapse_get_helper_from_environment(env, &helper) ||
-      !synapse_get_queue_from_environment(env, &queue)) {
+  if (!synapse_environment_get_helper(env, &helper) ||
+      !synapse_environment_get_queue(env, &queue)) {
     return false;
   }
 
@@ -399,13 +397,15 @@ bool synapse_queue_insert_table_entry(env_ptr_t env, synapse_config_t *config,
   p4_field_match_ptr_t *match = NULL;
   if (key_sz > 0) {
     if (NULL == (match = malloc((key_sz + 1) * sizeof(p4_field_match_ptr_t)))) {
+      SYNAPSE_ERROR("Could not allocated memory for the key");
       return false;
     }
 
     uint32_t *tag = NULL;
     string_ptr_t tag_match = NULL;
-    if (NULL == (tag = synapse_runtime_config_get_tag_by_table_name(
-                     config, table_name, &tag_match))) {
+
+    if (!synapse_runtime_config_get_tag_by_table_name(table_name, &tag,
+                                                      &tag_match)) {
       SYNAPSE_ERROR("Could not locate tag");
       return false;
     }
@@ -416,7 +416,6 @@ bool synapse_queue_insert_table_entry(env_ptr_t env, synapse_config_t *config,
         synapse_runtime_p4_info_match_field_id(tag_match_info);
 
     string_ptr_t range_low = synapse_encode_p4_uint32(++*tag);
-    config->tags_updated = true;
     string_ptr_t range_high = synapse_encode_p4_uint32(UINT32_MAX);
 
     p4_field_match_range_ptr_t range =
@@ -482,6 +481,7 @@ bool synapse_queue_insert_table_entry(env_ptr_t env, synapse_config_t *config,
     }
   }
 
+  synapse_config.bmv2_tables_modified = true;
   return synapse_runtime_update_queue_queue(
       queue,
       synapse_runtime_p4_update_new(
@@ -496,13 +496,30 @@ bool synapse_queue_insert_table_entry(env_ptr_t env, synapse_config_t *config,
                   priority, idle_timeout_ns))));
 }
 
-bool synapse_queue_modify_table_entry(env_ptr_t env) { return false; }
+// Encoders
 
-bool synapse_queue_delete_table_entry(env_ptr_t env) { return false; }
+string_ptr_t synapse_encode_mac_address(const char *value) {
+  return synapse_runtime_wrappers_mac_address_new(value)->bytes;
+}
 
-/**
- * table name (string_t)
- * key (pair<string_t, string_t>)
- * action name (string_t)
- * action params (pair<string_t, string_t>)
- */
+string_ptr_t synapse_encode_p4_uint32(uint32_t value) {
+  return synapse_runtime_wrappers_p4_uint32_new(value)->bytes;
+}
+
+string_ptr_t synapse_encode_port(uint16_t value) {
+  return synapse_runtime_wrappers_port_new(value)->bytes;
+}
+
+// Decoders
+
+string_ptr_t synapse_decode_mac_address(string_ptr_t encoded) {
+  return synapse_runtime_wrappers_decode_mac_address(encoded)->address;
+}
+
+uint32_t synapse_decode_p4_uint32(string_ptr_t encoded) {
+  return synapse_runtime_wrappers_decode_p4_uint32(encoded)->value;
+}
+
+uint16_t synapse_decode_port(string_ptr_t encoded) {
+  return synapse_runtime_wrappers_decode_port(encoded)->port;
+}

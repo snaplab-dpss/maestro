@@ -564,42 +564,69 @@ static int nf_init_device(uint16_t device, struct rte_mempool *mbuf_pool) {
 }
 
 bool synapse_runtime_handle_pre_configure(env_ptr_t env) {
-  // Get a valid configuration for the runtime (i.e. devices, and tags)
-  synapse_runtime_config_clear(&synapse_config);
-  if (!synapse_runtime_config(&synapse_config) ||
-      NULL == (synapse_config.tags =
-                   malloc(synapse_config.tags_sz * sizeof(uint32_t)))) {
+  synapse_runtime_config_reset();
+
+  // Get a valid configuration for the runtime (i.e. devices, and bmv2 tables)
+  if (!synapse_runtime_config(&synapse_config)) {
     SYNAPSE_DEBUG("Failed to configure the runtime");
     return false;
   }
 
   // Install singleton multicast group (the request is queued)
-  if (!synapse_queue_configure_multicast_group(env, &synapse_config)) {
+  if (!synapse_environment_queue_configure_multicast_group(env)) {
     SYNAPSE_ERROR("Could not queue multicast group");
     return false;
   }
 
-  synapse_runtime_pkt_out_clear(&synapse_pkt_out);
-  for (size_t i = 0; i < synapse_config.tags_sz; i++) {
-    if (!synapse_pkt_out_set_tag(&synapse_pkt_out, synapse_config.tags_names[i],
-                                 synapse_config.tags[i] = 0)) {
-      SYNAPSE_ERROR("Could not set tag value");
-      return false;
-    }
+  // Set all tags to 0
+  synapse_runtime_pkt_out_reset();
+  for (size_t i = 0; i < synapse_config.bmv2_tables_sz; i++) {
+    synapse_config.bmv2_tables[i].tag = 0;
   }
 
-  // Push modification to the stack
-  return synapse_pkt_out_flush(env, &synapse_pkt_out) && nf_init();
+  // FIXME Remove lines inbetween
+  string_t table_name = { .str = "SyNAPSE_Ingress.map_get_35", .sz = 26 };
+  string_t action_name = { .str = "NoAction", .sz = 8 };
+
+  string_t k0 = { .str = "key_byte_0", .sz = 10 };
+  string_t k1 = { .str = "key_byte_1", .sz = 10 };
+  string_t k2 = { .str = "key_byte_2", .sz = 10 };
+  string_t k3 = { .str = "key_byte_3", .sz = 10 };
+  string_t k4 = { .str = "key_byte_4", .sz = 10 };
+  string_t k5 = { .str = "key_byte_5", .sz = 10 };
+  string_t k6 = { .str = "key_byte_6", .sz = 10 };
+  string_t k7 = { .str = "key_byte_7", .sz = 10 };
+
+  size_t key_sz = 8;
+  pair_t key[8] = { { .left = &k0, .right = synapse_encode_p4_uint32(10) },
+                    { .left = &k1, .right = synapse_encode_p4_uint32(10) },
+                    { .left = &k2, .right = synapse_encode_p4_uint32(10) },
+                    { .left = &k3, .right = synapse_encode_p4_uint32(10) },
+                    { .left = &k4, .right = synapse_encode_p4_uint32(10) },
+                    { .left = &k5, .right = synapse_encode_p4_uint32(10) },
+                    { .left = &k6, .right = synapse_encode_p4_uint32(10) },
+                    { .left = &k7, .right = synapse_encode_p4_uint32(10) } };
+
+  if (!synapse_environment_queue_insert_table_entry(
+          env, table_name, key, key_sz, action_name, NULL, 0, 1, 1000000000)) {
+    SYNAPSE_ERROR("Could not queue insertion");
+    return false;
+  }
+
+  // FIXME Remove lines inbetween
+
+  return synapse_runtime_pkt_out_update_tags_if_needed() &&
+         synapse_environment_flush_pkt_out(env) && nf_init();
 }
 
 bool synapse_runtime_handle_packet_received(env_ptr_t env) {
   stack_ptr_t stack = NULL;
-  if (!synapse_get_stack_from_environment(env, &stack, 3)) {
+  if (!synapse_environment_get_stack(env, &stack, 3)) {
     SYNAPSE_ERROR("The environment is corrupted");
     return false;
   }
 
-  if (!synapse_populate_pkt_in_from_stack(stack, &synapse_pkt_in)) {
+  if (!synapse_runtime_pkt_in_populate_from_stack(stack)) {
     SYNAPSE_ERROR("The environment stack is corrupted");
     return false;
   }
@@ -607,8 +634,8 @@ bool synapse_runtime_handle_packet_received(env_ptr_t env) {
   // Get the source device from the metadata
   static string_t src_device_str = { .str = "src_device", .sz = 10 };
   string_ptr_t src_device_encoded = NULL;
-  if (!synapse_get_pkt_in_metadata(&synapse_pkt_in, src_device_str,
-                                   &src_device_encoded)) {
+  if (!synapse_runtime_pkt_in_get_meta_by_name(src_device_str,
+                                               &src_device_encoded)) {
     SYNAPSE_ERROR("Incoming packets must contain the ingress port");
     return false;
   }
@@ -620,9 +647,8 @@ bool synapse_runtime_handle_packet_received(env_ptr_t env) {
 
   int dst_device = nf_process(src_device, &buffer, packet_length, now, NULL);
 
-  if (!synapse_pkt_out_set_meta(&synapse_pkt_out, src_device_str,
-                                *src_device_encoded)) {
-    SYNAPSE_ERROR("Could not add metadata `src_device`");
+  if (!synapse_runtime_pkt_out_set_meta(src_device_str, *src_device_encoded)) {
+    SYNAPSE_ERROR("Could not set metadata `src_device`");
     return false;
   }
 
@@ -636,41 +662,52 @@ bool synapse_runtime_handle_packet_received(env_ptr_t env) {
   }
 
   static string_t dst_device_str = { .str = "dst_device", .sz = 10 };
-  if (!synapse_pkt_out_set_meta(&synapse_pkt_out, dst_device_str,
-                                *dst_device_encoded)) {
-    SYNAPSE_ERROR("Could not add metadata `dst_device`");
+  if (!synapse_runtime_pkt_out_set_meta(dst_device_str, *dst_device_encoded)) {
+    SYNAPSE_ERROR("Could not set metadata `dst_device`");
     return false;
   }
 
-  if (!synapse_pkt_out_set_payload(&synapse_pkt_out, synapse_pkt_in.payload)) {
-    SYNAPSE_ERROR("Could not add payload");
+  if (!synapse_runtime_pkt_out_set_payload(synapse_pkt_in.payload)) {
+    SYNAPSE_ERROR("Could not set payload");
     return false;
   }
 
-  if (synapse_config.tags_updated) {
-    SYNAPSE_DEBUG("Updating tags");
-    synapse_config.tags_updated = false;
-
-    for (size_t i = 0; i < synapse_config.tags_sz; i++) {
-      if (!synapse_pkt_out_set_tag(&synapse_pkt_out,
-                                   synapse_config.tags_names[i],
-                                   synapse_config.tags[i])) {
-        return false;
-      }
-    }
-  }
-
-  return synapse_pkt_out_flush(env, &synapse_pkt_out);
+  return synapse_runtime_pkt_out_update_tags_if_needed() &&
+         synapse_environment_flush_pkt_out(env);
 }
 
 bool synapse_runtime_handle_idle_timeout_notification_received(env_ptr_t env) {
   stack_ptr_t stack = NULL;
-  if (!synapse_get_stack_from_environment(env, &stack, 2)) {
+  if (!synapse_environment_get_stack(env, &stack, 2)) {
     SYNAPSE_ERROR("The environment is corrupted");
     return false;
   }
 
-  synapse_runtime_wrappers_stack_clear(stack);
+  size_t entriesSz = *((size_t *)synapse_runtime_wrappers_stack_pop(stack));
+  pair_ptr_t *entries = synapse_runtime_wrappers_stack_pop(stack);
+
+  pair_ptr_t entry;
+  for (size_t i = 0; i < entriesSz; i++) {
+    if (NULL == (entry = entries[i])) {
+      return false;
+    }
+
+    string_ptr_t table_name = entry->left;
+    SYNAPSE_INFO("Entry in table `%.*s` has expired", (int)table_name->sz,
+                 table_name->str);
+
+    pair_ptr_t key = entry->right;
+    size_t match_sz = *(size_t *)key->left;
+    string_ptr_t *match = key->right;
+
+    SYNAPSE_INFO("The key of the entry contains %lu fields:", match_sz);
+    for (size_t i = 0; i < match_sz; i++) {
+      uint32_t decoded = synapse_decode_p4_uint32(match[i]);
+      SYNAPSE_INFO("Field %lu: '%" SCNu32 "'", i, decoded);
+    }
+  }
+
+  SYNAPSE_INFO("Received an idle timeout notification");
   return true;
 }
 
