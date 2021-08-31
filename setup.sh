@@ -501,6 +501,61 @@ if [ ! -e "$BUILDDIR/libr3s" ]; then
   popd
 fi
 
+# ===============
+# Synapse runtime
+# ===============
+
+if [ ! -e "$BUILDDIR/synapse-runtime" ]; then
+  # protobuf dependencies
+  sudo apt-get install -y autoconf automake libtool curl make g++ unzip cmake
+
+  # protobuf
+  git clone https://github.com/protocolbuffers/protobuf.git --recursive "$BUILDDIR/protobuf"
+  pushd "$BUILDDIR/protobuf"
+    ./autogen.sh
+    ./configure
+    make
+    sudo make install
+    sudo ldconfig
+    
+    echo "export PROTOBUF_DIR=$BUILDDIR/protobuf" >> "$PATHSFILE"
+    . "$PATHSFILE"
+  popd
+
+  # gRPC C++
+  git clone https://github.com/grpc/grpc.git --recursive "$BUILDDIR/grpc"
+  pushd "$BUILDDIR/grpc"
+    mkdir -p cmake/build
+    pushd cmake/build
+      cmake ../.. -DgRPC_INSTALL=ON \
+                  -DCMAKE_BUILD_TYPE=Release \
+                  -DgRPC_PROTOBUF_PROVIDER=package \
+                  -DgRPC_ABSL_PROVIDER=module \
+                  -DBUILD_SHARED_LIBS=ON
+      make
+      sudo make install
+      sudo ldconfig
+      sudo cp -r ../../third_party/abseil-cpp/absl /usr/local/include # abominable
+
+      echo "export GRPC_DIR=$BUILDDIR/grpc" >> "$PATHSFILE"
+      . "$PATHSFILE"
+    popd
+  popd
+
+  git clone https://github.com/joaomtiago/synapse-runtime.git "$BUILDDIR/synapse-runtime"
+  pushd "$BUILDDIR/synapse-runtime"
+    mkdir -p build
+    pushd build
+      cmake ..
+      make
+      sudo make install
+
+      echo "export SYNAPSE_RUNTIME_DIR=$BUILDDIR/synapse-runtime" >> "$PATHSFILE"
+      . "$PATHSFILE"
+    popd
+  popd
+fi
+
 # =====
 # Vigor
 # =====
