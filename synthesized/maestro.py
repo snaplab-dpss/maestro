@@ -55,6 +55,7 @@ RSS_CONF          = f"{BUILD_DIR}/rss_conf.txt"
 RSS_KEY_LEN       = 52
 
 EXTRA_VAR_MAKEFILE = f"{os.getcwd()}/Makefile.maestro"
+COMPATIBLE_OPTS = [ "ETH_RSS_NONFRAG_IPV4_TCP", "ETH_RSS_NONFRAG_IPV4_UDP" ]
 
 def error():
   print("Exiting...")
@@ -150,7 +151,7 @@ def synthesize_rss_conf(target):
   code += f"\nstruct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {{\n"
   for iconf, conf in enumerate(confs):
     var_name = conf[0]
-    opts  	 = conf[1]
+    opts  	 = list(filter(lambda opt: opt in COMPATIBLE_OPTS, conf[1]))
 
     code += f"  {{\n"
     code += f"    .rss_key = {var_name},\n"
