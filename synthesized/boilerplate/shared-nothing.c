@@ -335,13 +335,7 @@ typedef struct {
 
 retas_t retas_per_device[MAX_NUM_DEVICES];
 
-void init_retas() {
-  for (unsigned i = 0; i < MAX_NUM_DEVICES; i++) {
-    retas_per_device[i].set = false;
-  }
-
-  /*@INIT-RETAS@*/
-}
+void init_retas();
 
 void set_reta(uint16_t device) {
   unsigned lcores = rte_lcore_count();

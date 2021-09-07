@@ -11,11 +11,23 @@ SYNTHESIZED_DIR = pathlib.Path(__file__).parent.absolute()
 BOILERPLATE_DIR = f"{SYNTHESIZED_DIR}/boilerplate"
 SYNTHESIZED_BUILD = f"{SYNTHESIZED_DIR}/build"
 
+SYNTHESIZED_APP = f"{SYNTHESIZED_BUILD}/app"
 SYNTHESIZED_CODE = f"{SYNTHESIZED_BUILD}/synthesized"
 SYNTHESIZED_BUNDLE = f"{SYNTHESIZED_BUILD}/bundle"
 
+subprocess.call([ "rm", "-rf", SYNTHESIZED_APP ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+subprocess.call([ "rm", "-rf", SYNTHESIZED_BUNDLE ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+subprocess.call([ "mkdir", "-p", SYNTHESIZED_APP ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 subprocess.call([ "mkdir", "-p", SYNTHESIZED_CODE ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 subprocess.call([ "mkdir", "-p", SYNTHESIZED_BUNDLE ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+BOILERPLATE_CHOICE_BMV2 = "bmv2_ss_grpc_controller"
+BOILERPLATE_CHOICE_CALL_PATH_HITTER = "call_path_hitter"
+BOILERPLATE_CHOICE_LOCKS = "locks"
+BOILERPLATE_CHOICE_SQ = "sequential"
+BOILERPLATE_CHOICE_SN = "shared-nothing"
+BOILERPLATE_CHOICE_TM = "tm"
 
 def build_impl(boilerplate, impl):
   complete_impl = ""
@@ -68,18 +80,14 @@ def build_makefile(extra_vars_makefile, nf, srcs):
   makefile.write(MAKEFILE)
   makefile.close()
 
-def build():
+def build(boilerplate, impl, nf, extra_vars_makefile):
+  build_impl(boilerplate, impl)
+  srcs = get_original_nf_srcs(nf)
+  build_makefile(extra_vars_makefile, nf, srcs)
+
   subprocess.call([ "make", "-f", "Makefile.nf" ], cwd=SYNTHESIZED_BUNDLE)
-  subprocess.call([ "cp", f"{SYNTHESIZED_BUNDLE}/build/app/*", f"{SYNTHESIZED_BUILD}/app" ],
-    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-BOILERPLATE_CHOICE_BMV2 = "bmv2_ss_grpc_controller"
-BOILERPLATE_CHOICE_CALL_PATH_HITTER = "call_path_hitter"
-BOILERPLATE_CHOICE_LOCKS = "locks"
-BOILERPLATE_CHOICE_SQ = "sequential"
-BOILERPLATE_CHOICE_SN = "shared-nothing"
-BOILERPLATE_CHOICE_TM = "tm"
-
+  subprocess.call([ "cp" ] +  glob.glob(f"{SYNTHESIZED_BUNDLE}/build/app/*") + [ f"{SYNTHESIZED_APP}/" ])
+  
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description='Bundle synthesized NF with existing Vigor NF.')
   
@@ -102,7 +110,4 @@ if __name__ == "__main__":
   if args.nf:
     args.nf = os.path.abspath(args.nf)
 
-  build_impl(args.boilerplate, args.impl)
-  srcs = get_original_nf_srcs(args.nf)
-  build_makefile(args.extra_vars_makefile, args.nf, srcs)
-  build()
+  build(args.boilerplate, args.impl, args.nf, args.extra_vars_makefile)

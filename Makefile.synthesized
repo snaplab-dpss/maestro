@@ -53,4 +53,4 @@ clean: clean-vigor
 
 # Built-in DPDK default target, make it aware of autogen,
 # and make it clean every time because our dependency tracking is nonexistent...
-all: clean autogen cp-original_nf
+all: clean cp-original_nf autogen

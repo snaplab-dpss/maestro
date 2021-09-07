@@ -11,6 +11,7 @@ from time import perf_counter
 from datetime import timedelta 
 
 import get_balanced_lut
+import build
 
 # env vars
 KLEE_DIR = os.getenv("KLEE_DIR")
@@ -27,6 +28,8 @@ SYNTHESIZED_DIR=pathlib.Path(__file__).parent.absolute()
 BUILD_DIR = f"{SYNTHESIZED_DIR}/build/maestro"
 BUILD_SYNTHESIZED_DIR = f"{SYNTHESIZED_DIR}/build/synthesized"
 
+subprocess.call([ "rm", "-rf", BUILD_SYNTHESIZED_DIR ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
 subprocess.call([ "mkdir", "-p", BUILD_DIR ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 subprocess.call([ "mkdir", "-p", BUILD_SYNTHESIZED_DIR ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -36,27 +39,24 @@ CHOICE_LOCKS          = "locks"
 CHOICE_TM             = "tm"
 CHOICE_CPH            = "cph"
 
-BOILERPLATE = {
-  CHOICE_SEQUENTIAL:      f"{SYNTHESIZED_DIR}/boilerplate/sequential.c",
-  CHOICE_CPH:             f"{SYNTHESIZED_DIR}/boilerplate/call_path_hitter.c",
-  CHOICE_SHARED_NOTHING:	f"{SYNTHESIZED_DIR}/boilerplate/shared-nothing.c",
-  CHOICE_LOCKS:           f"{SYNTHESIZED_DIR}/boilerplate/locks.c",
-  CHOICE_TM:              f"{SYNTHESIZED_DIR}/boilerplate/tm.c",
+CHOICE_TO_BOILERPLATE = {
+  CHOICE_SEQUENTIAL: build.BOILERPLATE_CHOICE_SQ,
+  CHOICE_SHARED_NOTHING: build.BOILERPLATE_CHOICE_SN,
+  CHOICE_LOCKS: build.BOILERPLATE_CHOICE_LOCKS,
+  CHOICE_TM: build.BOILERPLATE_CHOICE_TM,
+  CHOICE_CPH: build.BOILERPLATE_CHOICE_CALL_PATH_HITTER,
 }
 
 SYNTHESIZED       = f"{BUILD_SYNTHESIZED_DIR}/nf_process.gen.c"
 SYNTHESIZED_XML   = f"{BUILD_SYNTHESIZED_DIR}/nf_process.gen.xml"
-FINAL_CODE        = f"{BUILD_SYNTHESIZED_DIR}/nf.c"
 LVA               = f"{BUILD_DIR}/report.lva"
 LVA_DEBUG         = f"{BUILD_DIR}/report.txt"
 RSS_CONF          = f"{BUILD_DIR}/rss_conf.txt"
 RSS_KEY_LEN       = 52
 
-RETA_MARKER = "/*@INIT-RETAS@*/"
+EXTRA_VAR_MAKEFILE = f"{os.getcwd()}/Makefile.maestro"
 
-def error(verbose):
-  if not verbose:
-    print("\nOh-oh something went wrong. Use '-v' to gather clues.")
+def error():
   print("Exiting...")
   exit(1)
 
@@ -66,55 +66,42 @@ def build_maestro():
 def clean_maestro():
   subprocess.call([ "make", "clean-maestro" ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
   
-def symbex(nf, verbose):
+def symbex(nf):
   subprocess.Popen("rm -rf klee-*", shell=True, cwd=os.path.abspath(nf), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+  code = subprocess.call([ "make", "symbex" ], cwd=os.path.abspath(nf))
 
-  if not verbose:
-    code = subprocess.call([ "make", "symbex" ], cwd=os.path.abspath(nf), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-  else:
-    code = subprocess.call([ "make", "symbex" ], cwd=os.path.abspath(nf))
-
-  if code != 0: error(verbose)
+  if code != 0: error()
 
   call_paths = glob.glob(f"{nf}/klee-last/*.call_path")
   call_paths.sort(key=lambda f: int(re.sub('\D', '', f)))
 
   return call_paths
 
-def analyze_call_paths(nf, call_paths, verbose):
+def analyze_call_paths(nf, call_paths):
   analyze 		= f"{KLEE_DIR}/build/bin/analyse-libvig-call-paths"
   analyze_args	= [ os.path.abspath(cp) for cp in call_paths ]
 
   lva = open(LVA, mode="w")
-  if not verbose:
-    code = subprocess.call([ analyze ] + analyze_args, stdout=lva, stderr=subprocess.DEVNULL)
-  else:
-    code = subprocess.call([ analyze ] + analyze_args, stdout=lva)
+  code = subprocess.call([ analyze ] + analyze_args, stdout=lva)
   
-  if code != 0: error(verbose)
+  if code != 0: error()
   lva.close()
 
-def rss_conf_from_lvas(verbose):
-  rss_conf_from_lva 		= f"{BUILD_DIR}/rss-config-from-lvas"
-  rss_conf_from_lva_arg 	= f"{BUILD_DIR}/report.lva"
+def rss_conf_from_lvas():
+  rss_conf_from_lva = f"{BUILD_DIR}/rss-config-from-lvas"
+  rss_conf_from_lva_arg = f"{BUILD_DIR}/report.lva"
 
   rss_conf = open(RSS_CONF, mode='w')
-  if not verbose:
-    code = subprocess.call([ rss_conf_from_lva, rss_conf_from_lva_arg ], stdout=rss_conf, stderr=subprocess.DEVNULL)
-  else:
-    code = subprocess.call([ rss_conf_from_lva, rss_conf_from_lva_arg ], stdout=rss_conf)
+  code = subprocess.call([ rss_conf_from_lva, rss_conf_from_lva_arg ], stdout=rss_conf)
   rss_conf.close()
 
   return code == 0
 
-def rss_conf_random(devices, verbose):
-  rss_conf_from_lva 		= f"{BUILD_DIR}/rss-config-from-lvas"
+def rss_conf_random(devices):
+  rss_conf_from_lva = f"{BUILD_DIR}/rss-config-from-lvas"
   
   rss_conf = open(RSS_CONF, mode='w')
-  if not verbose:
-    code = subprocess.call([ rss_conf_from_lva, "--rand", str(devices) ], stdout=rss_conf, stderr=subprocess.DEVNULL)
-  else:
-    code = subprocess.call([ rss_conf_from_lva, "--rand", str(devices) ], stdout=rss_conf)
+  code = subprocess.call([ rss_conf_from_lva, "--rand", str(devices) ], stdout=rss_conf)
   rss_conf.close()
 
   return code == 0
@@ -134,8 +121,9 @@ def code_key(key_values, ikey):
 def synthesize_rss_conf(target):
   code = ""
   keys = []
+
   if target == CHOICE_SEQUENTIAL or target == CHOICE_CPH:
-    return ((None, code), keys)
+    return (code, keys)
 
   f = open(RSS_CONF, 'r')
   rss_conf = f.read()
@@ -162,7 +150,7 @@ def synthesize_rss_conf(target):
   code += f"\nstruct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {{\n"
   for iconf, conf in enumerate(confs):
     var_name = conf[0]
-    opts	 = conf[1]
+    opts  	 = conf[1]
 
     code += f"  {{\n"
     code += f"    .rss_key = {var_name},\n"
@@ -172,50 +160,52 @@ def synthesize_rss_conf(target):
     if iconf != len(confs) - 1: code += ",\n"
 
   code += f"\n}};"
-  return (None, code), keys
+  return (code, keys)
 
-def synthesize_nf(nf, call_paths, target, verbose):
+def synthesize_nf(nf, call_paths, target):
   assert(call_paths)
 
-  bdd_to_c 		= f"{KLEE_DIR}/build/bin/bdd-to-c"
+  bdd_to_c      = f"{KLEE_DIR}/build/bin/bdd-to-c"
   bdd_to_c_args	= f"-out={SYNTHESIZED} -xml={SYNTHESIZED_XML} -target={target} {' '.join(call_paths)}"
 
-  if not verbose:
-    code = subprocess.call([ bdd_to_c ] + bdd_to_c_args.split(' '), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-  else:
-    code = subprocess.call([ bdd_to_c ] + bdd_to_c_args.split(' '))
+  code = subprocess.call([ bdd_to_c ] + bdd_to_c_args.split(' '))
   
-  if code != 0: error(verbose)
+  if code != 0: error()
 
   synthesized_file    = open(SYNTHESIZED, mode='r')
   synthesized_content = synthesized_file.read()
   synthesized_file.close()
 
-  return (None, synthesized_content)
+  return synthesized_content
 
 def stitch_synthesized_nf(synthesized_content, target):
-  assert(target in BOILERPLATE)
-
-  boilerplate_file    = open(BOILERPLATE[target], mode='r')
-  boilerplate_content = boilerplate_file.read()
-  boilerplate_file.close()
-
-  code = boilerplate_content
-  for marker, content in synthesized_content:
-    if not marker: code += f"\n{content}"
-    else: code = code.replace(marker, content)
-
-  final_code_file = open(FINAL_CODE, mode='w')
-  final_code_file.write(code)
-  final_code_file.close()
-
-def synthesize_balance_lut(keys, pcap, target, verbose):
   code = ""
-  if target == CHOICE_SEQUENTIAL or not pcap:	return (None, code)
+
+  for content in synthesized_content:
+    code += f"\n{content}"
+  
+  synthesized_file = open(SYNTHESIZED, mode='w')
+  synthesized_file.write(code)
+  synthesized_file.close()
+
+def synthesize_balance_lut(keys, pcap, target):
+  code = ""
+
+  if target == CHOICE_SEQUENTIAL or target == CHOICE_CPH:
+    return code
+
+  code += "void init_retas() {\n"                                \
+          "  for (unsigned i = 0; i < MAX_NUM_DEVICES; i++) {\n" \
+          "    retas_per_device[i].set = false;\n"               \
+          "  }\n"
+
+  if not pcap:
+    code += "}"
+    return code
 
   for ikey, key in enumerate(keys):
-    if verbose: print(f"Balancing LUT for key {ikey}")
-    lut = get_balanced_lut.run(key, pcap, verbose)
+    print(f"Balancing LUT for key {ikey}")
+    lut = get_balanced_lut.run(key, pcap)
 
     code += "\n"
     code += f"  retas_per_device[{ikey}].set = true;"
@@ -225,8 +215,10 @@ def synthesize_balance_lut(keys, pcap, target, verbose):
 
       for k, bucket in enumerate(lut_core):
         code += f"  retas_per_device[{ikey}].tables[{j}][{k}] = {bucket};\n"
+  
+  code += "}"
 
-  return (RETA_MARKER, code)
+  return code
 
 def bundle_everything(nf):
   seq_nf_files = []
@@ -254,60 +246,61 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser(description='Parallelize a Vigor NF.')
   
   parser.add_argument('nf', type=str, help='path to the NF')
-  parser.add_argument('-v', action='store_true', help='verbose')
-  parser.add_argument('--target', 													\
+  parser.add_argument('--target', 													  \
     help='implementation model target', 											\
     choices=[ CHOICE_SEQUENTIAL, CHOICE_SHARED_NOTHING, CHOICE_LOCKS, CHOICE_TM, CHOICE_CPH ],	\
     default=CHOICE_SHARED_NOTHING)
+  parser.add_argument('--randomize', type=str, help='randomize RSS keys')
   parser.add_argument('--balance', type=str, help='pcap used to balance LUT')
 
   args = parser.parse_args()
+  args.nf = os.path.abspath(args.nf)
 
-  print("[1/7] Building maestro")
+  print("\n[*] Building maestro")
   build_maestro()
 
   t_start = perf_counter()
 
-  print("[2/7] Running symbolic execution")
-  call_paths = symbex(args.nf, args.v)
+  print("\n[*] Running symbolic execution")
+  call_paths = symbex(args.nf)
   t_symbex = perf_counter()
 
-  print("[3/7] Analyzing call paths")
-  analyze_call_paths(args.nf, call_paths, args.v)
+  print("\n[*] Analyzing call paths")
+  analyze_call_paths(args.nf, call_paths)
   t_analyze_call_paths = perf_counter()
 
-  print("[4/7] Finding RSS configuration")
-  if args.target == CHOICE_SHARED_NOTHING:
-    success = rss_conf_from_lvas(args.v)
-    if not success:
-      print("Unable to synthesize a parallel implementation using a shared nothing model.")
-      exit(1)
-  elif args.target == CHOICE_LOCKS:
-    success = rss_conf_random(2, args.v) # TODO devices
-    assert(success)
+  if args.target != CHOICE_SEQUENTIAL and args.target != CHOICE_CPH:
+    print("\n[*] Finding RSS configuration")
+    if not args.randomize:
+      success = rss_conf_from_lvas()
+      if not success:
+        print("Unable to synthesize a parallel implementation using a shared nothing model.")
+        exit(1)
+    else:
+      success = rss_conf_random(2) # TODO devices
+      assert(success)
 
   t_rss_conf = perf_counter()
 
-  print("[5/7] Synthesizing")
+  print("\n[*] Synthesizing")
   synthesized_content = []
 
   rss_conf_code, keys = synthesize_rss_conf(args.target)
   synthesized_content.append(rss_conf_code)
 
-  synthesized_nf = synthesize_nf(args.nf, call_paths, args.target, args.v)
+  synthesized_nf = synthesize_nf(args.nf, call_paths, args.target)
   synthesized_content.append(synthesized_nf)
 
-  balance_lut_code = synthesize_balance_lut(keys, args.balance, args.target, args.v)
+  balance_lut_code = synthesize_balance_lut(keys, args.balance, args.target)
   synthesized_content.append(balance_lut_code)
 
   stitch_synthesized_nf(synthesized_content, args.target)
+  build.build(CHOICE_TO_BOILERPLATE[args.target], SYNTHESIZED, args.nf, EXTRA_VAR_MAKEFILE)
+
   t_synthesize = perf_counter()
   t_end = t_synthesize
 
-  print("[6/7] Bundling everything")
-  bundle_everything(args.nf)
-
-  print("[7/7] Cleaning")
+  print("\n[*] Cleaning")
   clean_maestro()
 
   print()
@@ -318,3 +311,4 @@ if __name__ == "__main__":
   print(f"Synthesize          {timedelta(seconds=(t_synthesize - t_rss_conf))}")
   print(f"Total               {timedelta(seconds=(t_end - t_start))}")
   print("========================================")
+
