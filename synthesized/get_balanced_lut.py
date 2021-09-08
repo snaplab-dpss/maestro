@@ -27,7 +27,7 @@ from numpy import percentile
 MAX_CORES=18
 LUT_SIZE=512
 
-PCAP_PARTITIONS_MAX_SIZE = 1 # MB
+PCAP_PARTITIONS_MAX_SIZE = 100 # MB
 PCAP_PARTITIONS_BASENAME = 'pcap_partition'
 
 CONFIG = {
@@ -368,17 +368,3 @@ def run(key, pcap, _verbose=False):
 	delete_partitions(pcap_partitions)
 	
 	return luts
-
-if __name__ == "__main__":
-	parser = argparse.ArgumentParser(description="Analyzes RSS core distribution achieved by a certain pcap")
-	parser.add_argument('--pcap', help='name of pcap file', required=True)
-	parser.add_argument('--out', help='output file', required=True)
-	args = parser.parse_args()
-
-	luts = get_balanced_lut(args.pcap)
-
-	with open(f'{args.out}', 'w') as o:
-		for lut in luts:
-			lut_one_line  = " ".join([ str(bucket) for bucket in lut ])
-			o.write(f'{lut_one_line}\n')
-

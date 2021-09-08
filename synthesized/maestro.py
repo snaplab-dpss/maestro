@@ -206,7 +206,7 @@ def synthesize_balance_lut(keys, pcap, target):
 
   for ikey, key in enumerate(keys):
     print(f"Balancing LUT for key {ikey}")
-    lut = get_balanced_lut.run(key, pcap)
+    lut = get_balanced_lut.run(key, pcap, True)
 
     code += "\n"
     code += f"  retas_per_device[{ikey}].set = true;"
