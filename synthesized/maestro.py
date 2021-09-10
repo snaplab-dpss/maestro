@@ -266,11 +266,11 @@ if __name__ == "__main__":
   call_paths = symbex(args.nf)
   t_symbex = perf_counter()
 
-  print("\n[*] Analyzing call paths")
-  analyze_call_paths(args.nf, call_paths)
-  t_analyze_call_paths = perf_counter()
-
   if args.target != CHOICE_SEQUENTIAL and args.target != CHOICE_CPH:
+    print("\n[*] Analyzing call paths")
+    analyze_call_paths(args.nf, call_paths)
+    t_analyze_call_paths = perf_counter()
+
     print("\n[*] Finding RSS configuration")
     if not args.randomize:
       success = rss_conf_from_lvas()
@@ -281,7 +281,7 @@ if __name__ == "__main__":
       success = rss_conf_random(2) # TODO devices
       assert(success)
 
-  t_rss_conf = perf_counter()
+    t_rss_conf = perf_counter()
 
   print("\n[*] Synthesizing")
   synthesized_content = []
@@ -307,9 +307,12 @@ if __name__ == "__main__":
   print()
   print("================ REPORT ================")
   print(f"Symbolic execution  {timedelta(seconds=(t_symbex - t_start))}")
-  print(f"Call path analysis  {timedelta(seconds=(t_analyze_call_paths - t_symbex))}")
-  print(f"Solver              {timedelta(seconds=(t_rss_conf - t_analyze_call_paths))}")
-  print(f"Synthesize          {timedelta(seconds=(t_synthesize - t_rss_conf))}")
+  if args.target != CHOICE_SEQUENTIAL and args.target != CHOICE_CPH:
+    print(f"Call path analysis  {timedelta(seconds=(t_analyze_call_paths - t_symbex))}")
+    print(f"Solver              {timedelta(seconds=(t_rss_conf - t_analyze_call_paths))}")
+    print(f"Synthesize          {timedelta(seconds=(t_synthesize - t_rss_conf))}")
+  else:
+    print(f"Synthesize          {timedelta(seconds=(t_synthesize - t_symbex))}")
   print(f"Total               {timedelta(seconds=(t_end - t_start))}")
   print("========================================")
 
