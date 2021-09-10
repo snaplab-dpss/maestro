@@ -3,7 +3,7 @@ NF_FILES := nat_main.c nat_config.c nat_flowmanager.c
 NF_AUTOGEN_SRCS := flow.h
 
 NF_ARGS := --wan 1 \
-           --expire $(or $(EXPIRATION_TIME),10) \
+           --expire $(or $(EXPIRATION_TIME),1000000) \
            --starting-port 0 \
            --max-flows 65536 \
            --extip $(or $(MB_IP_EXTERNAL),0.0.0.0) \
