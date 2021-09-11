@@ -231,10 +231,10 @@ static inline void nf_return_all_chunks(void *p) {
   size_t *chunks_borrowed_num_ptr = &RTE_PER_LCORE(chunks_borrowed_num);
   void ***chunks_borrowed_ptr = &RTE_PER_LCORE(chunks_borrowed);
 
-  do {
+  while ((*chunks_borrowed_num_ptr) != 0) {
     (*chunks_borrowed_num_ptr)--;
     packet_return_chunk(p, (*chunks_borrowed_ptr)[*chunks_borrowed_num_ptr]);
-  } while ((*chunks_borrowed_num_ptr) != 0);
+  }
 }
 
 static inline struct rte_ether_hdr *nf_then_get_rte_ether_header(void *p) {
