@@ -272,7 +272,7 @@ if __name__ == "__main__":
     t_analyze_call_paths = perf_counter()
 
     print("\n[*] Finding RSS configuration")
-    if not args.randomize:
+    if not args.randomize and args.target == CHOICE_SHARED_NOTHING:
       success = rss_conf_from_lvas()
       if not success:
         print("Unable to synthesize a parallel implementation using a shared nothing model.")
