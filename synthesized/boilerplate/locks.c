@@ -201,6 +201,8 @@ void nf_util_init() {
   (*chunks_borrowed_num_ptr) = 0;
   (*chunks_borrowed_ptr) =
       (void **)rte_malloc(NULL, sizeof(void *) * MAX_N_CHUNKS, 64);
+
+  nf_util_init_locks();
 }
 
 static inline void *nf_borrow_next_chunk(void *p, size_t length) {
