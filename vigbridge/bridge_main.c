@@ -1,6 +1,6 @@
 #ifdef KLEE_VERIFICATION
-#  include "libvig/models/verified/map-control.h" //for map_reset
-#endif                                                  // KLEE_VERIFICATION
+#include "libvig/models/verified/map-control.h" //for map_reset
+#endif                                          // KLEE_VERIFICATION
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
@@ -31,7 +31,8 @@ int bridge_expire_entries(vigor_time_t time) {
   assert(time >= 0); // we don't support the past
   assert(sizeof(vigor_time_t) <= sizeof(uint64_t));
   uint64_t time_u = (uint64_t)time; // OK because of the two asserts
-  vigor_time_t last_time = time_u - config.expiration_time * 1000; // us to ns
+  vigor_time_t vigor_time_expiration = (vigor_time_t)config.expiration_time;
+  vigor_time_t last_time = time_u - vigor_time_expiration * 1000; // us to ns
   return expire_items_single_map(mac_tables->dyn_heap, mac_tables->dyn_keys,
                                  mac_tables->dyn_map, last_time);
 }
@@ -99,7 +100,7 @@ static void read_static_ft_from_array(struct Map *stat_map,
 
 #else // KLEE_VERIFICATION
 
-#  ifndef NFOS
+#ifndef NFOS
 static void read_static_ft_from_file(struct Map *stat_map,
                                      struct Vector *stat_keys,
                                      uint32_t stat_capacity) {
@@ -206,15 +207,13 @@ static void read_static_ft_from_file(struct Map *stat_map,
 finally:
   fclose(cfg_file);
 }
-#  endif // NFOS
+#endif // NFOS
 
 struct {
   const char mac_addr[18];
   const int device_from;
   const int device_to;
-} static_rules[] = {
-  { "00:00:00:00:00:00", 0, 0 },
-};
+} static_rules[] = { { "00:00:00:00:00:00", 0, 0 }, };
 
 static void read_static_ft_from_array(struct Map *stat_map,
                                       struct Vector *stat_keys,
