@@ -42,28 +42,33 @@
  **********************************************/
 
 typedef struct {
-  rte_atomic32_t *tokens;
-  rte_atomic32_t write_token;
+  rte_atomic32_t atom;
+} __attribute__((aligned(64))) atom_t;
+
+typedef struct {
+  atom_t *tokens;
+  atom_t write_token;
 } nf_lock_t;
 
 static inline void nf_lock_init(nf_lock_t *nfl) {
-  nfl->tokens = (rte_atomic32_t *)rte_malloc(
-      NULL, sizeof(rte_atomic32_t) * RTE_MAX_LCORE, 64);
+  nfl->tokens = (atom_t *)rte_malloc(NULL, sizeof(atom_t) * RTE_MAX_LCORE, 64);
 
   unsigned lcore_id;
-  RTE_LCORE_FOREACH(lcore_id) { rte_atomic32_init(&nfl->tokens[lcore_id]); }
+  RTE_LCORE_FOREACH(lcore_id) {
+    rte_atomic32_init(&nfl->tokens[lcore_id].atom);
+  }
 
-  rte_atomic32_init(&nfl->write_token);
+  rte_atomic32_init(&nfl->write_token.atom);
 }
 
 static inline void nf_lock_allow_writes(nf_lock_t *nfl) {
   unsigned lcore_id = rte_lcore_id();
-  rte_atomic32_clear(&nfl->tokens[lcore_id]);
+  rte_atomic32_clear(&nfl->tokens[lcore_id].atom);
 }
 
 static inline void nf_lock_block_writes(nf_lock_t *nfl) {
   unsigned lcore_id = rte_lcore_id();
-  while (!rte_atomic32_test_and_set(&nfl->tokens[lcore_id])) {
+  while (!rte_atomic32_test_and_set(&nfl->tokens[lcore_id].atom)) {
     // prevent the compiler from removing this loop
     __asm__ __volatile__("");
   }
@@ -71,15 +76,15 @@ static inline void nf_lock_block_writes(nf_lock_t *nfl) {
 
 static inline void nf_lock_write_lock(nf_lock_t *nfl) {
   unsigned lcore_id = rte_lcore_id();
-  rte_atomic32_clear(&nfl->tokens[lcore_id]);
+  rte_atomic32_clear(&nfl->tokens[lcore_id].atom);
 
-  while (!rte_atomic32_test_and_set(&nfl->write_token)) {
+  while (!rte_atomic32_test_and_set(&nfl->write_token.atom)) {
     // prevent the compiler from removing this loop
     __asm__ __volatile__("");
   }
 
   RTE_LCORE_FOREACH(lcore_id) {
-    while (!rte_atomic32_test_and_set(&nfl->tokens[lcore_id])) {
+    while (!rte_atomic32_test_and_set(&nfl->tokens[lcore_id].atom)) {
       __asm__ __volatile__("");
     }
   }
@@ -87,9 +92,11 @@ static inline void nf_lock_write_lock(nf_lock_t *nfl) {
 
 static inline void nf_lock_write_unlock(nf_lock_t *nfl) {
   unsigned lcore_id;
-  RTE_LCORE_FOREACH(lcore_id) { rte_atomic32_clear(&nfl->tokens[lcore_id]); }
+  RTE_LCORE_FOREACH(lcore_id) {
+    rte_atomic32_clear(&nfl->tokens[lcore_id].atom);
+  }
 
-  rte_atomic32_clear(&nfl->write_token);
+  rte_atomic32_clear(&nfl->write_token.atom);
 }
 
 /**********************************************
