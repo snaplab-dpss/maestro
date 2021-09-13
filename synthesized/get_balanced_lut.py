@@ -360,7 +360,7 @@ def run(key, pcap, _verbose=False):
 	lut_counters = [ sum(lut_entry) for lut_entry in zip(*lut_counters_partitioned) ]
 
 	luts = []
-	for cores in range(2, 19):
+	for cores in range(2, 10):
 		if CONFIG['verbose']: print(cores, "cores")
 		lut = find_good_lut(cores, lut_counters)
 		luts.append(lut)
