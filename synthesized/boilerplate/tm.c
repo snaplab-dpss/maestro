@@ -984,8 +984,10 @@ static void worker_main(void) {
         uint8_t *data = rte_pktmbuf_mtod(mbufs[n], uint8_t *);
         packet_state_total_length(data, &(mbufs[n]->pkt_len));
         vigor_time_t VIGOR_NOW = current_time();
+        HTM_SGL_begin();
         uint16_t dst_device =
             nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
+        HTM_SGL_commit();
         nf_return_all_chunks(data);
 
         if (dst_device == VIGOR_DEVICE) {
