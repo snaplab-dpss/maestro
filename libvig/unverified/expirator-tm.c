@@ -24,8 +24,9 @@ int expire_items_tm(struct DoubleChainTM *chain, struct DoubleMap *map,
   return count;
 }
 
-int expire_items_single_map(struct DoubleChainTM *chain, struct Vector *vector,
-                            struct Map *map, vigor_time_t time) {
+int expire_items_single_map_tm(struct DoubleChainTM *chain,
+                               struct Vector *vector, struct Map *map,
+                               vigor_time_t time) {
   bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
   bool *write_state_ptr = &RTE_PER_LCORE(write_state);
 

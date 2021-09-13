@@ -1,4 +1,4 @@
-#ifndef _EXPIRATOR_LOCKS_H_INCLUDED_
+#ifndef _EXPIRATOR_TM_H_INCLUDED_
 
 #include "double-chain-tm.h"
 #include "../verified/double-map.h"
