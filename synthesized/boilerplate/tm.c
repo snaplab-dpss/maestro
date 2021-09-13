@@ -22,7 +22,6 @@
 #include <rte_udp.h>
 #include <rte_errno.h>
 #include <rte_lcore.h>
-#include <rte_atomic.h>
 #include <rte_malloc.h>
 
 #include "libvig/verified/boilerplate-util.h"
@@ -34,63 +33,6 @@
 #include "libvig/verified/vector.h"
 #include "libvig/verified/map.h"
 #include "libvig/verified/expirator.h"
-
-/**********************************************
- *
- *                  NF-LOCKS
- *
- **********************************************/
-
-typedef struct {
-  rte_atomic32_t *tokens;
-  rte_atomic32_t write_token;
-} nf_lock_t;
-
-static inline void nf_lock_init(nf_lock_t *nfl) {
-  nfl->tokens = (rte_atomic32_t *)rte_malloc(
-      NULL, sizeof(rte_atomic32_t) * RTE_MAX_LCORE, 64);
-
-  unsigned lcore_id;
-  RTE_LCORE_FOREACH(lcore_id) { rte_atomic32_init(&nfl->tokens[lcore_id]); }
-
-  rte_atomic32_init(&nfl->write_token);
-}
-
-static inline void nf_lock_allow_writes(nf_lock_t *nfl) {
-  unsigned lcore_id = rte_lcore_id();
-  rte_atomic32_clear(&nfl->tokens[lcore_id]);
-}
-
-static inline void nf_lock_block_writes(nf_lock_t *nfl) {
-  unsigned lcore_id = rte_lcore_id();
-  while (!rte_atomic32_test_and_set(&nfl->tokens[lcore_id])) {
-    // prevent the compiler from removing this loop
-    __asm__ __volatile__("");
-  }
-}
-
-static inline void nf_lock_write_lock(nf_lock_t *nfl) {
-  unsigned lcore_id = rte_lcore_id();
-  rte_atomic32_clear(&nfl->tokens[lcore_id]);
-
-  while (!rte_atomic32_test_and_set(&nfl->write_token)) {
-    // prevent the compiler from removing this loop
-    __asm__ __volatile__("");
-  }
-
-  RTE_LCORE_FOREACH(lcore_id) {
-    while (!rte_atomic32_test_and_set(&nfl->tokens[lcore_id])) {
-      __asm__ __volatile__("");
-    }
-  }
-}
-
-static inline void nf_lock_write_unlock(nf_lock_t *nfl) {
-  unsigned lcore_id;
-  RTE_LCORE_FOREACH(lcore_id) { rte_atomic32_clear(&nfl->tokens[lcore_id]); }
-
-  rte_atomic32_clear(&nfl->write_token);
-}
 
 /**********************************************
  *
@@ -189,10 +131,6 @@ RTE_DEFINE_PER_LCORE(size_t, chunks_borrowed_num);
 
 RTE_DEFINE_PER_LCORE(bool, write_attempt);
 RTE_DEFINE_PER_LCORE(bool, write_state);
-
-nf_lock_t nf_lock;
-
-void nf_util_init_locks() { nf_lock_init(&nf_lock); }
 
 void nf_util_init() {
   size_t *chunks_borrowed_num_ptr = &RTE_PER_LCORE(chunks_borrowed_num);
@@ -1012,7 +950,6 @@ static int nf_init_device(uint16_t device, struct rte_mempool **mbuf_pools) {
   return 0;
 }
 
-// Main worker method (for now used on a single thread...)
 static void worker_main(void) {
   const unsigned lcore_id = rte_lcore_id();
   const uint16_t queue_id = lcores_conf[lcore_id].queue_id;
@@ -1023,9 +960,6 @@ static void worker_main(void) {
   if (!nf_init()) {
     rte_exit(EXIT_FAILURE, "Error initializing NF");
   }
-
-  bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
-  bool *write_state_ptr = &RTE_PER_LCORE(write_state);
 
   NF_INFO("Core %u forwarding packets.", rte_lcore_id());
 
@@ -1050,27 +984,9 @@ static void worker_main(void) {
         uint8_t *data = rte_pktmbuf_mtod(mbufs[n], uint8_t *);
         packet_state_total_length(data, &(mbufs[n]->pkt_len));
         vigor_time_t VIGOR_NOW = current_time();
-
-        *write_attempt_ptr = false;
-        *write_state_ptr = false;
-
-        nf_lock_block_writes(&nf_lock);
         uint16_t dst_device =
             nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
         nf_return_all_chunks(data);
-
-        if (*write_attempt_ptr) {
-          *write_state_ptr = true;
-
-          nf_lock_write_lock(&nf_lock);
-          uint16_t dst_device =
-              nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
-          nf_lock_write_unlock(&nf_lock);
-
-          nf_return_all_chunks(data);
-        } else {
-          nf_lock_allow_writes(&nf_lock);
-        }
 
         if (dst_device == VIGOR_DEVICE) {
           rte_pktmbuf_free(mbufs[n]);

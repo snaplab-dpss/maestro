@@ -486,7 +486,6 @@ static int nf_init_device(uint16_t device, struct rte_mempool **mbuf_pools) {
   return 0;
 }
 
-// Main worker method (for now used on a single thread...)
 static void worker_main(void) {
   const unsigned lcore_id = rte_lcore_id();
   const uint16_t queue_id = lcores_conf[lcore_id].queue_id;

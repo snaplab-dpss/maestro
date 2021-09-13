@@ -1,5 +1,4 @@
 SYNTHESIZED_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
 EXTRA-SRCS-y := $(shell echo $(SYNTHESIZED_DIR)/../libvig/unverified/*.c)
-#LDLIBS := -mrtm
 SYNTHESIZED_FILE := $(SYNTHESIZED_DIR)/build/synthesized/nf.c
