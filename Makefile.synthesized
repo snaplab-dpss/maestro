@@ -28,6 +28,7 @@ CFLAGS += -DCAPACITY_POW2
 CFLAGS += -O3
 #CFLAGS += -O0 -g -rdynamic -DENABLE_LOG -Wfatal-errors
 CFLAGS += -Wl,--allow-multiple-definition
+CFLAGS += -mrtm
 
 include $(RTE_SDK)/mk/rte.extapp.mk
 
