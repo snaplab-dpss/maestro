@@ -32,7 +32,7 @@
 #include "libvig/unverified/double-chain-tm.h"
 #include "libvig/verified/vector.h"
 #include "libvig/verified/map.h"
-#include "libvig/verified/expirator.h"
+#include "libvig/unverified/expirator-tm.h"
 
 /**********************************************
  *
