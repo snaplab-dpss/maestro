@@ -1102,9 +1102,10 @@ counter_t counter;
 
 bool nf_init(void) {
   if (rte_lcore_id() == rte_get_master_lcore()) {
-    HTM_thr_init(rte_lcore_id());
     counter.counter = 0;
   }
+
+  HTM_thr_init(rte_lcore_id());
   return true;
 }
 

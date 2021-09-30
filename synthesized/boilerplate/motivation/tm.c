@@ -1098,15 +1098,18 @@ typedef struct {
   uint64_t counter;
 } __attribute__((aligned(64))) counter_t;
 
-counter_t counter;
+#define COUNTER_SIZE 100
+counter_t *counter;
 
 bool nf_init(void) {
   if (rte_lcore_id() == rte_get_master_lcore()) {
-    HTM_thr_init(rte_lcore_id());
-    counter.counter = 0;
-
-    return true;
+    counter =
+        (counter_t *)rte_malloc(NULL, COUNTER_SIZE * sizeof(counter_t), 64);
   }
+
+  HTM_thr_init(rte_lcore_id());
+
+  return true;
 }
 
 int nf_process(uint16_t device, uint8_t *buffer, uint16_t buffer_length,
@@ -1129,6 +1132,7 @@ int nf_process(uint16_t device, uint8_t *buffer, uint16_t buffer_length,
   }
 
   HTM_SGL_begin();
+  counter[rte_lcore_id()].counter++;
   HTM_SGL_commit();
 
   // test000003
