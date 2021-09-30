@@ -154,8 +154,8 @@ static inline void *nf_borrow_next_chunk(void *p, size_t length) {
   return chunk;
 }
 
-#define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests, tag)     \
-/*nothing*/
+#define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests,          \
+                          tag) /*nothing*/
 
 #define CHUNK_LAYOUT_N(pkt, str_name, fields, nests)                           \
   CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields,                      \
@@ -632,18 +632,11 @@ typedef struct {
   rte_atomic32_t counter;
 } __attribute__((aligned(64))) counter_t;
 
-#define COUNTER_SIZE 100
-
-counter_t *counter;
+counter_t counter;
 
 bool nf_init(void) {
   if (rte_lcore_id() == rte_get_master_lcore()) {
-    counter =
-        (counter_t *)rte_malloc(NULL, COUNTER_SIZE * sizeof(counter_t), 64);
-
-    for (int i = 0; i < COUNTER_SIZE; i++) {
-      rte_atomic32_init(&counter[i].counter);
-    }
+    rte_atomic32_init(&counter.counter);
   }
 
   return true;
@@ -653,7 +646,22 @@ int nf_process(uint16_t device, uint8_t *buffer, uint16_t buffer_length,
                vigor_time_t now) {
   struct rte_ether_hdr *ether_header = nf_borrow_next_chunk(buffer, 14u);
 
-  rte_atomic32_inc(&counter[rte_lcore_id()].counter);
+  uint8_t *ip_options;
+  struct rte_ipv4_hdr *rte_ipv4_header =
+      nf_then_get_rte_ipv4_header(ether_header, buffer, &ip_options);
+  if (rte_ipv4_header == NULL) {
+    NF_DEBUG("Not IPv4, dropping");
+    return device;
+  }
+
+  struct tcpudp_hdr *tcpudp_header =
+      nf_then_get_tcpudp_header(rte_ipv4_header, buffer);
+  if (tcpudp_header == NULL) {
+    NF_DEBUG("Not TCP/UDP, dropping");
+    return device;
+  }
+
+  rte_atomic32_inc(&counter.counter);
 
   // test000003
   if (device) {
