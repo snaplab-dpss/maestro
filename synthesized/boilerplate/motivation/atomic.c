@@ -632,11 +632,15 @@ typedef struct {
   rte_atomic32_t counter;
 } __attribute__((aligned(64))) counter_t;
 
-counter_t counter;
+rte_atomic32_t c1;
+rte_atomic32_t c2;
+rte_atomic32_t c3;
 
 bool nf_init(void) {
   if (rte_lcore_id() == rte_get_master_lcore()) {
-    rte_atomic32_init(&counter.counter);
+    rte_atomic32_init(&c1);
+    rte_atomic32_init(&c2);
+    rte_atomic32_init(&c3);
   }
 
   return true;
@@ -661,7 +665,13 @@ int nf_process(uint16_t device, uint8_t *buffer, uint16_t buffer_length,
     return device;
   }
 
-  rte_atomic32_inc(&counter.counter);
+  rte_atomic32_inc(&c1);
+  rte_atomic32_inc(&c2);
+  rte_atomic32_inc(&c3);
+  
+  uint32_t r1 = rte_atomic32_read(&c1);
+  uint32_t r2 = rte_atomic32_read(&c2);
+  uint32_t r3 = rte_atomic32_read(&c3);
 
   // test000003
   if (device) {

@@ -628,11 +628,20 @@ struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {
     .rss_hf = ETH_RSS_NONFRAG_IPV4_TCP | ETH_RSS_NONFRAG_IPV4_UDP }
 };
 
-RTE_DEFINE_PER_LCORE(uint64_t, counter);
+RTE_DEFINE_PER_LCORE(uint64_t, c1);
+RTE_DEFINE_PER_LCORE(uint64_t, c2);
+RTE_DEFINE_PER_LCORE(uint64_t, c3);
 
 bool nf_init(void) {
-  uint64_t *counter_ptr = &RTE_PER_LCORE(counter);
-  (*counter_ptr) = 0;
+  uint64_t *c1_ptr = &RTE_PER_LCORE(c1);
+  (*c1_ptr) = 0;
+
+  uint64_t *c2_ptr = &RTE_PER_LCORE(c2);
+  (*c2_ptr) = 0;
+
+  uint64_t *c3_ptr = &RTE_PER_LCORE(c3);
+  (*c3_ptr) = 0;
+
   return true;
 }
 
@@ -655,8 +664,17 @@ int nf_process(uint16_t device, uint8_t *buffer, uint16_t buffer_length,
     return device;
   }
 
-  uint64_t *counter_ptr = &RTE_PER_LCORE(counter);
-  (*counter_ptr)++;
+  uint64_t *c1_ptr = &RTE_PER_LCORE(c1);
+  (*c1_ptr)++;
+  uint64_t r1 = *c1_ptr;
+
+  uint64_t *c2_ptr = &RTE_PER_LCORE(c2);
+  (*c2_ptr)++;
+  uint64_t r2 = *c2_ptr;
+
+  uint64_t *c3_ptr = &RTE_PER_LCORE(c3);
+  (*c3_ptr)++;
+  uint64_t r3 = *c3_ptr;
 
   // test000003
   if (device) {

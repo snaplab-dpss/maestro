@@ -720,18 +720,23 @@ struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {
     .rss_hf = ETH_RSS_NONFRAG_IPV4_TCP | ETH_RSS_NONFRAG_IPV4_UDP }
 };
 
-rte_spinlock_t lock;
+rte_spinlock_t l;
 
 typedef struct {
   uint64_t counter;
 } __attribute__((aligned(64))) counter_t;
 
-counter_t counter;
+counter_t c1;
+counter_t c2;
+counter_t c3;
 
 bool nf_init(void) {
   if (rte_lcore_id() == rte_get_master_lcore()) {
-    rte_spinlock_init(&lock);
-    counter.counter = 0;
+    rte_spinlock_init(&l);
+
+    c1.counter = 0;
+    c2.counter = 0;
+    c3.counter = 0;
 
     return true;
   }
@@ -756,9 +761,11 @@ int nf_process(uint16_t device, uint8_t *buffer, uint16_t buffer_length,
     return device;
   }
 
-  rte_spinlock_lock(&lock);
-  counter.counter++;
-  rte_spinlock_unlock(&lock);
+  rte_spinlock_lock(&l);
+  c1.counter++;
+  c2.counter++;
+  c3.counter++;
+  rte_spinlock_unlock(&l);
 
   // test000003
   if (device) {

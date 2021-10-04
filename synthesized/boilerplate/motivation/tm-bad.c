@@ -1098,11 +1098,15 @@ typedef struct {
   uint64_t counter;
 } __attribute__((aligned(64))) counter_t;
 
-counter_t counter;
+counter_t c1;
+counter_t c2;
+counter_t c3;
 
 bool nf_init(void) {
   if (rte_lcore_id() == rte_get_master_lcore()) {
-    counter.counter = 0;
+    c1.counter = 0;
+    c2.counter = 0;
+    c3.counter = 0;
   }
 
   HTM_thr_init(rte_lcore_id());
@@ -1129,7 +1133,9 @@ int nf_process(uint16_t device, uint8_t *buffer, uint16_t buffer_length,
   }
 
   HTM_SGL_begin();
-  counter.counter++;
+  c1.counter++;
+  c2.counter++;
+  c3.counter++;
   HTM_SGL_commit();
 
   // test000003
