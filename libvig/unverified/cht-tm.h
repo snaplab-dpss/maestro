@@ -2,7 +2,7 @@
 #define _CHT_TM_H_INCLUDED_
 
 #include "libvig/unverified/double-chain-tm.h"
-#include "libvig/unverified/vector.h"
+#include "libvig/verified/vector.h"
 
 #define MAX_CHT_HEIGHT 40000
 
