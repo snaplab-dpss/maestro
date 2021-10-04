@@ -33,6 +33,7 @@
 #include "libvig/verified/vector.h"
 #include "libvig/verified/map.h"
 #include "libvig/unverified/expirator-tm.h"
+#include "libvig/verified/cht.h"
 
 /**********************************************
  *

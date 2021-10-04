@@ -44,6 +44,7 @@
 #include "libvig/verified/vector.h"
 #include "libvig/verified/map.h"
 #include "libvig/verified/expirator.h"
+#include "libvig/verified/cht.h"
 
 /**********************************************
  *
