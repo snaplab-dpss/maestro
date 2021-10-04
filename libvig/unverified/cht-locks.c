@@ -7,7 +7,7 @@ static uint64_t loop(uint64_t k, uint64_t capacity) {
     return g;
 }
 
-int cht_fill_cht(struct VectorLocks *cht, uint32_t cht_height, uint32_t backend_capacity) {
+int cht_locks_fill_cht(struct VectorLocks *cht, uint32_t cht_height, uint32_t backend_capacity) {
     // Generate the permutations of 0..(cht_height - 1) for each backend
     int *permutations = (int*) malloc(sizeof(int) * (int)(cht_height * backend_capacity));
     if (permutations == 0) {
@@ -60,7 +60,7 @@ int cht_fill_cht(struct VectorLocks *cht, uint32_t cht_height, uint32_t backend_
     return 1;
 }
 
-int cht_find_preferred_available_backend(uint64_t hash, struct VectorLocks *cht, struct DoubleChainLocks *active_backends, uint32_t cht_height, uint32_t backend_capacity, int *chosen_backend) {
+int cht_locks_find_preferred_available_backend(uint64_t hash, struct VectorLocks *cht, struct DoubleChainLocks *active_backends, uint32_t cht_height, uint32_t backend_capacity, int *chosen_backend) {
     uint64_t start = loop(hash, cht_height);
     for (uint32_t i = 0; i < backend_capacity; ++i) {
         uint64_t candidate_idx = start * backend_capacity + i; // There was a bug, right here, untill I tried to prove this.
