@@ -34,6 +34,7 @@
 #include "libvig/unverified/vector-locks.h"
 #include "libvig/unverified/map-locks.h"
 #include "libvig/unverified/expirator-locks.h"
+#include "libvig/unverified/cht-locks.h"
 
 /**********************************************
  *

@@ -29,10 +29,11 @@
 #include "libvig/verified/vigor-time.h"
 #include "libvig/verified/ether.h"
 
-#include "libvig/verified/double-chain.h"
+#include "libvig/unverified/double-chain-tm.h"
 #include "libvig/verified/vector.h"
 #include "libvig/verified/map.h"
-#include "libvig/verified/expirator.h"
+#include "libvig/unverified/expirator-tm.h"
+#include "libvig/unverified/cht-tm.h"
 
 /**********************************************
  *
