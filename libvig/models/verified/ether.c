@@ -3,7 +3,7 @@
 #include <klee/klee.h>
 
 struct str_field_descr rte_ether_addr_descrs[] = {
-  {offsetof(struct rte_ether_addr, addr_bytes), sizeof(uint8_t ), 6, "addr_bytes"},
+  {offsetof(struct rte_ether_addr, addr_bytes), sizeof(struct rte_ether_addr), 0, "addr_bytes"},
 };
 struct nested_field_descr rte_ether_addr_nests[] = {
 
