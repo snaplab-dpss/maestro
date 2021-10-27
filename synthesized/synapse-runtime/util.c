@@ -499,8 +499,8 @@ bool synapse_environment_queue_insert_table_entry(
 bool synapse_environment_queue_delete_table_entry(p4_table_entry_ptr_t entry) {
   helper_ptr_t helper;
   update_queue_ptr_t queue;
-  if (!synapse_environment_get_helper(helper) ||
-      !synapse_environment_get_queue(queue)) {
+  if (!synapse_environment_get_helper(&helper) ||
+      !synapse_environment_get_queue(&queue)) {
     return false;
   }
 

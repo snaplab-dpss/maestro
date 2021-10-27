@@ -657,7 +657,7 @@ bool synapse_runtime_handle_idle_timeout_notification_received() {
   size_t entriesSz = *((size_t *)synapse_runtime_wrappers_stack_pop(stack));
   p4_table_entry_ptr_t *entries = synapse_runtime_wrappers_stack_pop(stack);
 
-  p4_table_entry_t entry;
+  p4_table_entry_ptr_t entry;
   for (size_t i = 0; i < entriesSz; i++) {
     if (NULL == (entry = entries[i])) {
       return false;
