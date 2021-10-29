@@ -636,12 +636,18 @@ typedef struct {
 rte_atomic32_t c1;
 rte_atomic32_t c2;
 rte_atomic32_t c3;
+rte_atomic32_t c4;
+rte_atomic32_t c5;
+rte_atomic32_t c6;
 
 bool nf_init(void) {
   if (rte_lcore_id() == rte_get_master_lcore()) {
     rte_atomic32_init(&c1);
     rte_atomic32_init(&c2);
     rte_atomic32_init(&c3);
+    rte_atomic32_init(&c4);
+    rte_atomic32_init(&c5);
+    rte_atomic32_init(&c6);
   }
 
   return true;
@@ -666,13 +672,24 @@ int nf_process(uint16_t device, uint8_t *buffer, uint16_t buffer_length,
     return device;
   }
 
-  rte_atomic32_inc(&c1);
-  rte_atomic32_inc(&c2);
-  rte_atomic32_inc(&c3);
-  
+  uint64_t core_specific_load = 1;
+  for (int i = 0; i < 100; i++) {
+    core_specific_load = (core_specific_load * 13) % 17;
+  }
+
+  rte_atomic32_add(&c1, core_specific_load);
+  rte_atomic32_add(&c2, core_specific_load);
+  rte_atomic32_add(&c3, core_specific_load);
+  rte_atomic32_add(&c4, core_specific_load);
+  rte_atomic32_add(&c5, core_specific_load);
+  rte_atomic32_add(&c6, core_specific_load);
+
   uint32_t r1 = rte_atomic32_read(&c1);
   uint32_t r2 = rte_atomic32_read(&c2);
   uint32_t r3 = rte_atomic32_read(&c3);
+  uint32_t r4 = rte_atomic32_read(&c4);
+  uint32_t r5 = rte_atomic32_read(&c5);
+  uint32_t r6 = rte_atomic32_read(&c6);
 
   // test000003
   if (device) {

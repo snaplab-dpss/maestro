@@ -28,7 +28,6 @@ subprocess.call([ "mkdir", "-p", SYNTHESIZED_BUNDLE ], stdout=subprocess.DEVNULL
 CHOICE_ATOMIC = "atomic"
 CHOICE_LOCKS = "locks"
 CHOICE_SN = "shared-nothing"
-CHOICE_TM_BAD = "tm-bad"
 CHOICE_TM = "tm"
 CHOICE_UNPROTECTED = "unprotected"
 
@@ -62,7 +61,6 @@ if __name__ == "__main__":
       CHOICE_ATOMIC,
       CHOICE_LOCKS,
       CHOICE_SN,
-      CHOICE_TM_BAD,
       CHOICE_TM,
       CHOICE_UNPROTECTED,
     ])

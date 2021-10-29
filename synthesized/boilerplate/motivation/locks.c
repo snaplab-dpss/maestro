@@ -730,6 +730,9 @@ typedef struct {
 counter_t c1;
 counter_t c2;
 counter_t c3;
+counter_t c4;
+counter_t c5;
+counter_t c6;
 
 bool nf_init(void) {
   if (rte_lcore_id() == rte_get_master_lcore()) {
@@ -738,6 +741,9 @@ bool nf_init(void) {
     c1.counter = 0;
     c2.counter = 0;
     c3.counter = 0;
+    c4.counter = 0;
+    c5.counter = 0;
+    c6.counter = 0;
 
     return true;
   }
@@ -763,9 +769,30 @@ int nf_process(uint16_t device, uint8_t *buffer, uint16_t buffer_length,
   }
 
   rte_spinlock_lock(&l);
-  c1.counter++;
-  c2.counter++;
-  c3.counter++;
+
+  uint64_t core_specific_load = 1;
+  for (int i = 0; i < 100; i++) {
+    core_specific_load = (core_specific_load * 13) % 17;
+  }
+
+  c1.counter += core_specific_load;
+  uint64_t r1 = c1.counter;
+
+  c2.counter += core_specific_load;
+  uint64_t r2 = c2.counter;
+
+  c3.counter += core_specific_load;
+  uint64_t r3 = c3.counter;
+
+  c4.counter += core_specific_load;
+  uint64_t r4 = c4.counter;
+
+  c5.counter += core_specific_load;
+  uint64_t r5 = c5.counter;
+
+  c6.counter += core_specific_load;
+  uint64_t r6 = c6.counter;
+
   rte_spinlock_unlock(&l);
 
   // test000003

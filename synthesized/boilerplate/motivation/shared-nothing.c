@@ -632,6 +632,9 @@ struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {
 RTE_DEFINE_PER_LCORE(uint64_t, c1);
 RTE_DEFINE_PER_LCORE(uint64_t, c2);
 RTE_DEFINE_PER_LCORE(uint64_t, c3);
+RTE_DEFINE_PER_LCORE(uint64_t, c4);
+RTE_DEFINE_PER_LCORE(uint64_t, c5);
+RTE_DEFINE_PER_LCORE(uint64_t, c6);
 
 bool nf_init(void) {
   uint64_t *c1_ptr = &RTE_PER_LCORE(c1);
@@ -642,6 +645,15 @@ bool nf_init(void) {
 
   uint64_t *c3_ptr = &RTE_PER_LCORE(c3);
   (*c3_ptr) = 0;
+
+  uint64_t *c4_ptr = &RTE_PER_LCORE(c4);
+  (*c4_ptr) = 0;
+
+  uint64_t *c5_ptr = &RTE_PER_LCORE(c5);
+  (*c5_ptr) = 0;
+
+  uint64_t *c6_ptr = &RTE_PER_LCORE(c6);
+  (*c6_ptr) = 0;
 
   return true;
 }
@@ -665,17 +677,34 @@ int nf_process(uint16_t device, uint8_t *buffer, uint16_t buffer_length,
     return device;
   }
 
+  uint64_t core_specific_load = 1;
+  for (int i = 0; i < 100; i++) {
+    core_specific_load = (core_specific_load * 13) % 17;
+  }
+
   uint64_t *c1_ptr = &RTE_PER_LCORE(c1);
-  (*c1_ptr)++;
+  (*c1_ptr) += core_specific_load;
   uint64_t r1 = *c1_ptr;
 
   uint64_t *c2_ptr = &RTE_PER_LCORE(c2);
-  (*c2_ptr)++;
+  (*c2_ptr) += core_specific_load;
   uint64_t r2 = *c2_ptr;
 
   uint64_t *c3_ptr = &RTE_PER_LCORE(c3);
-  (*c3_ptr)++;
+  (*c3_ptr) += core_specific_load;
   uint64_t r3 = *c3_ptr;
+
+  uint64_t *c4_ptr = &RTE_PER_LCORE(c4);
+  (*c4_ptr) += core_specific_load;
+  uint64_t r4= *c4_ptr;
+
+  uint64_t *c5_ptr = &RTE_PER_LCORE(c5);
+  (*c5_ptr) += core_specific_load;
+  uint64_t r5 = *c5_ptr;
+
+  uint64_t *c6_ptr = &RTE_PER_LCORE(c6);
+  (*c6_ptr) += core_specific_load;
+  uint64_t r6 = *c6_ptr;
 
   // test000003
   if (device) {
