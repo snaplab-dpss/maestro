@@ -155,6 +155,8 @@ bool synapse_environment_queue_insert_table_entry(
     pair_t *action_params, size_t action_params_sz, int32_t priority,
     uint64_t idle_timeout_ns);
 
+bool synapse_environment_queue_delete_table_entry(p4_table_entry_ptr_t entry);
+
 // Encoders
 
 string_ptr_t synapse_encode_mac_address(const char *value);

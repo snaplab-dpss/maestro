@@ -496,6 +496,21 @@ bool synapse_environment_queue_insert_table_entry(
                   priority, idle_timeout_ns))));
 }
 
+bool synapse_environment_queue_delete_table_entry(p4_table_entry_ptr_t entry) {
+  helper_ptr_t helper;
+  update_queue_ptr_t queue;
+  if (!synapse_environment_get_helper(&helper) ||
+      !synapse_environment_get_queue(&queue)) {
+    return false;
+  }
+
+  return synapse_runtime_update_queue_queue(
+      queue,
+      synapse_runtime_p4_update_new(
+          helper, Update_Delete,
+          synapse_runtime_p4_entity_new(helper, Entity_TableEntry, entry)));
+}
+
 // Encoders
 
 string_ptr_t synapse_encode_mac_address(const char *value) {

@@ -655,30 +655,20 @@ bool synapse_runtime_handle_idle_timeout_notification_received() {
   }
 
   size_t entriesSz = *((size_t *)synapse_runtime_wrappers_stack_pop(stack));
-  pair_ptr_t *entries = synapse_runtime_wrappers_stack_pop(stack);
+  p4_table_entry_ptr_t *entries = synapse_runtime_wrappers_stack_pop(stack);
 
-  pair_ptr_t entry;
+  p4_table_entry_ptr_t entry;
   for (size_t i = 0; i < entriesSz; i++) {
     if (NULL == (entry = entries[i])) {
       return false;
     }
 
-    string_ptr_t table_name = entry->left;
-    SYNAPSE_INFO("Entry in table `%.*s` has expired", (int)table_name->sz,
-                 table_name->str);
-
-    pair_ptr_t key = entry->right;
-    size_t match_sz = *(size_t *)key->left;
-    string_ptr_t *match = key->right;
-
-    SYNAPSE_INFO("The key of the entry contains %lu fields:", match_sz);
-    for (size_t i = 0; i < match_sz; i++) {
-      uint32_t decoded = synapse_decode_p4_uint32(match[i]);
-      SYNAPSE_INFO("Field %lu: '%" SCNu32 "'", i, decoded);
+    if (!synapse_environment_queue_delete_table_entry(entry)) {
+      return false;
     }
   }
 
-  SYNAPSE_INFO("Received an idle timeout notification");
+  SYNAPSE_INFO("Deleted %d table entries", entriesSz);
   return true;
 }
 
