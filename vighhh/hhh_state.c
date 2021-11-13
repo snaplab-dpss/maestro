@@ -1,0 +1,109 @@
+#include "hhh_state.h"
+
+#include <stdlib.h>
+
+#include "libvig/verified/boilerplate-util.h"
+#ifdef KLEE_VERIFICATION
+#  include "libvig/models/verified/double-chain-control.h"
+#  include "libvig/models/verified/ether.h"
+#  include "libvig/models/verified/map-control.h"
+#  include "libvig/models/verified/vector-control.h"
+#  include "libvig/models/verified/lpm-dir-24-8-control.h"
+
+bool dyn_val_condition(void *value, int index, void *state) {
+  struct DynamicValue *v = value;
+  return (0 <= v->bucket_time) AND(v->bucket_time <= recent_time())
+      AND(v->bucket_size <= 3750000000);
+}
+
+#endif // KLEE_VERIFICATION
+
+struct State *allocated_nf_state = NULL;
+
+struct State *alloc_state(uint64_t link_capacity, uint8_t threshold,
+                          uint8_t min_prefix, uint8_t max_prefix,
+                          uint32_t capacity, uint32_t dev_count) {
+  if (allocated_nf_state != NULL)
+    return allocated_nf_state;
+
+  struct State *ret = malloc(sizeof(struct State));
+
+  if (ret == NULL)
+    return NULL;
+
+  uint8_t n_prefixes = max_prefix - min_prefix + 1;
+  ret->n_prefixes = n_prefixes;
+
+  uint64_t threshold_rate = (link_capacity / 8) * (threshold * 0.01);
+  ret->threshold_rate = threshold_rate;
+
+  ret->prefix_indexers =
+      (struct Map **)malloc(sizeof(struct Map *) * n_prefixes);
+  ret->allocators =
+      (struct DoubleChain **)malloc(sizeof(struct DoubleChain *) * n_prefixes);
+  ret->prefix_buckets =
+      (struct Vector **)malloc(sizeof(struct Vector *) * n_prefixes);
+  ret->prefixes =
+      (struct Vector **)malloc(sizeof(struct Vector *) * n_prefixes);
+
+  for (uint8_t i = 0; i < n_prefixes; i++) {
+    ret->prefix_indexers[i] = NULL;
+    if (map_allocate(ip_addr_eq, ip_addr_hash, capacity,
+                     &(ret->prefix_indexers[i])) == 0) {
+      return NULL;
+    }
+
+    ret->allocators[i] = NULL;
+    if (dchain_allocate(capacity, &(ret->allocators[i])) == 0) {
+      return NULL;
+    }
+
+    ret->prefix_buckets[i] = NULL;
+    if (vector_allocate(sizeof(struct DynamicValue), capacity,
+                        DynamicValue_allocate,
+                        &(ret->prefix_buckets[i])) == 0) {
+      return NULL;
+    }
+
+    ret->prefixes[i] = NULL;
+    if (vector_allocate(sizeof(struct ip_addr), capacity, ip_addr_allocate,
+                        &(ret->prefixes[i])) == 0) {
+      return NULL;
+    }
+
+#ifdef KLEE_VERIFICATION
+    map_set_layout(ret->prefix_indexers[i], ip_addr_descrs,
+                   sizeof(ip_addr_descrs) / sizeof(ip_addr_descrs[0]),
+                   ip_addr_nests,
+                   sizeof(ip_addr_nests) / sizeof(ip_addr_nests[0]), "ip_addr");
+    vector_set_layout(
+        ret->prefix_buckets[i], DynamicValue_descrs,
+        sizeof(DynamicValue_descrs) / sizeof(DynamicValue_descrs[0]),
+        DynamicValue_nests,
+        sizeof(DynamicValue_nests) / sizeof(DynamicValue_nests[0]),
+        "DynamicValue");
+    vector_set_entry_condition(ret->prefix_buckets[i], dyn_val_condition, ret);
+    vector_set_layout(
+        ret->prefixes[i], ip_addr_descrs,
+        sizeof(ip_addr_descrs) / sizeof(ip_addr_descrs[0]), ip_addr_nests,
+        sizeof(ip_addr_nests) / sizeof(ip_addr_nests[0]), "ip_addr");
+#endif // KLEE_VERIFICATION
+  }
+
+  ret->capacity = capacity;
+  ret->dev_count = dev_count;
+
+  allocated_nf_state = ret;
+  return ret;
+}
+
+#ifdef KLEE_VERIFICATION
+void nf_loop_iteration_border(unsigned lcore_id, vigor_time_t time) {
+  loop_iteration_border(
+      &allocated_nf_state->prefix_indexers, &allocated_nf_state->allocators,
+      &allocated_nf_state->prefix_buckets, &allocated_nf_state->prefixes,
+      allocated_nf_state->n_prefixes, allocated_nf_state->capacity,
+      allocated_nf_state->dev_count, lcore_id, time);
+}
+
+#endif // KLEE_VERIFICATION

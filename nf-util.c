@@ -13,7 +13,7 @@
 #include "nf-log.h"
 
 #ifdef KLEE_VERIFICATION
-#include <klee/klee.h>
+#  include <klee/klee.h>
 #endif
 
 void *chunks_borrowed[MAX_N_CHUNKS];
@@ -49,16 +49,14 @@ void nf_log_pkt(struct rte_ether_hdr *rte_ether_header,
   NF_INFO("  ttl     %u", rte_ipv4_header->time_to_live);
   NF_INFO("  proto   %u", rte_ipv4_header->next_proto_id);
   NF_INFO("  chksum  0x%x", rte_bswap16(rte_ipv4_header->hdr_checksum));
-  NF_INFO("  src     %u.%u.%u.%u",
-          (rte_bswap32(rte_ipv4_header->src_addr) >> 24) & 0xff,
-          (rte_bswap32(rte_ipv4_header->src_addr) >> 16) & 0xff,
-          (rte_bswap32(rte_ipv4_header->src_addr) >> 8) & 0xff,
-          (rte_bswap32(rte_ipv4_header->src_addr) >> 0) & 0xff);
-  NF_INFO("  dst     %u.%u.%u.%u",
-          (rte_bswap32(rte_ipv4_header->dst_addr) >> 24) & 0xff,
-          (rte_bswap32(rte_ipv4_header->dst_addr) >> 16) & 0xff,
-          (rte_bswap32(rte_ipv4_header->dst_addr) >> 8) & 0xff,
-          (rte_bswap32(rte_ipv4_header->dst_addr) >> 0) & 0xff);
+  NF_INFO("  src     %u.%u.%u.%u", (rte_ipv4_header->src_addr >> 0) & 0xff,
+          (rte_ipv4_header->src_addr >> 8) & 0xff,
+          (rte_ipv4_header->src_addr >> 16) & 0xff,
+          (rte_ipv4_header->src_addr >> 24) & 0xff);
+  NF_INFO("  dst     %u.%u.%u.%u", (rte_ipv4_header->dst_addr >> 0) & 0xff,
+          (rte_ipv4_header->dst_addr >> 8) & 0xff,
+          (rte_ipv4_header->dst_addr >> 16) & 0xff,
+          (rte_ipv4_header->dst_addr >> 24) & 0xff);
 
   NF_INFO("###[ UDP ]###");
   NF_INFO("  sport   %u", rte_bswap16(tcpudp_header->src_port));
