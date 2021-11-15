@@ -994,15 +994,23 @@ R3S::Z3_ast RSSConfigBuilder::constraint_to_solver_input(
       auto packet_field = processed_dependency->get_packet_field();
 
       R3S::Z3_ast packet_field_ast;
-      status = R3S_packet_extract_pf(cfg, target_packet, packet_field,
-                                     &packet_field_ast);
+      status = R3S::R3S_packet_extract_pf(cfg, target_packet, packet_field,
+                                          &packet_field_ast);
       assert(status == R3S::R3S_STATUS_SUCCESS);
 
       auto packet_field_sort = Z3_get_sort(ctx, packet_field_ast);
       auto packet_field_size = Z3_get_bv_sort_size(ctx, packet_field_sort);
 
-      auto high = packet_field_size - processed_dependency->get_bytes() * 8 - 1;
-      auto low = high - 7;
+      unsigned high, low;
+
+      if (packet_field == R3S::R3S_PF_IPV4_SRC ||
+          packet_field == R3S::R3S_PF_IPV4_DST) {
+        high = (processed_dependency->get_bytes() + 1) * 8 - 1;
+        low = high - 7;
+      } else {
+        high = packet_field_size - processed_dependency->get_bytes() * 8 - 1;
+        low = high - 7;
+      }
 
       target_ast = Z3_mk_extract(ctx, high, low, packet_field_ast);
     }
