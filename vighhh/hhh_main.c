@@ -49,7 +49,7 @@ int64_t expire_entries(vigor_time_t time) {
   return freed;
 }
 
-bool allocate(uint32_t masked_dst, int i_prefix, uint16_t size,
+bool allocate(uint32_t masked_src, int i_prefix, uint16_t size,
               vigor_time_t time) {
   int index = -1;
 
@@ -68,7 +68,7 @@ bool allocate(uint32_t masked_dst, int i_prefix, uint16_t size,
   vector_borrow(state->prefixes[i_prefix], index, (void **)&key);
   vector_borrow(state->prefix_buckets[i_prefix], index, (void **)&value);
 
-  *key = masked_dst;
+  *key = masked_src;
 
   assert(config.burst >= size);
   value->bucket_size = config.burst - size;
@@ -82,10 +82,10 @@ bool allocate(uint32_t masked_dst, int i_prefix, uint16_t size,
   return true;
 }
 
-void update_buckets(uint32_t dst, uint16_t size, vigor_time_t time) {
+void update_buckets(uint32_t src, uint16_t size, vigor_time_t time) {
   int index = -1;
   uint32_t mask = 0;
-  uint32_t masked_dst = 0;
+  uint32_t masked_src = 0;
 
   bool captured_hh = false;
   uint32_t hh = 0;
@@ -97,23 +97,23 @@ void update_buckets(uint32_t dst, uint16_t size, vigor_time_t time) {
 
   for (int i = 0; i < state->n_prefixes; i++) {
     mask = (mask >> 1) | (1 << 31);
-    masked_dst = dst & SWAP_ENDIANNESS_32_BIT(mask);
+    masked_src = src & SWAP_ENDIANNESS_32_BIT(mask);
 
-    int present = map_get(state->prefix_indexers[i], &masked_dst, &index);
+    int present = map_get(state->prefix_indexers[i], &masked_src, &index);
 
     if (!present) {
-      // NF_DEBUG("  [psz:%02d] dst    %u.%u.%u.%u", (int)i + config.min_prefix,
-      //          (dst >> 0) & 0xff, (dst >> 8) & 0xff, (dst >> 16) & 0xff,
-      //          (dst >> 24) & 0xff);
+      // NF_DEBUG("  [psz:%02d] src    %u.%u.%u.%u", (int)i + config.min_prefix,
+      //          (src >> 0) & 0xff, (src >> 8) & 0xff, (src >> 16) & 0xff,
+      //          (src >> 24) & 0xff);
       // NF_DEBUG("  [psz:%02d] mask   %u.%u.%u.%u", (int)i + config.min_prefix,
       //          (rte_bswap32(mask) >> 0) & 0xff, (rte_bswap32(mask) >> 8) &
       //          0xff, (rte_bswap32(mask) >> 16) & 0xff, (rte_bswap32(mask) >>
       //          24) & 0xff);
-      // NF_DEBUG("  New subnet %u.%u.%u.%u/%d", (masked_dst >> 0) & 0xff,
-      //          (masked_dst >> 8) & 0xff, (masked_dst >> 16) & 0xff,
-      //          (masked_dst >> 24) & 0xff, (int)i + config.min_prefix);
+      // NF_DEBUG("  New subnet %u.%u.%u.%u/%d", (masked_src >> 0) & 0xff,
+      //          (masked_src >> 8) & 0xff, (masked_src >> 16) & 0xff,
+      //          (masked_src >> 24) & 0xff, (int)i + config.min_prefix);
 
-      bool allocated = allocate(masked_dst, i, size, time);
+      bool allocated = allocate(masked_src, i, size, time);
 
       // Not much we can do...
       if (!allocated) {
@@ -159,7 +159,7 @@ void update_buckets(uint32_t dst, uint16_t size, vigor_time_t time) {
       value->bucket_size -= size;
     } else {
       captured_hh = true;
-      hh = masked_dst;
+      hh = masked_src;
       hh_prefix_sz = (int)i + config.min_prefix;
     }
 
@@ -167,8 +167,8 @@ void update_buckets(uint32_t dst, uint16_t size, vigor_time_t time) {
   }
 
   if (captured_hh) {
-    NF_DEBUG("HH detected: %0u.%u.%u.%u => %u.%u.%u.%u/%d", (dst >> 0) & 0xff,
-             (dst >> 8) & 0xff, (dst >> 16) & 0xff, (dst >> 24) & 0xff,
+    NF_DEBUG("HH detected: %0u.%u.%u.%u => %u.%u.%u.%u/%d", (src >> 0) & 0xff,
+             (src >> 8) & 0xff, (src >> 16) & 0xff, (src >> 24) & 0xff,
              (hh >> 0) & 0xff, (hh >> 8) & 0xff, (hh >> 16) & 0xff,
              (hh >> 24) & 0xff, hh_prefix_sz);
   }
@@ -192,7 +192,7 @@ int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
     NF_DEBUG("Outgoing packet. Not checking for heavy hitters.");
     return config.wan_device;
   } else if (device == config.wan_device) {
-    update_buckets(rte_ipv4_header->dst_addr, packet_length, now);
+    update_buckets(rte_ipv4_header->src_addr, packet_length, now);
 
     // And just forward to LAN, we analyze without policing.
     return config.lan_device;

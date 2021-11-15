@@ -67,8 +67,8 @@ def generate_pkts(output, hh_prefix_sz):
         mac_src = random_mac()
         mac_dst = random_mac()
 
-        ip_src = random_ip(hh_prefix_sz)
-        ip_dst = random_ip(hh_prefix_sz, subnet) if i % 2 == 0 else random_ip(hh_prefix_sz)
+        ip_src = random_ip(hh_prefix_sz, subnet) if i % 2 == 0 else random_ip(hh_prefix_sz)
+        ip_dst = random_ip(hh_prefix_sz)
 
         sport = random_port()
         dport = random_port()
