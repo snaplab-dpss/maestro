@@ -1061,6 +1061,13 @@ R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
     final_constraint = generated_constraints[0];
   }
 
+  std::stringstream ss;
+  ss << "Constraints:\n";
+  ss << R3S::Z3_ast_to_string(ctx, final_constraint);
+  ss << "\n";
+
+  Logger::warn() << ss.str();
+
   return final_constraint;
 }
 
