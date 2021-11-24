@@ -17,11 +17,10 @@ struct nf_config {
   // HHH threshold in %
   uint8_t threshold;
 
-  // Minimum size mask from 1 to 32 bits
-  uint8_t min_prefix;
-
-  // Maximum size mask from min_prefix to 32 bits
-  uint8_t max_prefix;
+  // List of subnets that the HHH is configured to check.
+  // Bit 0 of subnets_mask corresponds to subnet /0,
+  // bit 1 to subnet /1, etc.
+  uint32_t subnets_mask;
 
   // HHH burst size in B
   uint64_t burst;

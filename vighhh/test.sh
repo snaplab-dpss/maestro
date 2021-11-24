@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)
-TARGET_SUBNET_SZ=11
+TARGET_SUBNET_SZ=20
 
 function cleanup {
   sudo killall nf 2>/dev/null || true
@@ -15,9 +15,8 @@ trap cleanup EXIT
 function test_hhh {
   LINK=$1
   THRESHOLD=$2
-  MIN_PREFIX=$3
-  MAX_PREFIX=$4
-  BURST=$5
+  SUBNETS_MASK=$3
+  BURST=$4
 
   python3 hhh.py --output hhh.pcap --sz $TARGET_SUBNET_SZ
 
@@ -29,8 +28,7 @@ function test_hhh {
         --wan 0 \
         --link $LINK \
         --threshold $THRESHOLD \
-        --min-prefix $MIN_PREFIX \
-        --max-prefix $MAX_PREFIX \
+        --subnets-mask $SUBNETS_MASK \
         --burst $BURST \
         --capacity 65536 &
   NF_PID=$!
@@ -50,4 +48,9 @@ function test_hhh {
 make clean
 make EXTRA_CFLAGS="-O0 -g -DENABLE_LOG"
 
-test_hhh 1000000 70 8 32 500000
+link=1000000
+subnets=0x808080 # /8 /16 /24
+threshold=70
+burst=500000
+
+test_hhh $link $threshold $subnets $burst

@@ -22,13 +22,12 @@ struct State *state;
 bool nf_init(void) {
   uint64_t link_capacity = config.link_capacity;
   uint8_t threshold = config.threshold;
-  uint8_t min_prefix = config.min_prefix;
-  uint8_t max_prefix = config.max_prefix;
+  uint32_t subnets_mask = config.subnets_mask;
   unsigned capacity = config.dyn_capacity;
   uint32_t dev_count = rte_eth_dev_count_avail();
 
-  state = alloc_state(link_capacity, threshold, min_prefix, max_prefix,
-                      capacity, dev_count);
+  state =
+      alloc_state(link_capacity, threshold, subnets_mask, capacity, dev_count);
 
   return state != NULL;
 }
@@ -40,33 +39,32 @@ int64_t expire_entries(vigor_time_t time) {
   uint64_t time_u = (uint64_t)time;
   // OK because time >= config.burst / threshold_rate >= 0
   vigor_time_t min_time = time_u - exp_time;
-  int n_prefixes = config.max_prefix - config.min_prefix + 1;
   int64_t freed = 0;
-  for (int i = 0; i < state->n_prefixes; i++) {
-    freed += expire_items_single_map(state->allocators[i], state->prefixes[i],
-                                     state->prefix_indexers[i], min_time);
+  for (int i = 0; i < state->n_subnets; i++) {
+    freed += expire_items_single_map(state->allocators[i], state->subnets[i],
+                                     state->subnet_indexers[i], min_time);
   }
   return freed;
 }
 
-bool allocate(uint32_t masked_src, int i_prefix, uint16_t size,
+bool allocate(uint32_t masked_src, int i_subnet, uint16_t size,
               vigor_time_t time) {
   int index = -1;
 
   int allocated =
-      dchain_allocate_new_index(state->allocators[i_prefix], &index, time);
+      dchain_allocate_new_index(state->allocators[i_subnet], &index, time);
 
   if (!allocated) {
     // Nothing we can do...
-    NF_DEBUG("No more space in the HHH prefix match tables");
+    NF_DEBUG("No more space in the HHH subnet match tables");
     return false;
   }
 
   uint32_t *key = NULL;
   struct DynamicValue *value = NULL;
 
-  vector_borrow(state->prefixes[i_prefix], index, (void **)&key);
-  vector_borrow(state->prefix_buckets[i_prefix], index, (void **)&value);
+  vector_borrow(state->subnets[i_subnet], index, (void **)&key);
+  vector_borrow(state->subnet_buckets[i_subnet], index, (void **)&value);
 
   *key = masked_src;
 
@@ -74,10 +72,10 @@ bool allocate(uint32_t masked_src, int i_prefix, uint16_t size,
   value->bucket_size = config.burst - size;
   value->bucket_time = time;
 
-  map_put(state->prefix_indexers[i_prefix], key, index);
+  map_put(state->subnet_indexers[i_subnet], key, index);
 
-  vector_return(state->prefixes[i_prefix], index, key);
-  vector_return(state->prefix_buckets[i_prefix], index, value);
+  vector_return(state->subnets[i_subnet], index, key);
+  vector_return(state->subnet_buckets[i_subnet], index, value);
 
   return true;
 }
@@ -85,35 +83,41 @@ bool allocate(uint32_t masked_src, int i_prefix, uint16_t size,
 void update_buckets(uint32_t src, uint16_t size, vigor_time_t time) {
   int index = -1;
   uint32_t mask = 0;
-  uint32_t masked_src = 0;
 
   bool captured_hh = false;
   uint32_t hh = 0;
-  uint8_t hh_prefix_sz = 0;
+  uint8_t hh_subnet_sz = 0;
 
-  for (int i = 0; i < config.min_prefix - 1; i++) {
+  uint32_t subnets_mask = config.subnets_mask;
+
+  for (int subnet = 0, subnet_i = -1; subnet < 32;
+       subnet++, subnets_mask >>= 1) {
     mask = (mask >> 1) | (1 << 31);
-  }
 
-  for (int i = 0; i < state->n_prefixes; i++) {
-    mask = (mask >> 1) | (1 << 31);
-    masked_src = src & SWAP_ENDIANNESS_32_BIT(mask);
+    if (!(subnets_mask & 1)) {
+      continue;
+    }
 
-    int present = map_get(state->prefix_indexers[i], &masked_src, &index);
+    subnet_i++;
+    uint32_t masked_src = src & SWAP_ENDIANNESS_32_BIT(mask);
+    int present =
+        map_get(state->subnet_indexers[subnet_i], &masked_src, &index);
 
     if (!present) {
-      // NF_DEBUG("  [psz:%02d] src    %u.%u.%u.%u", (int)i + config.min_prefix,
+      // NF_DEBUG("  [psz:%02d] src    %u.%u.%u.%u", (int)i +
+      // config.min_subnet,
       //          (src >> 0) & 0xff, (src >> 8) & 0xff, (src >> 16) & 0xff,
       //          (src >> 24) & 0xff);
-      // NF_DEBUG("  [psz:%02d] mask   %u.%u.%u.%u", (int)i + config.min_prefix,
-      //          (rte_bswap32(mask) >> 0) & 0xff, (rte_bswap32(mask) >> 8) &
-      //          0xff, (rte_bswap32(mask) >> 16) & 0xff, (rte_bswap32(mask) >>
-      //          24) & 0xff);
+      // NF_DEBUG("  [psz:%02d] mask   %u.%u.%u.%u", (int)i +
+      // config.min_subnet,
+      //          (rte_bswap32(mask) >> 0) & 0xff, (rte_bswap32(mask) >> 8)
+      //          & 0xff, (rte_bswap32(mask) >> 16) & 0xff,
+      //          (rte_bswap32(mask) >> 24) & 0xff);
       // NF_DEBUG("  New subnet %u.%u.%u.%u/%d", (masked_src >> 0) & 0xff,
       //          (masked_src >> 8) & 0xff, (masked_src >> 16) & 0xff,
-      //          (masked_src >> 24) & 0xff, (int)i + config.min_prefix);
+      //          (masked_src >> 24) & 0xff, (int)i + config.min_subnet);
 
-      bool allocated = allocate(masked_src, i, size, time);
+      bool allocated = allocate(masked_src, subnet_i, size, time);
 
       // Not much we can do...
       if (!allocated) {
@@ -123,10 +127,10 @@ void update_buckets(uint32_t src, uint16_t size, vigor_time_t time) {
       continue;
     }
 
-    dchain_rejuvenate_index(state->allocators[i], index, time);
+    dchain_rejuvenate_index(state->allocators[subnet_i], index, time);
 
     struct DynamicValue *value = NULL;
-    vector_borrow(state->prefix_buckets[i], index, (void **)&value);
+    vector_borrow(state->subnet_buckets[subnet_i], index, (void **)&value);
 
     assert(0 <= time);
     uint64_t time_u = (uint64_t)time;
@@ -160,17 +164,17 @@ void update_buckets(uint32_t src, uint16_t size, vigor_time_t time) {
     } else {
       captured_hh = true;
       hh = masked_src;
-      hh_prefix_sz = (int)i + config.min_prefix;
+      hh_subnet_sz = subnet + 1;
     }
 
-    vector_return(state->prefix_buckets[i], index, value);
+    vector_return(state->subnet_buckets[subnet_i], index, value);
   }
 
   if (captured_hh) {
     NF_DEBUG("HH detected: %0u.%u.%u.%u => %u.%u.%u.%u/%d", (src >> 0) & 0xff,
              (src >> 8) & 0xff, (src >> 16) & 0xff, (src >> 24) & 0xff,
              (hh >> 0) & 0xff, (hh >> 8) & 0xff, (hh >> 16) & 0xff,
-             (hh >> 24) & 0xff, hh_prefix_sz);
+             (hh >> 24) & 0xff, hh_subnet_sz);
   }
 }
 
