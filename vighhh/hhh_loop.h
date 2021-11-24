@@ -12,24 +12,24 @@
 #include "ip_addr.h"
 #include "dynamic_value.h"
 
-void loop_invariant_consume(struct Map ***prefix_indexers,
+void loop_invariant_consume(struct Map ***subnet_indexers,
                             struct DoubleChain ***allocators,
-                            struct Vector ***prefix_buckets,
-                            struct Vector ***prefixes, int n_prefixes,
+                            struct Vector ***subnet_buckets,
+                            struct Vector ***subnets, int n_subnets,
                             uint32_t capacity, uint32_t dev_count,
                             unsigned int lcore_id, vigor_time_t time);
 
-void loop_invariant_produce(struct Map ***prefix_indexers,
+void loop_invariant_produce(struct Map ***subnet_indexers,
                             struct DoubleChain ***allocators,
-                            struct Vector ***prefix_buckets,
-                            struct Vector ***prefixes, int n_prefixes,
+                            struct Vector ***subnet_buckets,
+                            struct Vector ***subnets, int n_subnets,
                             uint32_t capacity, uint32_t dev_count,
                             unsigned int *lcore_id, vigor_time_t *time);
 
-void loop_iteration_border(struct Map ***prefix_indexers,
+void loop_iteration_border(struct Map ***subnet_indexers,
                            struct DoubleChain ***allocators,
-                           struct Vector ***prefix_buckets,
-                           struct Vector ***prefixes, int n_prefixes,
+                           struct Vector ***subnet_buckets,
+                           struct Vector ***subnets, int n_subnets,
                            uint32_t capacity, uint32_t dev_count,
                            unsigned int lcore_id, vigor_time_t time);
 

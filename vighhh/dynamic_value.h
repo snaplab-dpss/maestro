@@ -7,8 +7,6 @@
 #include "libvig/verified/ether.h"
 #include "libvig/verified/vigor-time.h"
 
-#define DEFAULT_DynamicValue DynamicValuec(0, 0)
-
 struct DynamicValue {
   uint64_t bucket_size;
   vigor_time_t bucket_time;
@@ -26,8 +24,8 @@ void DynamicValue_allocate(void *obj);
   p("}");
 
 #ifdef KLEE_VERIFICATION
-#  include <klee/klee.h>
-#  include "libvig/models/str-descr.h"
+#include <klee/klee.h>
+#include "libvig/models/str-descr.h"
 
 extern struct str_field_descr DynamicValue_descrs[2];
 extern struct nested_field_descr DynamicValue_nests[0];
