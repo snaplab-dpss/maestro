@@ -30,13 +30,13 @@ void loop_invariant_consume(struct Map ***subnet_indexers,
   klee_trace_ret();
 
   for (int i = 0; i < n_subnets; i++) {
-    klee_trace_param_ptr((*subnet_indexers)[i], sizeof(struct Map *),
+    klee_trace_param_ptr(&(*subnet_indexers)[i], sizeof(struct Map *),
                          "subnet_indexers");
-    klee_trace_param_ptr((*allocators)[i], sizeof(struct DoubleChain *),
+    klee_trace_param_ptr(&(*allocators)[i], sizeof(struct DoubleChain *),
                          "allocators");
-    klee_trace_param_ptr((*subnet_buckets)[i], sizeof(struct Vector *),
+    klee_trace_param_ptr(&(*subnet_buckets)[i], sizeof(struct Vector *),
                          "subnet_buckets");
-    klee_trace_param_ptr((*subnets)[i], sizeof(struct Vector *), "subnets");
+    klee_trace_param_ptr(&(*subnets)[i], sizeof(struct Vector *), "subnets");
   }
 
   klee_trace_param_u32(n_subnets, "n_subnets");
@@ -55,13 +55,13 @@ void loop_invariant_produce(struct Map ***subnet_indexers,
   klee_trace_ret();
 
   for (int i = 0; i < n_subnets; i++) {
-    klee_trace_param_ptr((*subnet_indexers)[i], sizeof(struct Map *),
+    klee_trace_param_ptr(&(*subnet_indexers)[i], sizeof(struct Map *),
                          "subnet_indexers");
-    klee_trace_param_ptr((*allocators)[i], sizeof(struct DoubleChain *),
+    klee_trace_param_ptr(&(*allocators)[i], sizeof(struct DoubleChain *),
                          "allocators");
-    klee_trace_param_ptr((*subnet_buckets)[i], sizeof(struct Vector *),
+    klee_trace_param_ptr(&(*subnet_buckets)[i], sizeof(struct Vector *),
                          "subnet_buckets");
-    klee_trace_param_ptr((*subnets)[i], sizeof(struct Vector *), "subnets");
+    klee_trace_param_ptr(&(*subnets)[i], sizeof(struct Vector *), "subnets");
   }
 
   klee_trace_param_u32(n_subnets, "n_subnets");
