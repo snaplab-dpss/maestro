@@ -19,6 +19,21 @@ const uint32_t DEFAULT_EXPIRATION_TIME = 1000000; // 1s
   fprintf(stderr, format, ##__VA_ARGS__);                                      \
   exit(EXIT_FAILURE);
 
+int is_power_of_2(uint32_t d) {
+  if (d == 0)
+    return false;
+
+  while (d != 1) {
+    if (d % 2 != 0) {
+      return false;
+    }
+
+    d >>= 1;
+  }
+
+  return true;
+}
+
 void nf_config_init(int argc, char **argv) {
   // Set the default values
   config.lan_device = DEFAULT_LAN;
@@ -61,12 +76,18 @@ void nf_config_init(int argc, char **argv) {
         if (config.capacity <= 0) {
           PARSE_ERROR("Capacity must be strictly positive.\n");
         }
+        if (!is_power_of_2(config.capacity)) {
+          PARSE_ERROR("Capacity must be a power of 2.\n");
+        }
         break;
 
       case 'p':
         config.max_ports = nf_util_parse_int(optarg, "max-ports", 10, '\0');
         if (config.max_ports <= 0) {
           PARSE_ERROR("Maximum number of ports must be strictly positive.\n");
+        }
+        if (!is_power_of_2(config.max_ports)) {
+          PARSE_ERROR("Maximum number of ports must be a power of 2.\n");
         }
         break;
 

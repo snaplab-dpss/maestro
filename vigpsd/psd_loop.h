@@ -10,24 +10,33 @@
 #include "libvig/verified/vigor-time.h"
 
 #include "ip_addr.h"
-#include "source_key.h"
-#include "scanned_ports.h"
+#include "counter.h"
+#include "touched_port.h"
 
 void loop_invariant_consume(struct Map **srcs, struct Vector **srcs_keys,
-                            struct DoubleChain **allocator,
-                            struct Vector **scanned_ports, uint32_t capacity,
+                            struct Vector **touched_ports_counter,
+                            struct DoubleChain **allocator, struct Map **ports,
+                            struct Vector **ports_key,
+                            struct DoubleChain **ports_indexer,
+                            uint32_t capacity, uint32_t max_ports,
                             uint32_t dev_count, unsigned int lcore_id,
                             vigor_time_t time);
 
 void loop_invariant_produce(struct Map **srcs, struct Vector **srcs_keys,
-                            struct DoubleChain **allocator,
-                            struct Vector **scanned_ports, uint32_t capacity,
+                            struct Vector **touched_ports_counter,
+                            struct DoubleChain **allocator, struct Map **ports,
+                            struct Vector **ports_key,
+                            struct DoubleChain **ports_indexer,
+                            uint32_t capacity, uint32_t max_ports,
                             uint32_t dev_count, unsigned int *lcore_id,
                             vigor_time_t *time);
 
 void loop_iteration_border(struct Map **srcs, struct Vector **srcs_keys,
-                           struct DoubleChain **allocator,
-                           struct Vector **scanned_ports, uint32_t capacity,
+                           struct Vector **touched_ports_counter,
+                           struct DoubleChain **allocator, struct Map **ports,
+                           struct Vector **ports_key,
+                           struct DoubleChain **ports_indexer,
+                           uint32_t capacity, uint32_t max_ports,
                            uint32_t dev_count, unsigned int lcore_id,
                            vigor_time_t time);
 

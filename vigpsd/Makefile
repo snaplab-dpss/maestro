@@ -1,4 +1,4 @@
-NF_FILES := psd_main.c psd_config.c psd_state.c ip_addr.c scanned_ports.c
+NF_FILES := psd_main.c psd_config.c psd_state.c ip_addr.c counter.c touched_port.c
 
 NF_ARGS := --lan 0 \
            --wan 1 \

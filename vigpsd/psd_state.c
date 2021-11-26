@@ -9,7 +9,6 @@
 #include "libvig/models/verified/map-control.h"
 #include "libvig/models/verified/vector-control.h"
 #include "libvig/models/verified/lpm-dir-24-8-control.h"
-
 #endif // KLEE_VERIFICATION
 
 struct State *allocated_nf_state = NULL;
@@ -37,14 +36,28 @@ struct State *alloc_state(uint32_t capacity, uint64_t max_ports,
     return NULL;
   }
 
+  ret->touched_ports_counter = NULL;
+  if (vector_allocate(sizeof(struct counter), capacity, counter_allocate,
+                      &(ret->touched_ports_counter)) == 0) {
+    return NULL;
+  }
+
   ret->allocator = NULL;
   if (dchain_allocate(capacity, &(ret->allocator)) == 0) {
     return NULL;
   }
 
-  ret->scanned_ports = NULL;
-  if (vector_allocate(sizeof(struct ScannedPorts), capacity,
-                      ScannedPorts_allocate, &(ret->scanned_ports)) == 0) {
+  if (map_allocate(touched_port_eq, touched_port_hash, capacity * max_ports,
+                   &(ret->ports)) == 0) {
+    return NULL;
+  }
+
+  if (vector_allocate(sizeof(struct TouchedPort), capacity * max_ports,
+                      touched_port_allocate, &(ret->ports_key)) == 0) {
+    return NULL;
+  }
+
+  if (dchain_allocate(capacity * max_ports, &(ret->ports_indexer)) == 0) {
     return NULL;
   }
 
@@ -57,15 +70,25 @@ struct State *alloc_state(uint32_t capacity, uint64_t max_ports,
       ret->srcs_key, ip_addr_descrs,
       sizeof(ip_addr_descrs) / sizeof(ip_addr_descrs[0]), ip_addr_nests,
       sizeof(ip_addr_nests) / sizeof(ip_addr_nests[0]), "ip_addr");
-  vector_set_layout(ret->scanned_ports, ScannedPorts_descrs,
-                    sizeof(ScannedPorts_descrs) /
-                        sizeof(ScannedPorts_descrs[0]),
-                    ScannedPorts_nests,
-                    sizeof(ScannedPorts_nests) / sizeof(ScannedPorts_nests[0]),
-                    "ScannedPorts");
+  vector_set_layout(
+      ret->touched_ports_counter, counter_descrs,
+      sizeof(counter_descrs) / sizeof(counter_descrs[0]), counter_nests,
+      sizeof(counter_nests) / sizeof(counter_nests[0]), "counter");
+  map_set_layout(ret->ports, touched_port_descrs,
+                 sizeof(touched_port_descrs) / sizeof(touched_port_descrs[0]),
+                 touched_port_nests,
+                 sizeof(touched_port_nests) / sizeof(touched_port_nests[0]),
+                 "TouchedPort");
+  vector_set_layout(ret->ports_key, touched_port_descrs,
+                    sizeof(touched_port_descrs) /
+                        sizeof(touched_port_descrs[0]),
+                    touched_port_nests,
+                    sizeof(touched_port_nests) / sizeof(touched_port_nests[0]),
+                    "TouchedPort");
 #endif // KLEE_VERIFICATION
 
   ret->capacity = capacity;
+  ret->max_ports = max_ports;
   ret->dev_count = dev_count;
 
   allocated_nf_state = ret;
@@ -76,9 +99,11 @@ struct State *alloc_state(uint32_t capacity, uint64_t max_ports,
 void nf_loop_iteration_border(unsigned lcore_id, vigor_time_t time) {
   loop_iteration_border(
       &allocated_nf_state->srcs, &allocated_nf_state->srcs_key,
-      &allocated_nf_state->allocator, &allocated_nf_state->scanned_ports,
-      allocated_nf_state->capacity, allocated_nf_state->dev_count, lcore_id,
-      time);
+      &allocated_nf_state->touched_ports_counter,
+      &allocated_nf_state->allocator, &allocated_nf_state->ports,
+      &allocated_nf_state->ports_key, &allocated_nf_state->ports_indexer,
+      allocated_nf_state->capacity, allocated_nf_state->max_ports,
+      allocated_nf_state->dev_count, lcore_id, time);
 }
 
 #endif // KLEE_VERIFICATION

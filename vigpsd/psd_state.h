@@ -6,10 +6,15 @@
 struct State {
   struct Map *srcs;
   struct Vector *srcs_key;
+  struct Vector *touched_ports_counter;
   struct DoubleChain *allocator;
-  struct Vector *scanned_ports;
+
+  struct Map *ports;
+  struct Vector *ports_key;
+  struct DoubleChain *ports_indexer;
 
   uint32_t capacity;
+  uint32_t max_ports;
   uint32_t dev_count;
 };
 
