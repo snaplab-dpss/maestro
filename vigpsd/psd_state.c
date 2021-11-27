@@ -9,6 +9,13 @@
 #include "libvig/models/verified/map-control.h"
 #include "libvig/models/verified/vector-control.h"
 #include "libvig/models/verified/lpm-dir-24-8-control.h"
+
+bool counter_condition(void *value, int index, void *state) {
+  uint32_t *c = (uint32_t *)value;
+  struct State *s = (struct State *)state;
+  return *c <= s->max_ports;
+}
+
 #endif // KLEE_VERIFICATION
 
 struct State *allocated_nf_state = NULL;
@@ -57,10 +64,6 @@ struct State *alloc_state(uint32_t capacity, uint64_t max_ports,
     return NULL;
   }
 
-  if (dchain_allocate(capacity * max_ports, &(ret->ports_indexer)) == 0) {
-    return NULL;
-  }
-
 #ifdef KLEE_VERIFICATION
   map_set_layout(ret->srcs, ip_addr_descrs,
                  sizeof(ip_addr_descrs) / sizeof(ip_addr_descrs[0]),
@@ -74,6 +77,8 @@ struct State *alloc_state(uint32_t capacity, uint64_t max_ports,
       ret->touched_ports_counter, counter_descrs,
       sizeof(counter_descrs) / sizeof(counter_descrs[0]), counter_nests,
       sizeof(counter_nests) / sizeof(counter_nests[0]), "counter");
+  vector_set_entry_condition(ret->touched_ports_counter, counter_condition,
+                             ret);
   map_set_layout(ret->ports, touched_port_descrs,
                  sizeof(touched_port_descrs) / sizeof(touched_port_descrs[0]),
                  touched_port_nests,
@@ -101,9 +106,9 @@ void nf_loop_iteration_border(unsigned lcore_id, vigor_time_t time) {
       &allocated_nf_state->srcs, &allocated_nf_state->srcs_key,
       &allocated_nf_state->touched_ports_counter,
       &allocated_nf_state->allocator, &allocated_nf_state->ports,
-      &allocated_nf_state->ports_key, &allocated_nf_state->ports_indexer,
-      allocated_nf_state->capacity, allocated_nf_state->max_ports,
-      allocated_nf_state->dev_count, lcore_id, time);
+      &allocated_nf_state->ports_key, allocated_nf_state->capacity,
+      allocated_nf_state->max_ports, allocated_nf_state->dev_count, lcore_id,
+      time);
 }
 
 #endif // KLEE_VERIFICATION

@@ -34,8 +34,6 @@ void expire_entries(vigor_time_t time) {
   vigor_time_t last_time = time_u - expiration_time_ns;
   expire_items_single_map(state->allocator, state->srcs_key, state->srcs,
                           last_time);
-  expire_items_single_map(state->ports_indexer, state->ports_key, state->ports,
-                          last_time);
 }
 
 int allocate(uint32_t src, uint16_t target_port, vigor_time_t time) {
@@ -50,21 +48,28 @@ int allocate(uint32_t src, uint16_t target_port, vigor_time_t time) {
     return false;
   }
 
-  allocated =
-      dchain_allocate_new_index(state->ports_indexer, &port_index, time);
-
-  if (!allocated) {
-    // Nothing we can do...
-    NF_DEBUG("No more space in the Port Scanner Detector touched ports table");
-    return false;
-  }
-
   uint32_t *src_key = NULL;
   uint32_t *counter = NULL;
   struct TouchedPort *touched_port = NULL;
 
   vector_borrow(state->srcs_key, index, (void **)&src_key);
   vector_borrow(state->touched_ports_counter, index, (void **)&counter);
+  assert(*counter >= 0 && *counter <= state->max_ports);
+
+  // Cleanup previous state first.
+  port_index = *((int *)counter) - 1;
+  while (port_index >= 0) {
+    NF_DEBUG("Allocating %3u.%3u.%3u.%3u counter %d", (src >> 0) & 0xff,
+             (src >> 8) & 0xff, (src >> 16) & 0xff, (src >> 24) & 0xff,
+             port_index);
+    vector_borrow(state->ports_key, port_index, (void **)&touched_port);
+    map_erase(state->ports, touched_port, (void **)&touched_port);
+    vector_return(state->ports_key, port_index, touched_port);
+    port_index--;
+  }
+
+  // Now save the source and add the first port.
+  port_index = 0;
   vector_borrow(state->ports_key, port_index, (void **)&touched_port);
 
   *src_key = src;
@@ -90,7 +95,7 @@ int detect_port_scanning(uint32_t src, uint16_t target_port,
   int present = map_get(state->srcs, &src, &index);
 
   if (!present) {
-    NF_DEBUG("Allocating %u.%u.%u.%u", (src >> 0) & 0xff, (src >> 8) & 0xff,
+    NF_DEBUG("Allocating %3u.%3u.%3u.%3u", (src >> 0) & 0xff, (src >> 8) & 0xff,
              (src >> 16) & 0xff, (src >> 24) & 0xff);
 
     bool allocated = allocate(src, target_port, time);
@@ -108,8 +113,8 @@ int detect_port_scanning(uint32_t src, uint16_t target_port,
   vector_borrow(state->touched_ports_counter, index, (void **)&counter);
 
   if (*counter > state->max_ports) {
-    NF_DEBUG("Dropping port scanner %u.%u.%u.%u", (src >> 0) & 0xff,
-             (src >> 8) & 0xff, (src >> 16) & 0xff, (src >> 24) & 0xff);
+    NF_DEBUG("Dropping   %3u.%3u.%3u.%3u", (src >> 0) & 0xff, (src >> 8) & 0xff,
+             (src >> 16) & 0xff, (src >> 24) & 0xff);
     vector_return(state->touched_ports_counter, index, counter);
     return true;
   }
@@ -121,28 +126,18 @@ int detect_port_scanning(uint32_t src, uint16_t target_port,
   present = map_get(state->ports, &touched_port, &port_index);
 
   if (!present) {
-    int allocated =
-        dchain_allocate_new_index(state->ports_indexer, &port_index, time);
-
-    if (!allocated) {
-      // No more space in the dchain, nothing we can do...
-      vector_return(state->touched_ports_counter, index, counter);
-      return false;
-    }
-
     struct TouchedPort *new_touched_port = NULL;
+    port_index = *((int *)counter) - 1;
 
-    vector_borrow(state->ports_key, port_index, (void **)&new_touched_port);
+    vector_borrow(state->ports_key, port_index + 1, (void **)&new_touched_port);
 
     (*counter)++;
     new_touched_port->src = src;
     new_touched_port->port = target_port;
 
-    map_put(state->ports, new_touched_port, port_index);
+    map_put(state->ports, new_touched_port, port_index + 1);
 
-    vector_return(state->ports_key, port_index, new_touched_port);
-  } else {
-    dchain_rejuvenate_index(state->ports_indexer, port_index, time);
+    vector_return(state->ports_key, port_index + 1, new_touched_port);
   }
 
   vector_return(state->touched_ports_counter, index, counter);

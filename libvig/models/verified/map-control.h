@@ -7,9 +7,9 @@
 #include <stdbool.h>
 
 #define PREALLOC_SIZE (256)
-#define NUM_ELEMS (3)
+#define NUM_ELEMS (65)
 
-typedef bool map_entry_condition(void *key, int value, void* state);
+typedef bool map_entry_condition(void *key, int value, void *state);
 
 struct Map {
   void *keyp[NUM_ELEMS];
@@ -42,7 +42,7 @@ void map_set_layout(struct Map *map, struct str_field_descr *key_fields,
                     int nested_key_fields_count, char *key_type);
 
 void map_set_entry_condition(struct Map *map, map_entry_condition *cond,
-                             void* state);
+                             void *state);
 
 void map_reset(struct Map *map);
 

@@ -11,7 +11,6 @@ struct State {
 
   struct Map *ports;
   struct Vector *ports_key;
-  struct DoubleChain *ports_indexer;
 
   uint32_t capacity;
   uint32_t max_ports;

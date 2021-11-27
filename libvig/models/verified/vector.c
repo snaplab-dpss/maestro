@@ -6,7 +6,7 @@
 #include "vector-control.h"
 
 #define PREALLOC_SIZE (256)
-#define NUM_ELEMS (3)
+#define NUM_ELEMS (65)
 
 struct Vector {
   uint8_t *data;
