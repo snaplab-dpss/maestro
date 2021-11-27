@@ -169,7 +169,7 @@ int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
 
   if (device == config.lan_device) {
     // Simply forward outgoing packets.
-    NF_DEBUG("Outgoing packet. Not checking for heavy hitters.");
+    NF_DEBUG("Outgoing packet. Not checking for port scanning attempts.");
     return config.wan_device;
   } else if (device == config.wan_device) {
     int detected = detect_port_scanning(rte_ipv4_header->src_addr,
