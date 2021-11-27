@@ -141,6 +141,8 @@ int detect_port_scanning(uint32_t src, uint16_t target_port,
     map_put(state->ports, new_touched_port, port_index);
 
     vector_return(state->ports_key, port_index, new_touched_port);
+  } else {
+    dchain_rejuvenate_index(state->ports_indexer, port_index, time);
   }
 
   vector_return(state->touched_ports_counter, index, counter);

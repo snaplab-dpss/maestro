@@ -4,7 +4,7 @@ NF_ARGS := --lan 0 \
            --wan 1 \
            --capacity $(or $(CAPACITY),65536) \
            --max-ports $(or $(MAX_PORTS),64) \
-           --expire $(or $(EXPIRATION_TIME),1000000)
+           --expire $(or $(EXPIRATION_TIME),10000000)
 
 NF_LAYER := 4
 
