@@ -7,7 +7,7 @@
 #include <stdbool.h>
 
 #define PREALLOC_SIZE (256)
-#define NUM_ELEMS (65)
+#define NUM_ELEMS (3)
 
 typedef bool map_entry_condition(void *key, int value, void *state);
 

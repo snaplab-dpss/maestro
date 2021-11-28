@@ -31,6 +31,7 @@ ifneq (true,$(NF_NO_BASE))
 SRCS-y := $(shell echo $(SELF_DIR)/nf*.c)
 endif
 SRCS-y += $(shell echo $(SELF_DIR)/libvig/verified/*.c)
+SRCS-y += $(shell find $(SELF_DIR)/libvig/unverified -name "*.c" ! -name "*tm*" ! -name "*locks*" -printf "%p ")
 SRCS-y += $(NF_FILES)
 # Compiler flags
 CFLAGS += -I $(SELF_DIR)
@@ -189,6 +190,7 @@ VERIF_FILES := $(SELF_DIR)/nf*.c
 VERIF_FILES += $(NF_FILES) *loop.c
 # Models
 VERIF_FILES += $(SELF_DIR)/libvig/models/verified/*.c \
+               $(SELF_DIR)/libvig/models/unverified/*.c \
                $(SELF_DIR)/libvig/models/externals/*.c
 
 # The only thing we don't put in variables is the DPDK model headers,
