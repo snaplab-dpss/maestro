@@ -28,12 +28,14 @@
 #include "libvig/verified/tcpudp_hdr.h"
 #include "libvig/verified/vigor-time.h"
 #include "libvig/verified/ether.h"
-
-#include "libvig/unverified/double-chain-tm.h"
 #include "libvig/verified/vector.h"
 #include "libvig/verified/map.h"
+
+#include "libvig/unverified/double-chain-tm.h"
 #include "libvig/unverified/expirator-tm.h"
 #include "libvig/unverified/cht-tm.h"
+
+#include "libvig/unverified/expirator.h"
 
 /**********************************************
  *
@@ -101,11 +103,11 @@ struct lcore_conf lcores_conf[RTE_MAX_LCORE];
   fflush(stdout);
 
 #ifdef ENABLE_LOG
-#define NF_DEBUG(text, ...)                                                    \
-  fprintf(stderr, "DEBUG: " text "\n", ##__VA_ARGS__);                         \
-  fflush(stderr);
+#  define NF_DEBUG(text, ...)                                                  \
+    fprintf(stderr, "DEBUG: " text "\n", ##__VA_ARGS__);                       \
+    fflush(stderr);
 #else // ENABLE_LOG
-#define NF_DEBUG(...)
+#  define NF_DEBUG(...)
 #endif // ENABLE_LOG
 
 /**********************************************
@@ -155,7 +157,7 @@ static inline void *nf_borrow_next_chunk(void *p, size_t length) {
 }
 
 #define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests, tag)     \
-/*nothing*/
+  /*nothing*/
 
 #define CHUNK_LAYOUT_N(pkt, str_name, fields, nests)                           \
   CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields,                      \
@@ -404,13 +406,11 @@ typedef enum {
                                           tsx_error & ~_XABORT_CAPACITY;       \
                                       HTM_CAPACITY;                            \
                                     })                                         \
-                                  : tsx_error & _XABORT_DEBUG                  \
-                                        ? ({                                   \
-                                            tsx_error =                        \
-                                                tsx_error & ~_XABORT_DEBUG;    \
-                                            HTM_DEBUG;                         \
-                                          })                                   \
-                                        : HTM_OTHER;                           \
+                                  : tsx_error & _XABORT_DEBUG ? ({             \
+                                      tsx_error = tsx_error & ~_XABORT_DEBUG;  \
+                                      HTM_DEBUG;                               \
+                                    })                                         \
+                                                              : HTM_OTHER;     \
         error_array[idx] += 1;                                                 \
         nb_errors--;                                                           \
       } while (nb_errors > 0);                                                 \
@@ -421,15 +421,15 @@ typedef enum {
 #define CL_DISTANCE(type) CACHE_LINE_SIZE / sizeof(type)
 
 #ifndef GRANULE_TYPE
-#define GRANULE_TYPE intptr_t
+#  define GRANULE_TYPE intptr_t
 #endif /* GRANULE_TYPE */
 
 #ifndef GRANULE_P_TYPE
-#define GRANULE_P_TYPE intptr_t *
+#  define GRANULE_P_TYPE intptr_t *
 #endif /* GRANULE_P_TYPE */
 
 #ifndef GRANULE_D_TYPE
-#define GRANULE_D_TYPE double
+#  define GRANULE_D_TYPE double
 #endif /* GRANULE_D_TYPE */
 
 #ifdef __cplusplus
@@ -437,7 +437,7 @@ extern "C" {
 #endif
 
 #ifndef HTM_SGL_INIT_BUDGET
-#define HTM_SGL_INIT_BUDGET 2
+#  define HTM_SGL_INIT_BUDGET 2
 #endif /* HTM_SGL_INIT_BUDGET */
 
 typedef struct HTM_SGL_local_vars_ {
@@ -656,8 +656,8 @@ void HTM_reset_status_count();
 
 #define LOCK(mtx)                                                              \
   while (!__sync_bool_compare_and_swap(&mtx, 0, 1))                            \
-  PAUSE()                                                                      \
-      //
+    PAUSE()                                                                    \
+  //
 
 #define UNLOCK(mtx)                                                            \
   mtx = 0;                                                                     \
@@ -842,13 +842,13 @@ bool nf_init(void);
 int nf_process(uint16_t device, uint8_t *buffer, uint16_t packet_length,
                vigor_time_t now);
 
-#define FLOOD_FRAME ((uint16_t) - 1)
+#define FLOOD_FRAME ((uint16_t)-1)
 
 // NFOS declares its own main method
 #ifdef NFOS
-#define MAIN nf_main
+#  define MAIN nf_main
 #else // NFOS
-#define MAIN main
+#  define MAIN main
 #endif // NFOS
 
 // Unverified support for batching, useful for performance comparisons
@@ -1046,7 +1046,7 @@ int MAIN(int argc, char **argv) {
                                 0, // application private area size
                                 RTE_MBUF_DEFAULT_BUF_SIZE, // data buffer size
                                 rte_socket_id()            // socket ID
-                                );
+        );
 
     if (mbuf_pools[lcore_idx] == NULL) {
       rte_exit(EXIT_FAILURE, "Cannot create mbuf pool: %s\n",

@@ -35,6 +35,8 @@
 #include "libvig/verified/expirator.h"
 #include "libvig/verified/cht.h"
 
+#include "libvig/unverified/expirator.h"
+
 /**********************************************
  *
  *                  PACKET-IO

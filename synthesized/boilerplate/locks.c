@@ -35,6 +35,7 @@
 #include "libvig/unverified/map-locks.h"
 #include "libvig/unverified/expirator-locks.h"
 #include "libvig/unverified/cht-locks.h"
+#include "libvig/unverified/expirator.h"
 
 /**********************************************
  *
@@ -166,11 +167,11 @@ struct lcore_conf lcores_conf[RTE_MAX_LCORE];
   fflush(stdout);
 
 #ifdef ENABLE_LOG
-#define NF_DEBUG(text, ...)                                                    \
-  fprintf(stderr, "DEBUG: " text "\n", ##__VA_ARGS__);                         \
-  fflush(stderr);
+#  define NF_DEBUG(text, ...)                                                  \
+    fprintf(stderr, "DEBUG: " text "\n", ##__VA_ARGS__);                       \
+    fflush(stderr);
 #else // ENABLE_LOG
-#define NF_DEBUG(...)
+#  define NF_DEBUG(...)
 #endif // ENABLE_LOG
 
 /**********************************************
@@ -226,7 +227,7 @@ static inline void *nf_borrow_next_chunk(void *p, size_t length) {
 }
 
 #define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests, tag)     \
-/*nothing*/
+  /*nothing*/
 
 #define CHUNK_LAYOUT_N(pkt, str_name, fields, nests)                           \
   CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields,                      \
@@ -448,13 +449,13 @@ bool nf_init(void);
 int nf_process(uint16_t device, uint8_t *buffer, uint16_t packet_length,
                vigor_time_t now);
 
-#define FLOOD_FRAME ((uint16_t) - 1)
+#define FLOOD_FRAME ((uint16_t)-1)
 
 // NFOS declares its own main method
 #ifdef NFOS
-#define MAIN nf_main
+#  define MAIN nf_main
 #else // NFOS
-#define MAIN main
+#  define MAIN main
 #endif // NFOS
 
 // Unverified support for batching, useful for performance comparisons
@@ -670,7 +671,7 @@ int MAIN(int argc, char **argv) {
                                 0, // application private area size
                                 RTE_MBUF_DEFAULT_BUF_SIZE, // data buffer size
                                 rte_socket_id()            // socket ID
-                                );
+        );
 
     if (mbuf_pools[lcore_idx] == NULL) {
       rte_exit(EXIT_FAILURE, "Cannot create mbuf pool: %s\n",
