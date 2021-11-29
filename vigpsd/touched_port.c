@@ -20,7 +20,7 @@ struct str_field_descr touched_port_descrs[] = {
   { offsetof(struct TouchedPort, port), sizeof(uint16_t), 0, "port" },
 };
 struct nested_field_descr touched_port_nests[] = {};
-unsigned port_hash(void *obj) {
+unsigned touched_port_hash(void *obj) {
   klee_trace_ret();
   klee_trace_param_tagged_ptr(obj, sizeof(struct TouchedPort), "obj",
                               "TouchedPort", TD_BOTH);
