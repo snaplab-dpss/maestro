@@ -6,8 +6,10 @@
 
 namespace ParallelSynthesizer {
 
-R3S::Z3_ast Constraint::parse_expr(R3S::Z3_context ctx, const std::string& expr_str) {
-  auto expr = R3S::Z3_parse_smtlib2_string(ctx, expr_str.c_str(), 0, 0, 0, 0, 0, 0);
+R3S::Z3_ast Constraint::parse_expr(R3S::Z3_context ctx,
+                                   const std::string &expr_str) {
+  auto expr =
+      R3S::Z3_parse_smtlib2_string(ctx, expr_str.c_str(), 0, 0, 0, 0, 0, 0);
 
   assert(R3S::Z3_get_ast_kind(ctx, expr) == R3S::Z3_APP_AST);
 
@@ -25,7 +27,8 @@ R3S::Z3_ast Constraint::parse_expr(R3S::Z3_context ctx, const std::string& expr_
   return app_arg;
 }
 
-bool operator==(const PacketDependenciesExpression &lhs, const PacketDependenciesExpression& rhs) {
+bool operator==(const PacketDependenciesExpression &lhs,
+                const PacketDependenciesExpression &rhs) {
   return R3S::Z3_is_eq_ast(lhs.ctx, lhs.expression, rhs.expression);
 }
 
@@ -52,7 +55,7 @@ std::ostream &operator<<(std::ostream &os,
   os << "\n";
 
   if (arg.dependencies.size()) {
-    for (const auto& dependency : arg.dependencies) {
+    for (const auto &dependency : arg.dependencies) {
       os << "    " << *dependency;
       os << "\n";
     }
@@ -62,12 +65,12 @@ std::ostream &operator<<(std::ostream &os,
 }
 
 bool operator==(const NonPacketDependencyExpression &lhs,
-                       const NonPacketDependencyExpression& rhs) {
+                const NonPacketDependencyExpression &rhs) {
   return R3S::Z3_is_eq_ast(lhs.ctx, lhs.expression, rhs.expression);
 }
 
 std::ostream &operator<<(std::ostream &os,
-                                const NonPacketDependencyExpression &arg) {
+                         const NonPacketDependencyExpression &arg) {
   os << "  expression    ";
   os << R3S::Z3_ast_to_string(arg.ctx, arg.expression);
   os << "\n";
@@ -89,12 +92,13 @@ std::ostream &operator<<(std::ostream &os, Constraint *arg) {
   auto type = arg->get_type();
 
   if (type == Constraint::Type::LibvigAccessType) {
-    LibvigAccessConstraint *constraint = dynamic_cast<LibvigAccessConstraint*>(arg);
+    LibvigAccessConstraint *constraint =
+        dynamic_cast<LibvigAccessConstraint *>(arg);
     os << *constraint;
   }
 
   else if (type == Constraint::Type::CallPathType) {
-    CallPathsConstraint *constraint = dynamic_cast<CallPathsConstraint*>(arg);
+    CallPathsConstraint *constraint = dynamic_cast<CallPathsConstraint *>(arg);
     os << *constraint;
   }
 
@@ -104,8 +108,7 @@ std::ostream &operator<<(std::ostream &os, Constraint *arg) {
   return os;
 }
 
-std::ostream &operator<<(std::ostream &os,
-                         const Constraint &arg) {
+std::ostream &operator<<(std::ostream &os, const Constraint &arg) {
   os << "first device     ";
   os << arg.devices.first;
   os << "\n";
@@ -129,7 +132,8 @@ std::ostream &operator<<(std::ostream &os,
   if (arg.packet_dependencies_expressions.size()) {
     os << "expressions:";
     os << "\n";
-    for (const auto& packet_dependency_expression : arg.packet_dependencies_expressions) {
+    for (const auto &packet_dependency_expression :
+         arg.packet_dependencies_expressions) {
       os << packet_dependency_expression;
       os << "\n";
     }
@@ -138,7 +142,7 @@ std::ostream &operator<<(std::ostream &os,
   if (arg.non_packet_dependencies_expressions.size()) {
     os << "non packet dependency expressions:";
     os << "\n";
-    for (const auto& npde : arg.non_packet_dependencies_expressions) {
+    for (const auto &npde : arg.non_packet_dependencies_expressions) {
       os << npde;
       os << "\n";
     }
@@ -147,8 +151,7 @@ std::ostream &operator<<(std::ostream &os,
   return os;
 }
 
-std::ostream &operator<<(std::ostream &os,
-                         const LibvigAccessConstraint &arg) {
+std::ostream &operator<<(std::ostream &os, const LibvigAccessConstraint &arg) {
   os << "first access:";
   os << "\n";
   os << "\n";
@@ -180,18 +183,23 @@ void LibvigAccessConstraint::generate_expression_from_read_args() {
   auto first_expr = Constraint::parse_expr(ctx, first_expr_str);
   auto second_expr = Constraint::parse_expr(ctx, second_expr_str);
 
-  expression = R3S::Z3_simplify(ctx, R3S::Z3_mk_eq(ctx, first_expr, second_expr));
+  expression =
+      R3S::Z3_simplify(ctx, R3S::Z3_mk_eq(ctx, first_expr, second_expr));
 }
 
-void Constraint::store_unique_dependencies_expression(const PacketDependenciesExpression& pde) {
-  auto found_it = std::find(packet_dependencies_expressions.begin(), packet_dependencies_expressions.end(), pde);
+void Constraint::store_unique_dependencies_expression(
+    const PacketDependenciesExpression &pde) {
+  auto found_it = std::find(packet_dependencies_expressions.begin(),
+                            packet_dependencies_expressions.end(), pde);
 
   if (found_it == packet_dependencies_expressions.end())
     packet_dependencies_expressions.push_back(pde);
 }
 
-void Constraint::store_unique_dependencies_expression(const NonPacketDependencyExpression& npde) {
-  auto found_it = std::find(non_packet_dependencies_expressions.begin(), non_packet_dependencies_expressions.end(), npde);
+void Constraint::store_unique_dependencies_expression(
+    const NonPacketDependencyExpression &npde) {
+  auto found_it = std::find(non_packet_dependencies_expressions.begin(),
+                            non_packet_dependencies_expressions.end(), npde);
 
   if (found_it == non_packet_dependencies_expressions.end())
     non_packet_dependencies_expressions.push_back(npde);
@@ -216,12 +224,13 @@ bool is_select_from_chunk(R3S::Z3_context &ctx, R3S::Z3_app &app,
 
   symbol_name = R3S::Z3_get_symbol_string(ctx, symbol_array_name);
 
-  auto found =
-      symbol_name.find(PacketDependenciesExpression::PACKET_CHUNKS_NAME_PATTERN);
+  auto found = symbol_name.find(
+      PacketDependenciesExpression::PACKET_CHUNKS_NAME_PATTERN);
   return found != std::string::npos;
 }
 
-bool is_not_chunk_symbol(R3S::Z3_context &ctx, R3S::Z3_ast &expr, std::string &symbol_name) {
+bool is_not_chunk_symbol(R3S::Z3_context &ctx, R3S::Z3_ast &expr,
+                         std::string &symbol_name) {
   R3S::Z3_ast_kind kind = R3S::Z3_get_ast_kind(ctx, expr);
 
   if (kind != R3S::Z3_APP_AST) {
@@ -243,8 +252,8 @@ bool is_not_chunk_symbol(R3S::Z3_context &ctx, R3S::Z3_ast &expr, std::string &s
     return false;
   }
 
-  auto found =
-      symbol_name.find(PacketDependenciesExpression::PACKET_CHUNKS_NAME_PATTERN);
+  auto found = symbol_name.find(
+      PacketDependenciesExpression::PACKET_CHUNKS_NAME_PATTERN);
 
   return found == std::string::npos;
 }
@@ -286,13 +295,16 @@ void Constraint::fill_dependencies(R3S::Z3_ast &expr) {
   }
 }
 
-void Constraint::zip_packet_fields_expression_and_values(const DependencyManager& first, const DependencyManager& second) {
+void Constraint::zip_packet_fields_expression_and_values(
+    const DependencyManager &first, const DependencyManager &second) {
   const auto &first_deps = first.get();
   const auto &second_deps = second.get();
 
-  std::sort(packet_dependencies_expressions.begin(), packet_dependencies_expressions.end());
+  std::sort(packet_dependencies_expressions.begin(),
+            packet_dependencies_expressions.end());
 
-  if (first_deps.size() + second_deps.size() < packet_dependencies_expressions.size()) {
+  if (first_deps.size() + second_deps.size() <
+      packet_dependencies_expressions.size()) {
 
     Logger::error() << "\n";
     Logger::error() << "Total number of dependencies is different than ";
@@ -325,9 +337,8 @@ void Constraint::zip_packet_fields_expression_and_values(const DependencyManager
 
     for (const auto &pde : packet_dependencies_expressions) {
       Logger::error() << "  ";
-      Logger::error() << R3S::Z3_ast_to_string(
-                             pde.get_context(),
-                             pde.get_expression());
+      Logger::error() << R3S::Z3_ast_to_string(pde.get_context(),
+                                               pde.get_expression());
       Logger::error() << "\n";
     }
 
@@ -344,31 +355,39 @@ void Constraint::zip_packet_fields_expression_and_values(const DependencyManager
       const PacketDependency *curr_packet_dependency = nullptr;
 
       if (pde.get_packet_chunks_id() == packet_chunks_ids.first) {
-        if(first_counter >= first_deps.size()) break;
+        if (first_counter >= first_deps.size())
+          break;
 
         assert(first_deps[first_counter]->is_packet_related());
 
         curr_packet_dependency = dynamic_cast<const PacketDependency *>(
-              first_deps[first_counter].get());
+            first_deps[first_counter].get());
 
-        if (prev_packet_dependency && (
-              prev_packet_dependency->get_layer() != curr_packet_dependency->get_layer() ||
-              prev_packet_dependency->get_offset() != curr_packet_dependency->get_offset())) break;
+        if (prev_packet_dependency &&
+            (prev_packet_dependency->get_layer() !=
+                 curr_packet_dependency->get_layer() ||
+             prev_packet_dependency->get_offset() !=
+                 curr_packet_dependency->get_offset()))
+          break;
 
         first_counter++;
       }
 
       else if (pde.get_packet_chunks_id() == packet_chunks_ids.second) {
-        if(second_counter >= second_deps.size()) break;
+        if (second_counter >= second_deps.size())
+          break;
 
         assert(second_deps[second_counter]->is_packet_related());
 
         curr_packet_dependency = dynamic_cast<const PacketDependency *>(
-              second_deps[second_counter].get());
+            second_deps[second_counter].get());
 
-        if (prev_packet_dependency && (
-              prev_packet_dependency->get_layer() != curr_packet_dependency->get_layer() ||
-              prev_packet_dependency->get_offset() != curr_packet_dependency->get_offset())) break;
+        if (prev_packet_dependency &&
+            (prev_packet_dependency->get_layer() !=
+                 curr_packet_dependency->get_layer() ||
+             prev_packet_dependency->get_offset() !=
+                 curr_packet_dependency->get_offset()))
+          break;
 
         second_counter++;
       }
@@ -377,7 +396,6 @@ void Constraint::zip_packet_fields_expression_and_values(const DependencyManager
 
       pde.store_dependency(curr_packet_dependency);
       prev_packet_dependency = curr_packet_dependency;
-
     }
   }
 }
@@ -392,8 +410,8 @@ void LibvigAccessConstraint::check_incompatible_dependencies() {
   const auto &first_dependencies = first_read_arg.get_dependencies().get();
   const auto &second_dependencies = second_read_arg.get_dependencies().get();
 
-  auto incompatible_dependency_filter = [](
-      const std::shared_ptr<const Dependency> & dependency)->bool {
+  auto incompatible_dependency_filter =
+      [](const std::shared_ptr<const Dependency> &dependency) -> bool {
     if (dependency->should_ignore())
       return false;
     return !dependency->is_rss_compatible();
@@ -414,8 +432,7 @@ void LibvigAccessConstraint::check_incompatible_dependencies() {
   }
 }
 
-std::ostream &operator<<(std::ostream &os,
-                         const CallPathInfo &arg) {
+std::ostream &operator<<(std::ostream &os, const CallPathInfo &arg) {
   os << "call path info";
   os << "\n";
 
@@ -441,8 +458,7 @@ std::ostream &operator<<(std::ostream &os,
   return os;
 }
 
-std::ostream &operator<<(std::ostream &os,
-                         const CallPathsConstraint &arg) {
+std::ostream &operator<<(std::ostream &os, const CallPathsConstraint &arg) {
   os << "expression  " << arg.expression_str;
   os << "\n";
 
@@ -452,4 +468,4 @@ std::ostream &operator<<(std::ostream &os,
   return os;
 }
 
-}
+} // namespace ParallelSynthesizer
