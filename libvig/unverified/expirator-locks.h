@@ -11,13 +11,17 @@
 RTE_DECLARE_PER_LCORE(bool, write_attempt);
 RTE_DECLARE_PER_LCORE(bool, write_state);
 
-int expire_items_locks(struct DoubleChainLocks *chain, struct DoubleMapLocks *map,
-                 vigor_time_t time);
+int expire_items_locks(struct DoubleChainLocks *chain,
+                       struct DoubleMapLocks *map, vigor_time_t time);
 
 typedef void entry_extract_key(void *entry, void **key);
 typedef void entry_pack_key(void *entry, void *key);
 
 int expire_items_single_map_locks(struct DoubleChainLocks *chain,
-                            struct VectorLocks *vector, struct MapLocks *map,
-                            vigor_time_t time);
+                                  struct VectorLocks *vector,
+                                  struct MapLocks *map, vigor_time_t time);
+
+int expire_items_single_map_iteratively_locks(struct VectorLocks *vector,
+                                              struct MapLocks *map,
+                                              int n_elems);
 #endif

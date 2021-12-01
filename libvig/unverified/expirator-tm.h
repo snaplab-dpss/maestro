@@ -20,4 +20,8 @@ typedef void entry_pack_key(void *entry, void *key);
 int expire_items_single_map_tm(struct DoubleChainTM *chain,
                                struct Vector *vector, struct Map *map,
                                vigor_time_t time);
+
+#define expire_items_single_map_iteratively_tm                                 \
+  expire_items_single_map_iteratively
+
 #endif

@@ -3,8 +3,8 @@
 #include <assert.h>
 #include <stdbool.h>
 
-int expire_items_locks(struct DoubleChainLocks *chain, struct DoubleMapLocks *map,
-                       vigor_time_t time) {
+int expire_items_locks(struct DoubleChainLocks *chain,
+                       struct DoubleMapLocks *map, vigor_time_t time) {
   bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
   bool *write_state_ptr = &RTE_PER_LCORE(write_state);
 
@@ -16,7 +16,7 @@ int expire_items_locks(struct DoubleChainLocks *chain, struct DoubleMapLocks *ma
       *write_attempt_ptr = true;
       return 1;
     }
-    
+
     dmap_locks_erase(map, index);
     ++count;
   }
@@ -25,8 +25,8 @@ int expire_items_locks(struct DoubleChainLocks *chain, struct DoubleMapLocks *ma
 }
 
 int expire_items_single_map_locks(struct DoubleChainLocks *chain,
-                                  struct VectorLocks *vector, struct MapLocks *map,
-                                  vigor_time_t time) {
+                                  struct VectorLocks *vector,
+                                  struct MapLocks *map, vigor_time_t time) {
   bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
   bool *write_state_ptr = &RTE_PER_LCORE(write_state);
 
@@ -47,4 +47,24 @@ int expire_items_single_map_locks(struct DoubleChainLocks *chain,
   }
 
   return count;
+}
+
+int expire_items_single_map_iteratively_locks(struct VectorLocks *vector,
+                                              struct MapLocks *map,
+                                              int n_elems) {
+  bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool *write_state_ptr = &RTE_PER_LCORE(write_state);
+
+  if (n_elems != 0 && !*write_state_ptr) {
+    *write_attempt_ptr = true;
+    return 1;
+  }
+
+  assert(n_elems >= 0);
+  void *key;
+  for (int i = 0; i < n_elems; i++) {
+    vector_locks_borrow(vector, i, (void **)&key);
+    map_locks_erase(map, key, (void **)&key);
+    vector_locks_return(vector, i, key);
+  }
 }
