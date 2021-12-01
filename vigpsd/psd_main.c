@@ -65,7 +65,8 @@ int allocate(uint32_t src, uint16_t target_port, vigor_time_t time) {
 
   // Now save the source and add the first port.
   port_index = 0;
-  vector_borrow(state->ports_key, port_index, (void **)&touched_port);
+  vector_borrow(state->ports_key, state->max_ports * index + port_index,
+                (void **)&touched_port);
 
   *src_key = src;
   *counter = 1;
@@ -77,7 +78,8 @@ int allocate(uint32_t src, uint16_t target_port, vigor_time_t time) {
 
   vector_return(state->srcs_key, index, src_key);
   vector_return(state->touched_ports_counter, index, counter);
-  vector_return(state->ports_key, port_index, touched_port);
+  vector_return(state->ports_key, state->max_ports * index + port_index,
+                touched_port);
 
   return true;
 }
@@ -123,7 +125,8 @@ int detect_port_scanning(uint32_t src, uint16_t target_port,
     struct TouchedPort *new_touched_port = NULL;
     port_index = *((int *)counter) - 1;
 
-    vector_borrow(state->ports_key, port_index + 1, (void **)&new_touched_port);
+    vector_borrow(state->ports_key, state->max_ports * index + (port_index + 1),
+                  (void **)&new_touched_port);
 
     (*counter)++;
     new_touched_port->src = src;
@@ -131,7 +134,8 @@ int detect_port_scanning(uint32_t src, uint16_t target_port,
 
     map_put(state->ports, new_touched_port, port_index + 1);
 
-    vector_return(state->ports_key, port_index + 1, new_touched_port);
+    vector_return(state->ports_key, state->max_ports * index + (port_index + 1),
+                  new_touched_port);
   }
 
   vector_return(state->touched_ports_counter, index, counter);
