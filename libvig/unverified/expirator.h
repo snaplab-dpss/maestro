@@ -11,6 +11,6 @@
 // It removes items from 0 to n_elems (inclusive) simultaneously from the vector
 // and the map.
 int expire_items_single_map_iteratively(struct Vector *vector, struct Map *map,
-                                        int n_elems);
+                                        int start, int n_elems);
 
 #endif //_UNVERIFIED_EXPIRATOR_H_INCLUDED_

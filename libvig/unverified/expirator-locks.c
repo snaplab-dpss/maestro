@@ -50,7 +50,7 @@ int expire_items_single_map_locks(struct DoubleChainLocks *chain,
 }
 
 int expire_items_single_map_iteratively_locks(struct VectorLocks *vector,
-                                              struct MapLocks *map,
+                                              struct MapLocks *map, int start,
                                               int n_elems) {
   bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
   bool *write_state_ptr = &RTE_PER_LCORE(write_state);
@@ -60,9 +60,10 @@ int expire_items_single_map_iteratively_locks(struct VectorLocks *vector,
     return 1;
   }
 
+  assert(start >= 0);
   assert(n_elems >= 0);
   void *key;
-  for (int i = 0; i < n_elems; i++) {
+  for (int i = start; i < n_elems; i++) {
     vector_locks_borrow(vector, i, (void **)&key);
     map_locks_erase(map, key, (void **)&key);
     vector_locks_return(vector, i, key);

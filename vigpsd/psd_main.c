@@ -60,7 +60,7 @@ int allocate(uint32_t src, uint16_t target_port, vigor_time_t time) {
   vector_borrow(state->touched_ports_counter, index, (void **)&counter);
 
   // Cleanup previous state first.
-  expire_items_single_map_iteratively(state->ports_key, state->ports,
+  expire_items_single_map_iteratively(state->ports_key, state->ports, index,
                                       *((int *)counter));
 
   // Now save the source and add the first port.

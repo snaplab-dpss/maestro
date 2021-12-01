@@ -22,6 +22,6 @@ int expire_items_single_map_locks(struct DoubleChainLocks *chain,
                                   struct MapLocks *map, vigor_time_t time);
 
 int expire_items_single_map_iteratively_locks(struct VectorLocks *vector,
-                                              struct MapLocks *map,
+                                              struct MapLocks *map, int start,
                                               int n_elems);
 #endif
