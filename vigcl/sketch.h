@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 // Careful: this needs to be a power of 2
-#define SKETCH_HASHES 2
+#define SKETCH_HASHES 4
 
 extern const uint32_t SKETCH_SALTS[SKETCH_HASHES];
 

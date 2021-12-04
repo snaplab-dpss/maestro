@@ -2,7 +2,8 @@
 
 #include <stdint.h>
 
-const uint32_t SKETCH_SALTS[SKETCH_HASHES] = { 0xec99b144, 0x18a3b351 };
+const uint32_t SKETCH_SALTS[SKETCH_HASHES] = { 0xec99b144, 0x18a3b351,
+                                               0x4a030346, 0x3122358b };
 
 bool hash_eq(void *a, void *b) {
   struct hash *id1 = (struct hash *)a;
