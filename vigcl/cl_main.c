@@ -74,11 +74,11 @@ int allocate_flow(struct flow *flow, vigor_time_t time) {
   return true;
 }
 
-int touch_bucket(int sketch_iteration, struct hash hash, vigor_time_t now) {
+int touch_bucket(int sketch_iteration, unsigned sketch_hash, vigor_time_t now) {
   assert(sketch_iteration >= 0 && sketch_iteration < SKETCH_HASHES);
 
   int bucket_index = -1;
-  int present = map_get(state->clients, &hash, &bucket_index);
+  int present = map_get(state->clients, &sketch_hash, &bucket_index);
 
   if (!present) {
     int allocated_client = dchain_allocate_new_index(
@@ -97,7 +97,7 @@ int touch_bucket(int sketch_iteration, struct hash hash, vigor_time_t now) {
     vector_borrow(state->clients_keys, offseted, (void **)&saved_hash);
     vector_borrow(state->clients_buckets, offseted, (void **)&saved_bucket);
 
-    (*saved_hash) = hash.value;
+    (*saved_hash) = sketch_hash;
     (*saved_bucket) = 0;
     map_put(state->clients, saved_hash, bucket_index);
 
@@ -125,7 +125,7 @@ int limit_clients(struct flow *flow, vigor_time_t now) {
   struct hash_input hash_input = { .src_ip = flow->src_ip,
                                    .dst_ip = flow->dst_ip };
 
-  struct hash hashes[SKETCH_HASHES];
+  unsigned hashes[SKETCH_HASHES];
   int bucket_indexes[SKETCH_HASHES];
   int hash_present[SKETCH_HASHES];
   int all_hashes_present = true;
@@ -133,7 +133,7 @@ int limit_clients(struct flow *flow, vigor_time_t now) {
   for (int i = 0; i < SKETCH_HASHES; i++) {
     bucket_indexes[i] = -1;
     hash_present[i] = 0;
-    sketch_hash(&hash_input, SKETCH_SALTS[i], &hashes[i]);
+    hashes[i] = sketch_hash(&hash_input, SKETCH_SALTS[i]);
   }
 
   if (!present) {

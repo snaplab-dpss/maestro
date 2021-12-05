@@ -21,6 +21,10 @@ int expire_items_single_map_tm(struct DoubleChainTM *chain,
                                struct Vector *vector, struct Map *map,
                                vigor_time_t time);
 
+int expire_items_single_map_offseted_tm(struct DoubleChainTM *chain,
+                                        struct Vector *vector, struct Map *map,
+                                        vigor_time_t time, int offset);
+
 #define expire_items_single_map_iteratively_tm                                 \
   expire_items_single_map_iteratively
 

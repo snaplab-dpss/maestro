@@ -6,10 +6,12 @@
 
 #include <stdint.h>
 
-// Careful: this needs to be a power of 2
-#define SKETCH_HASHES 4
+// Careful: SKETCH_HASHES needs to be a power of 2 and <=
+// SKETCH_SALTS_BANK_SIZE
+#define SKETCH_HASHES 2
+#define SKETCH_SALTS_BANK_SIZE 4
 
-extern const uint32_t SKETCH_SALTS[SKETCH_HASHES];
+extern const uint32_t SKETCH_SALTS[SKETCH_SALTS_BANK_SIZE];
 
 struct hash_input {
   uint32_t src_ip;
@@ -23,7 +25,7 @@ struct hash {
 unsigned hash_hash(void *obj);
 bool hash_eq(void *a, void *b);
 void hash_allocate(void *obj);
-void sketch_hash(void *input, uint32_t salt, void *output);
+unsigned sketch_hash(void *input, uint32_t salt);
 
 #define LOG_hash(obj, p)                                                       \
   ;                                                                            \

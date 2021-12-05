@@ -2,8 +2,9 @@
 
 #include <stdint.h>
 
-const uint32_t SKETCH_SALTS[SKETCH_HASHES] = { 0xec99b144, 0x18a3b351,
-                                               0x4a030346, 0x3122358b };
+const uint32_t SKETCH_SALTS[SKETCH_SALTS_BANK_SIZE] = {
+  0xec99b144, 0x18a3b351, 0x4a030346, 0x3122358b
+};
 
 bool hash_eq(void *a, void *b) {
   struct hash *id1 = (struct hash *)a;
@@ -45,7 +46,7 @@ struct str_field_descr hash_input_descrs[] = {
 };
 struct nested_field_descr hash_input_nests[] = {};
 
-void sketch_hash(void *input, uint32_t salt, void *output) {
+unsigned sketch_hash(void *input, uint32_t salt) {
   klee_trace_param_tagged_ptr(input, sizeof(struct hash_input), "input",
                               "hash_input", TD_BOTH);
   for (int i = 0; i < sizeof(hash_input_descrs) / sizeof(hash_input_descrs[0]);
@@ -64,18 +65,7 @@ void sketch_hash(void *input, uint32_t salt, void *output) {
 
   klee_trace_param_u32(salt, "salt");
 
-  klee_trace_param_tagged_ptr(output, sizeof(struct hash), "output", "hash",
-                              TD_BOTH);
-  for (int i = 0; i < sizeof(hash_descrs) / sizeof(hash_descrs[0]); ++i) {
-    klee_trace_param_ptr_field_arr_directed(
-        output, hash_descrs[i].offset, hash_descrs[i].width,
-        hash_descrs[i].count, hash_descrs[i].name, TD_BOTH);
-  }
-  for (int i = 0; i < sizeof(hash_nests) / sizeof(hash_nests[0]); ++i) {
-    klee_trace_param_ptr_nested_field_arr_directed(
-        output, hash_nests[i].base_offset, hash_nests[i].offset,
-        hash_nests[i].width, hash_nests[i].count, hash_nests[i].name, TD_BOTH);
-  }
+  return klee_int("sketch_hash");
 }
 
 #else // KLEE_VERIFICATION
@@ -88,16 +78,15 @@ unsigned hash_hash(void *obj) {
   return hash;
 }
 
-void sketch_hash(void *input, uint32_t salt, void *output) {
+unsigned sketch_hash(void *input, uint32_t salt) {
   struct hash_input *hash_input = (struct hash_input *)input;
-  struct hash *hash_output = (struct hash *)output;
 
-  hash_output->value = 0;
-  hash_output->value = __builtin_ia32_crc32si(hash_output->value, salt);
-  hash_output->value =
-      __builtin_ia32_crc32si(hash_output->value, hash_input->src_ip);
-  hash_output->value =
-      __builtin_ia32_crc32si(hash_output->value, hash_input->dst_ip);
+  unsigned sketch_hash = 0;
+  sketch_hash = __builtin_ia32_crc32si(sketch_hash, salt);
+  sketch_hash = __builtin_ia32_crc32si(sketch_hash, hash_input->src_ip);
+  sketch_hash = __builtin_ia32_crc32si(sketch_hash, hash_input->dst_ip);
+
+  return sketch_hash;
 }
 
 #endif // KLEE_VERIFICATION

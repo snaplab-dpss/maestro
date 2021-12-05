@@ -1,6 +1,7 @@
 #include "cl_state.h"
 
 #include <stdlib.h>
+#include <assert.h>
 
 #include "libvig/verified/boilerplate-util.h"
 #ifdef KLEE_VERIFICATION
@@ -16,6 +17,8 @@ struct State *allocated_nf_state = NULL;
 
 struct State *alloc_state(uint32_t max_flows, uint32_t sketch_capacity,
                           uint16_t max_clients, uint32_t dev_count) {
+  assert(SKETCH_HASHES <= SKETCH_SALTS_BANK_SIZE);
+
   if (allocated_nf_state != NULL)
     return allocated_nf_state;
 
