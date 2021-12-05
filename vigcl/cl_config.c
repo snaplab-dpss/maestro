@@ -93,9 +93,6 @@ void nf_config_init(int argc, char **argv) {
         if (config.sketch_capacity <= 0) {
           PARSE_ERROR("Sketch capacity must be strictly positive.\n");
         }
-        if (!is_power_of_2(config.sketch_capacity)) {
-          PARSE_ERROR("Sketch capacity must be a power of 2.\n");
-        }
         break;
 
       case 'c':

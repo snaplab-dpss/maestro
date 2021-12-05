@@ -6,8 +6,7 @@
 
 #include <stdint.h>
 
-// Careful: SKETCH_HASHES needs to be a power of 2 and <=
-// SKETCH_SALTS_BANK_SIZE
+// Careful: SKETCH_HASHES needs to be <= SKETCH_SALTS_BANK_SIZE
 #define SKETCH_HASHES 2
 #define SKETCH_SALTS_BANK_SIZE 4
 

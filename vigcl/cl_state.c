@@ -15,6 +15,17 @@
 
 struct State *allocated_nf_state = NULL;
 
+unsigned find_next_power_of_2_bigger_than(uint32_t d) {
+  assert(d <= 0x80000000);
+  unsigned n = 1;
+
+  while (n < d) {
+    n *= 2;
+  }
+
+  return n;
+}
+
 struct State *alloc_state(uint32_t max_flows, uint32_t sketch_capacity,
                           uint16_t max_clients, uint32_t dev_count) {
   assert(SKETCH_HASHES <= SKETCH_SALTS_BANK_SIZE);
@@ -48,20 +59,23 @@ struct State *alloc_state(uint32_t max_flows, uint32_t sketch_capacity,
     return NULL;
   }
 
+  unsigned total_sketch_capacity =
+      find_next_power_of_2_bigger_than(sketch_capacity * SKETCH_HASHES);
+
   ret->clients = NULL;
-  if (map_allocate(hash_eq, hash_hash, sketch_capacity * SKETCH_HASHES,
+  if (map_allocate(hash_eq, hash_hash, total_sketch_capacity,
                    &(ret->clients)) == 0) {
     return NULL;
   }
 
   ret->clients_keys = NULL;
-  if (vector_allocate(sizeof(struct hash), sketch_capacity * SKETCH_HASHES,
-                      hash_allocate, &(ret->clients_keys)) == 0) {
+  if (vector_allocate(sizeof(struct hash), total_sketch_capacity, hash_allocate,
+                      &(ret->clients_keys)) == 0) {
     return NULL;
   }
 
   ret->clients_buckets = NULL;
-  if (vector_allocate(sizeof(struct bucket), sketch_capacity * SKETCH_HASHES,
+  if (vector_allocate(sizeof(struct bucket), total_sketch_capacity,
                       bucket_allocate, &(ret->clients_buckets)) == 0) {
     return NULL;
   }
