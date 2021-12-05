@@ -24,7 +24,7 @@ function test_cl {
         --lan 1 \
         --wan 0 \
         --max-flows 65536 \
-        --capacity 65536 \
+        --capacity 1024 \
         --max-clients $MAX_CLIENTS \
         --expire-flow 1000000 \
         --expire-client 10000000 &
