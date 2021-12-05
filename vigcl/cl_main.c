@@ -133,7 +133,8 @@ int limit_clients(struct flow *flow, vigor_time_t now) {
   for (int i = 0; i < SKETCH_HASHES; i++) {
     bucket_indexes[i] = -1;
     hash_present[i] = 0;
-    hashes[i] = sketch_hash(&hash_input, SKETCH_SALTS[i]);
+    hashes[i] =
+        sketch_hash(&hash_input, SKETCH_SALTS[i], config.sketch_capacity);
   }
 
   if (!present) {

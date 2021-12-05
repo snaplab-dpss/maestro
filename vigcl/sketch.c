@@ -46,7 +46,7 @@ struct str_field_descr hash_input_descrs[] = {
 };
 struct nested_field_descr hash_input_nests[] = {};
 
-unsigned sketch_hash(void *input, uint32_t salt) {
+unsigned sketch_hash(void *input, uint32_t salt, uint32_t bucket_size) {
   klee_trace_param_tagged_ptr(input, sizeof(struct hash_input), "input",
                               "hash_input", TD_BOTH);
   for (int i = 0; i < sizeof(hash_input_descrs) / sizeof(hash_input_descrs[0]);
@@ -64,6 +64,7 @@ unsigned sketch_hash(void *input, uint32_t salt) {
   }
 
   klee_trace_param_u32(salt, "salt");
+  klee_trace_param_u32(bucket_size, "bucket_size");
 
   return klee_int("sketch_hash");
 }
@@ -78,13 +79,14 @@ unsigned hash_hash(void *obj) {
   return hash;
 }
 
-unsigned sketch_hash(void *input, uint32_t salt) {
+unsigned sketch_hash(void *input, uint32_t salt, uint32_t bucket_size) {
   struct hash_input *hash_input = (struct hash_input *)input;
 
   unsigned sketch_hash = 0;
   sketch_hash = __builtin_ia32_crc32si(sketch_hash, salt);
   sketch_hash = __builtin_ia32_crc32si(sketch_hash, hash_input->src_ip);
   sketch_hash = __builtin_ia32_crc32si(sketch_hash, hash_input->dst_ip);
+  sketch_hash %= bucket_size;
 
   return sketch_hash;
 }

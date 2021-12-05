@@ -25,7 +25,7 @@ struct hash {
 unsigned hash_hash(void *obj);
 bool hash_eq(void *a, void *b);
 void hash_allocate(void *obj);
-unsigned sketch_hash(void *input, uint32_t salt);
+unsigned sketch_hash(void *input, uint32_t salt, uint32_t bucket_size);
 
 #define LOG_hash(obj, p)                                                       \
   ;                                                                            \
