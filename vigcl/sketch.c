@@ -1,15 +1,11 @@
 #include "sketch.h"
 
-#include "libvig/verified/map.h"
-#include "libvig/verified/vector.h"
-#include "libvig/verified/double-chain,h"
-#include "libvig/verified/vigor-time.h"
-
 #include <stdint.h>
 
-const uint32_t SKETCH_SALTS[SKETCH_SALTS_BANK_SIZE] = { 0xec99b144, 0x18a3b351,
-                                                        0x4a030346,
-                                                        0x3122358b };
+const uint32_t SKETCH_SALTS[SKETCH_SALTS_BANK_SIZE] = {
+  0xec99b144, 0x18a3b351, 0x4a030346, 0x3122358b,
+  0x444db70b, 0x3a7762cc, 0xed3076f5, 0x5ef8e5f7
+};
 
 bool hash_eq(void *a, void *b) {
   struct hash *id1 = (struct hash *)a;
@@ -45,73 +41,189 @@ unsigned hash_hash(void *obj) {
   return klee_int("hash_hash");
 }
 
-struct str_field_descr hash_input_descrs[] = {
-  { offsetof(struct hash_input, src_ip), sizeof(uint32_t), 0, "src_ip" },
-  { offsetof(struct hash_input, dst_ip), sizeof(uint32_t), 0, "dst_ip" },
+struct str_field_descr sketch_descrs[7] = {
+  { offsetof(struct Sketch, clients), sizeof(struct Map *), 0, "clients" },
+  { offsetof(struct Sketch, keys), sizeof(struct Vector *), 0, "keys" },
+  { offsetof(struct Sketch, buckets), sizeof(struct Vector *), 0, "buckets" },
+  { offsetof(struct Sketch, allocators), sizeof(struct DoubleChain *),
+    SKETCH_HASHES,                       "allocators" },
+  { offsetof(struct Sketch, capacity), sizeof(uint32_t), 0, "capacity" },
+  { offsetof(struct Sketch, bucket_size), sizeof(uint32_t), 0, "bucket_size" },
+  { offsetof(struct Sketch, threshold), sizeof(uint16_t), 0, "threshold" },
 };
-struct nested_field_descr hash_input_nests[] = {};
 
-unsigned sketch_hash(void *input, uint32_t salt, uint32_t bucket_size) {
-  klee_trace_ret();
-  klee_trace_param_tagged_ptr(input, sizeof(struct hash_input), "input",
-                              "hash_input", TD_BOTH);
-  for (int i = 0; i < sizeof(hash_input_descrs) / sizeof(hash_input_descrs[0]);
-       ++i) {
-    klee_trace_param_ptr_field_arr_directed(
-        input, hash_input_descrs[i].offset, hash_input_descrs[i].width,
-        hash_input_descrs[i].count, hash_input_descrs[i].name, TD_BOTH);
-  }
-  for (int i = 0; i < sizeof(hash_input_nests) / sizeof(hash_input_nests[0]);
-       ++i) {
-    klee_trace_param_ptr_nested_field_arr_directed(
-        input, hash_input_nests[i].base_offset, hash_input_nests[i].offset,
-        hash_input_nests[i].width, hash_input_nests[i].count,
-        hash_input_nests[i].name, TD_BOTH);
-  }
+struct nested_field_descr sketch_nests[0];
 
-  klee_trace_param_u32(salt, "salt");
-  klee_trace_param_u32(bucket_size, "bucket_size");
-
-  return klee_int("sketch_hash");
-}
-
-struct str_field_descr sketch_data_descrs[3] = {
-  { offsetof(struct sketch_data, hashes), sizeof(unsigned), SKETCH_HASHES,
-    "hashes" },
-  { offsetof(struct sketch_data, present), sizeof(int), SKETCH_HASHES,
-    "present" },
-  { offsetof(struct sketch_data, buckets_indexes), sizeof(int), SKETCH_HASHES,
-    "buckets_indexes" },
+struct str_field_descr sketch_key_descrs[] = {
+  { offsetof(struct sketch_key, src_ip), sizeof(uint32_t), 0, "src_ip" },
+  { offsetof(struct sketch_key, dst_ip), sizeof(uint32_t), 0, "dst_ip" },
 };
+struct nested_field_descr sketch_key_nests[] = {};
+
+struct str_field_descr sketch_data_descrs[3] =
+    { { offsetof(struct sketch_data, hashes), sizeof(unsigned),
+        SKETCH_HASHES,                        "hashes" },
+      { offsetof(struct sketch_data, present), sizeof(int),
+        SKETCH_HASHES,                         "present" },
+      { offsetof(struct sketch_data, buckets_indexes), sizeof(int),
+        SKETCH_HASHES,                                 "buckets_indexes" }, };
 
 struct nested_field_descr sketch_data_nests[0];
 
-int sketch_fetch(void *indexes, void *buckets, uint32_t sketch_capacity,
-                 uint16_t threshold, void *data) {
-  klee_trace_ret();
-  klee_trace_param_u64((uint64_t)indexes, "indexes");
-  klee_trace_param_u64((uint64_t)buckets, "buckets");
+void sketch_compute_hashes(void *obj, void *k, void *out) {
+  klee_trace_param_tagged_ptr(obj, sizeof(struct Sketch), "sketch", "sketch",
+                              TD_BOTH);
+  for (int i = 0; i < sizeof(sketch_descrs) / sizeof(sketch_descrs[0]); ++i) {
+    klee_trace_param_ptr_field_arr_directed(
+        obj, sketch_descrs[i].offset, sketch_descrs[i].width,
+        sketch_descrs[i].count, sketch_descrs[i].name, TD_BOTH);
+  }
+  for (int i = 0; i < sizeof(sketch_nests) / sizeof(sketch_nests[0]); ++i) {
+    klee_trace_param_ptr_nested_field_arr_directed(
+        obj, sketch_nests[i].base_offset, sketch_nests[i].offset,
+        sketch_nests[i].width, sketch_nests[i].count, sketch_nests[i].name,
+        TD_BOTH);
+  }
 
-  klee_trace_param_u32(sketch_capacity, "sketch_capacity");
-  klee_trace_param_u16(threshold, "threshold");
+  klee_trace_param_tagged_ptr(k, sizeof(struct sketch_key), "key", "sketch_key",
+                              TD_BOTH);
+  for (int i = 0; i < sizeof(sketch_key_descrs) / sizeof(sketch_key_descrs[0]);
+       ++i) {
+    klee_trace_param_ptr_field_arr_directed(
+        k, sketch_key_descrs[i].offset, sketch_key_descrs[i].width,
+        sketch_key_descrs[i].count, sketch_key_descrs[i].name, TD_BOTH);
+  }
+  for (int i = 0; i < sizeof(sketch_key_nests) / sizeof(sketch_key_nests[0]);
+       ++i) {
+    klee_trace_param_ptr_nested_field_arr_directed(
+        k, sketch_key_nests[i].base_offset, sketch_key_nests[i].offset,
+        sketch_key_nests[i].width, sketch_key_nests[i].count,
+        sketch_key_nests[i].name, TD_BOTH);
+  }
 
-  klee_trace_param_tagged_ptr(data, sizeof(struct sketch_data), "data",
-                              "sketch_data", TD_BOTH);
+  klee_trace_param_tagged_ptr(out, sizeof(struct sketch_data), "out", "data",
+                              TD_BOTH);
   for (int i = 0;
        i < sizeof(sketch_data_descrs) / sizeof(sketch_data_descrs[0]); ++i) {
     klee_trace_param_ptr_field_arr_directed(
-        data, sketch_data_descrs[i].offset, sketch_data_descrs[i].width,
+        out, sketch_data_descrs[i].offset, sketch_data_descrs[i].width,
         sketch_data_descrs[i].count, sketch_data_descrs[i].name, TD_BOTH);
   }
   for (int i = 0; i < sizeof(sketch_data_nests) / sizeof(sketch_data_nests[0]);
        ++i) {
     klee_trace_param_ptr_nested_field_arr_directed(
-        data, sketch_data_nests[i].base_offset, sketch_data_nests[i].offset,
+        out, sketch_data_nests[i].base_offset, sketch_data_nests[i].offset,
+        sketch_data_nests[i].width, sketch_data_nests[i].count,
+        sketch_data_nests[i].name, TD_BOTH);
+  }
+}
+
+void sketch_refresh(void *obj, void *out, vigor_time_t now) {
+  klee_trace_param_tagged_ptr(obj, sizeof(struct Sketch), "sketch", "sketch",
+                              TD_BOTH);
+  for (int i = 0; i < sizeof(sketch_descrs) / sizeof(sketch_descrs[0]); ++i) {
+    klee_trace_param_ptr_field_arr_directed(
+        obj, sketch_descrs[i].offset, sketch_descrs[i].width,
+        sketch_descrs[i].count, sketch_descrs[i].name, TD_BOTH);
+  }
+  for (int i = 0; i < sizeof(sketch_nests) / sizeof(sketch_nests[0]); ++i) {
+    klee_trace_param_ptr_nested_field_arr_directed(
+        obj, sketch_nests[i].base_offset, sketch_nests[i].offset,
+        sketch_nests[i].width, sketch_nests[i].count, sketch_nests[i].name,
+        TD_BOTH);
+  }
+
+  klee_trace_param_tagged_ptr(out, sizeof(struct sketch_data), "out", "data",
+                              TD_BOTH);
+  for (int i = 0;
+       i < sizeof(sketch_data_descrs) / sizeof(sketch_data_descrs[0]); ++i) {
+    klee_trace_param_ptr_field_arr_directed(
+        out, sketch_data_descrs[i].offset, sketch_data_descrs[i].width,
+        sketch_data_descrs[i].count, sketch_data_descrs[i].name, TD_BOTH);
+  }
+  for (int i = 0; i < sizeof(sketch_data_nests) / sizeof(sketch_data_nests[0]);
+       ++i) {
+    klee_trace_param_ptr_nested_field_arr_directed(
+        out, sketch_data_nests[i].base_offset, sketch_data_nests[i].offset,
+        sketch_data_nests[i].width, sketch_data_nests[i].count,
+        sketch_data_nests[i].name, TD_BOTH);
+  }
+
+  klee_trace_param_u64(now, "now");
+}
+
+int sketch_fetch(void *obj, void *out) {
+  klee_trace_ret();
+
+  klee_trace_param_tagged_ptr(obj, sizeof(struct Sketch), "sketch", "sketch",
+                              TD_BOTH);
+  for (int i = 0; i < sizeof(sketch_descrs) / sizeof(sketch_descrs[0]); ++i) {
+    klee_trace_param_ptr_field_arr_directed(
+        obj, sketch_descrs[i].offset, sketch_descrs[i].width,
+        sketch_descrs[i].count, sketch_descrs[i].name, TD_BOTH);
+  }
+  for (int i = 0; i < sizeof(sketch_nests) / sizeof(sketch_nests[0]); ++i) {
+    klee_trace_param_ptr_nested_field_arr_directed(
+        obj, sketch_nests[i].base_offset, sketch_nests[i].offset,
+        sketch_nests[i].width, sketch_nests[i].count, sketch_nests[i].name,
+        TD_BOTH);
+  }
+
+  klee_trace_param_tagged_ptr(out, sizeof(struct sketch_data), "out", "data",
+                              TD_BOTH);
+  for (int i = 0;
+       i < sizeof(sketch_data_descrs) / sizeof(sketch_data_descrs[0]); ++i) {
+    klee_trace_param_ptr_field_arr_directed(
+        out, sketch_data_descrs[i].offset, sketch_data_descrs[i].width,
+        sketch_data_descrs[i].count, sketch_data_descrs[i].name, TD_BOTH);
+  }
+  for (int i = 0; i < sizeof(sketch_data_nests) / sizeof(sketch_data_nests[0]);
+       ++i) {
+    klee_trace_param_ptr_nested_field_arr_directed(
+        out, sketch_data_nests[i].base_offset, sketch_data_nests[i].offset,
         sketch_data_nests[i].width, sketch_data_nests[i].count,
         sketch_data_nests[i].name, TD_BOTH);
   }
 
   return klee_int("overflow");
+}
+
+int sketch_touch_buckets(void *obj, void *out, vigor_time_t now) {
+  klee_trace_ret();
+
+  klee_trace_param_tagged_ptr(obj, sizeof(struct Sketch), "sketch", "sketch",
+                              TD_BOTH);
+  for (int i = 0; i < sizeof(sketch_descrs) / sizeof(sketch_descrs[0]); ++i) {
+    klee_trace_param_ptr_field_arr_directed(
+        obj, sketch_descrs[i].offset, sketch_descrs[i].width,
+        sketch_descrs[i].count, sketch_descrs[i].name, TD_BOTH);
+  }
+  for (int i = 0; i < sizeof(sketch_nests) / sizeof(sketch_nests[0]); ++i) {
+    klee_trace_param_ptr_nested_field_arr_directed(
+        obj, sketch_nests[i].base_offset, sketch_nests[i].offset,
+        sketch_nests[i].width, sketch_nests[i].count, sketch_nests[i].name,
+        TD_BOTH);
+  }
+
+  klee_trace_param_tagged_ptr(out, sizeof(struct sketch_data), "out", "data",
+                              TD_BOTH);
+  for (int i = 0;
+       i < sizeof(sketch_data_descrs) / sizeof(sketch_data_descrs[0]); ++i) {
+    klee_trace_param_ptr_field_arr_directed(
+        out, sketch_data_descrs[i].offset, sketch_data_descrs[i].width,
+        sketch_data_descrs[i].count, sketch_data_descrs[i].name, TD_BOTH);
+  }
+  for (int i = 0; i < sizeof(sketch_data_nests) / sizeof(sketch_data_nests[0]);
+       ++i) {
+    klee_trace_param_ptr_nested_field_arr_directed(
+        out, sketch_data_nests[i].base_offset, sketch_data_nests[i].offset,
+        sketch_data_nests[i].width, sketch_data_nests[i].count,
+        sketch_data_nests[i].name, TD_BOTH);
+  }
+
+  klee_trace_param_u64(now, "now");
+
+  return klee_int("success");
 }
 
 #else // KLEE_VERIFICATION
@@ -124,94 +236,104 @@ unsigned hash_hash(void *obj) {
   return hash;
 }
 
-unsigned sketch_hash(void *input, uint32_t salt, uint32_t bucket_size) {
-  struct hash_input *hash_input = (struct hash_input *)input;
+void sketch_compute_hashes(void *obj, void *k, void *out) {
+  struct Sketch *sketch = (struct Sketch *)obj;
+  struct sketch_key *key = (struct sketch_key *)k;
+  struct sketch_data *data = (struct sketch_data *)out;
 
-  unsigned sketch_hash = 0;
-  sketch_hash = __builtin_ia32_crc32si(sketch_hash, salt);
-  sketch_hash = __builtin_ia32_crc32si(sketch_hash, hash_input->src_ip);
-  sketch_hash = __builtin_ia32_crc32si(sketch_hash, hash_input->dst_ip);
-  sketch_hash %= bucket_size;
+  for (int i = 0; i < SKETCH_HASHES; i++) {
+    data->buckets_indexes[i] = -1;
+    data->present[i] = 0;
+    data->hashes[i] = 0;
 
-  return sketch_hash;
+    data->hashes[i] = __builtin_ia32_crc32si(data->hashes[i], SKETCH_SALTS[i]);
+    data->hashes[i] = __builtin_ia32_crc32si(data->hashes[i], key->src_ip);
+    data->hashes[i] = __builtin_ia32_crc32si(data->hashes[i], key->dst_ip);
+    data->hashes[i] %= sketch->bucket_size;
+  }
 }
 
-int sketch_fetch(void *indexes, void *buckets, uint32_t sketch_capacity,
-                 uint16_t threshold, void *data) {
-  struct Map *indexes_cast = (struct Map *)indexes;
-  struct Vector *buckets_cast = (struct Vector *)buckets;
-  struct sketch_data *sketch_data = (struct sketch_data *)data;
+void sketch_refresh(void *obj, void *out, vigor_time_t now) {
+  struct Sketch *sketch = (struct Sketch *)obj;
+  struct sketch_data *data = (struct sketch_data *)out;
+
+  for (int i = 0; i < SKETCH_HASHES; i++) {
+    map_get(sketch->clients, &data->hashes[i], &data->buckets_indexes[i]);
+    dchain_rejuvenate_index(sketch->allocators[i], data->buckets_indexes[i],
+                            now);
+  }
+}
+
+int sketch_fetch(void *obj, void *out) {
+  struct Sketch *sketch = (struct Sketch *)obj;
+  struct sketch_data *data = (struct sketch_data *)out;
 
   int bucket_min_set = false;
   uint32_t *buckets_values[SKETCH_HASHES];
   uint32_t bucket_min = 0;
 
   for (int i = 0; i < SKETCH_HASHES; i++) {
-    sketch_data->present[i] = map_get(indexes_cast, &sketch_data->hashes[i],
-                                      &sketch_data->buckets_indexes[i]);
+    data->present[i] =
+        map_get(sketch->clients, &data->hashes[i], &data->buckets_indexes[i]);
 
-    if (!sketch_data->present[i]) {
+    if (!data->present[i]) {
       continue;
     }
 
-    int offseted = sketch_data->buckets_indexes[i] + sketch_capacity * i;
-    vector_borrow(buckets_cast, offseted, (void **)&buckets_values[i]);
+    int offseted = data->buckets_indexes[i] + sketch->capacity * i;
+    vector_borrow(sketch->buckets, offseted, (void **)&buckets_values[i]);
 
     if (!bucket_min_set || bucket_min > *buckets_values[i]) {
       bucket_min = *buckets_values[i];
       bucket_min_set = true;
     }
 
-    vector_return(buckets_cast, offseted, buckets_values[i]);
+    vector_return(sketch->buckets, offseted, buckets_values[i]);
   }
 
-  return bucket_min_set && bucket_min > threshold;
+  return bucket_min_set && bucket_min > sketch->threshold;
 }
 
-int sketch_touch_buckets(void *indexes, void *buckets, void *allocator,
-                         void *data, vigor_time_t now) {
-  struct Map *indexes_cast = (struct Map *)indexes;
-  struct Vector *buckets_cast = (struct Vector *)buckets;
-  struct Vector *buckets_cast = (struct DoubleChain *)buckets;
-  struct sketch_data *sketch_data = (struct sketch_data *)data;
+int sketch_touch_buckets(void *obj, void *out, vigor_time_t now) {
+  struct Sketch *sketch = (struct Sketch *)obj;
+  struct sketch_data *data = (struct sketch_data *)out;
 
   for (int i = 0; i < SKETCH_HASHES; i++) {
     int bucket_index = -1;
-    int present = map_get(indexes, &sketch_data->hashes[i], &bucket_index);
+    int present = map_get(sketch->clients, &data->hashes[i], &bucket_index);
 
     if (!present) {
-      int allocated_client = dchain_allocate_new_index(
-          state->client_allocator[sketch_iteration], &bucket_index, now);
+      int allocated_client =
+          dchain_allocate_new_index(sketch->allocators[i], &bucket_index, now);
 
       if (!allocated_client) {
         // Sketch size limit reached.
         return false;
       }
 
-      int offseted = bucket_index + state->sketch_capacity * sketch_iteration;
+      int offseted = bucket_index + sketch->capacity * i;
 
-      uint32_t *saved_hash = NULL;
-      uint32_t *saved_bucket = NULL;
+      uint32_t *saved_hash = 0;
+      uint32_t *saved_bucket = 0;
 
-      vector_borrow(state->clients_keys, offseted, (void **)&saved_hash);
-      vector_borrow(state->clients_buckets, offseted, (void **)&saved_bucket);
+      vector_borrow(sketch->keys, offseted, (void **)&saved_hash);
+      vector_borrow(sketch->buckets, offseted, (void **)&saved_bucket);
 
-      (*saved_hash) = sketch_hash;
+      (*saved_hash) = data->hashes[i];
       (*saved_bucket) = 0;
-      map_put(state->clients, saved_hash, bucket_index);
+      map_put(sketch->clients, saved_hash, bucket_index);
 
-      vector_return(state->clients_keys, offseted, saved_hash);
-      vector_return(state->clients_buckets, offseted, saved_bucket);
+      vector_return(sketch->keys, offseted, saved_hash);
+      vector_return(sketch->buckets, offseted, saved_bucket);
 
       return true;
     } else {
-      dchain_rejuvenate_index(state->client_allocator[sketch_iteration],
-                              bucket_index, now);
+      dchain_rejuvenate_index(sketch->allocators[i], bucket_index, now);
       uint32_t *bucket;
-      int offseted = bucket_index + state->sketch_capacity * sketch_iteration;
-      vector_borrow(state->clients_buckets, offseted, (void **)&bucket);
+      int offseted = bucket_index + sketch->capacity * i;
+      vector_borrow(sketch->buckets, offseted, (void **)&bucket);
       (*bucket)++;
-      vector_return(state->clients_buckets, offseted, bucket);
+      vector_return(sketch->buckets, offseted, bucket);
       return true;
     }
   }

@@ -41,8 +41,8 @@ void expire_entries(vigor_time_t time) {
                           state->flows, flow_last_time);
   for (int i = 0; i < SKETCH_HASHES; i++) {
     expire_items_single_map_offseted(
-        state->client_allocator[i], state->clients_keys, state->clients,
-        client_last_time, i * state->sketch_capacity);
+        state->sketch.allocators[i], state->sketch.keys, state->sketch.clients,
+        client_last_time, i * state->sketch.capacity);
   }
 }
 
@@ -74,79 +74,19 @@ int allocate_flow(struct flow *flow, vigor_time_t time) {
   return true;
 }
 
-int touch_bucket(int sketch_iteration, unsigned sketch_hash, vigor_time_t now) {
-  assert(sketch_iteration >= 0 && sketch_iteration < SKETCH_HASHES);
-
-  int bucket_index = -1;
-  int present = map_get(state->clients, &sketch_hash, &bucket_index);
-
-  if (!present) {
-    int allocated_client = dchain_allocate_new_index(
-        state->client_allocator[sketch_iteration], &bucket_index, now);
-
-    if (!allocated_client) {
-      // Sketch size limit reached.
-      return false;
-    }
-
-    int offseted = bucket_index + state->sketch_capacity * sketch_iteration;
-
-    uint32_t *saved_hash = NULL;
-    uint32_t *saved_bucket = NULL;
-
-    vector_borrow(state->clients_keys, offseted, (void **)&saved_hash);
-    vector_borrow(state->clients_buckets, offseted, (void **)&saved_bucket);
-
-    (*saved_hash) = sketch_hash;
-    (*saved_bucket) = 0;
-    map_put(state->clients, saved_hash, bucket_index);
-
-    vector_return(state->clients_keys, offseted, saved_hash);
-    vector_return(state->clients_buckets, offseted, saved_bucket);
-
-    return true;
-  } else {
-    dchain_rejuvenate_index(state->client_allocator[sketch_iteration],
-                            bucket_index, now);
-    uint32_t *bucket;
-    int offseted = bucket_index + state->sketch_capacity * sketch_iteration;
-    vector_borrow(state->clients_buckets, offseted, (void **)&bucket);
-    (*bucket)++;
-    vector_return(state->clients_buckets, offseted, bucket);
-    return true;
-  }
-}
-
-void refresh(int flow_index, struct sketch_data *sketch_data,
-             vigor_time_t now) {
-  dchain_rejuvenate_index(state->flow_allocator, flow_index, now);
-
-  for (int i = 0; i < SKETCH_HASHES; i++) {
-    map_get(state->clients, &sketch_data->hashes[i],
-            &sketch_data->buckets_indexes[i]);
-    dchain_rejuvenate_index(state->client_allocator[i],
-                            sketch_data->buckets_indexes[i], now);
-  }
-}
-
 // Return false if packet should be dropped
 int limit_clients(struct flow *flow, vigor_time_t now) {
   int flow_index = -1;
   int present = map_get(state->flows, flow, &flow_index);
 
-  struct hash_input hash_input = { .src_ip = flow->src_ip,
-                                   .dst_ip = flow->dst_ip };
-  struct sketch_data sketch_data;
+  struct sketch_key key = { .src_ip = flow->src_ip, .dst_ip = flow->dst_ip };
+  struct sketch_data data;
 
-  for (int i = 0; i < SKETCH_HASHES; i++) {
-    sketch_data.buckets_indexes[i] = -1;
-    sketch_data.present[i] = 0;
-    sketch_data.hashes[i] =
-        sketch_hash(&hash_input, SKETCH_SALTS[i], config.sketch_capacity);
-  }
+  sketch_compute_hashes(&state->sketch, &key, &data);
 
   if (present) {
-    refresh(flow_index, &sketch_data, now);
+    dchain_rejuvenate_index(state->flow_allocator, flow_index, now);
+    sketch_refresh(&state->sketch, &data, now);
     return true;
   }
 
@@ -158,17 +98,13 @@ int limit_clients(struct flow *flow, vigor_time_t now) {
     return true;
   }
 
-  int overflow =
-      sketch_fetch(state->clients, state->clients_buckets,
-                   state->sketch_capacity, state->max_clients, &sketch_data);
+  int overflow = sketch_fetch(&state->sketch, &data);
 
   if (overflow) {
     return false;
   }
 
-  for (int i = 0; i < SKETCH_HASHES; i++) {
-    touch_bucket(i, sketch_data.hashes[i], now);
-  }
+  sketch_touch_buckets(&state->sketch, &data, now);
 
   return true;
 }
@@ -198,13 +134,11 @@ int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
     NF_DEBUG("Outgoing packet. Not limiting clients.");
     return config.wan_device;
   } else if (device == config.wan_device) {
-    struct flow flow = {
-      .src_port = tcpudp_header->src_port,
-      .dst_port = tcpudp_header->dst_port,
-      .src_ip = rte_ipv4_header->src_addr,
-      .dst_ip = rte_ipv4_header->dst_addr,
-      .protocol = rte_ipv4_header->next_proto_id,
-    };
+    struct flow flow = { .src_port = tcpudp_header->src_port,
+                         .dst_port = tcpudp_header->dst_port,
+                         .src_ip = rte_ipv4_header->src_addr,
+                         .dst_ip = rte_ipv4_header->dst_addr,
+                         .protocol = rte_ipv4_header->next_proto_id, };
 
     int fwd = limit_clients(&flow, now);
 

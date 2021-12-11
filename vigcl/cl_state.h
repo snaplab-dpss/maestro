@@ -8,14 +8,9 @@ struct State {
   struct Vector *flows_keys;
   struct DoubleChain *flow_allocator;
 
-  struct Map *clients;
-  struct Vector *clients_keys;
-  struct Vector *clients_buckets;
-  struct DoubleChain *client_allocator[SKETCH_HASHES];
+  struct Sketch sketch;
 
   uint32_t max_flows;
-  uint32_t sketch_capacity;
-  uint16_t max_clients;
   uint32_t dev_count;
 };
 
