@@ -117,6 +117,18 @@ int touch_bucket(int sketch_iteration, unsigned sketch_hash, vigor_time_t now) {
   }
 }
 
+void refresh(int flow_index, struct sketch_data *sketch_data,
+             vigor_time_t now) {
+  dchain_rejuvenate_index(state->flow_allocator, flow_index, now);
+
+  for (int i = 0; i < SKETCH_HASHES; i++) {
+    map_get(state->clients, &sketch_data->hashes[i],
+            &sketch_data->buckets_indexes[i]);
+    dchain_rejuvenate_index(state->client_allocator[i],
+                            sketch_data->buckets_indexes[i], now);
+  }
+}
+
 // Return false if packet should be dropped
 int limit_clients(struct flow *flow, vigor_time_t now) {
   int flow_index = -1;
@@ -124,76 +136,41 @@ int limit_clients(struct flow *flow, vigor_time_t now) {
 
   struct hash_input hash_input = { .src_ip = flow->src_ip,
                                    .dst_ip = flow->dst_ip };
-
-  unsigned hashes[SKETCH_HASHES];
-  int bucket_indexes[SKETCH_HASHES];
-  int hash_present[SKETCH_HASHES];
-  int all_hashes_present = true;
+  struct sketch_data sketch_data;
 
   for (int i = 0; i < SKETCH_HASHES; i++) {
-    bucket_indexes[i] = -1;
-    hash_present[i] = 0;
-    hashes[i] =
+    sketch_data.buckets_indexes[i] = -1;
+    sketch_data.present[i] = 0;
+    sketch_data.hashes[i] =
         sketch_hash(&hash_input, SKETCH_SALTS[i], config.sketch_capacity);
   }
 
-  if (!present) {
-    int allocated_flow = allocate_flow(flow, now);
-
-    if (!allocated_flow) {
-      // Reached the maximum number of allowed flows.
-      // Just forward and don't limit...
-      return true;
-    }
-
-    for (int i = 0; i < SKETCH_HASHES; i++) {
-      hash_present[i] = map_get(state->clients, &hashes[i], &bucket_indexes[i]);
-      all_hashes_present &= hash_present[i];
-    }
-
-    if (all_hashes_present) {
-      uint32_t *buckets[SKETCH_HASHES];
-      uint32_t bucket_min = -1;
-
-      for (int i = 0; i < SKETCH_HASHES; i++) {
-        int offseted = bucket_indexes[i] + state->sketch_capacity * i;
-        vector_borrow(state->clients_buckets, offseted, (void **)&buckets[i]);
-        if (bucket_min == -1 || bucket_min > *buckets[i]) {
-          bucket_min = *buckets[i];
-        }
-        vector_return(state->clients_buckets, offseted, buckets[i]);
-      }
-
-      if (bucket_min < state->max_clients) {
-        for (int i = 0; i < SKETCH_HASHES; i++) {
-          int offseted = bucket_indexes[i] + state->sketch_capacity * i;
-          vector_borrow(state->clients_buckets, offseted, (void **)&buckets[i]);
-          (*buckets[i])++;
-          vector_return(state->clients_buckets, offseted, buckets[i]);
-        }
-
-        return true;
-      } else {
-        // Maximum number of clients reached. Drop!
-        return false;
-      }
-    } else {
-      for (int i = 0; i < SKETCH_HASHES; i++) {
-        touch_bucket(i, hashes[i], now);
-      }
-      return true;
-    }
-  } else {
-    dchain_rejuvenate_index(state->flow_allocator, flow_index, now);
-
-    for (int i = 0; i < SKETCH_HASHES; i++) {
-      present = map_get(state->clients, &hashes[i], &bucket_indexes[i]);
-      dchain_rejuvenate_index(state->client_allocator[i], bucket_indexes[i],
-                              now);
-    }
-
+  if (present) {
+    refresh(flow_index, &sketch_data, now);
     return true;
   }
+
+  int allocated_flow = allocate_flow(flow, now);
+
+  if (!allocated_flow) {
+    // Reached the maximum number of allowed flows.
+    // Just forward and don't limit...
+    return true;
+  }
+
+  int overflow =
+      sketch_fetch(state->clients, state->clients_buckets,
+                   state->sketch_capacity, state->max_clients, &sketch_data);
+
+  if (overflow) {
+    return false;
+  }
+
+  for (int i = 0; i < SKETCH_HASHES; i++) {
+    touch_bucket(i, sketch_data.hashes[i], now);
+  }
+
+  return true;
 }
 
 int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
@@ -221,11 +198,13 @@ int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
     NF_DEBUG("Outgoing packet. Not limiting clients.");
     return config.wan_device;
   } else if (device == config.wan_device) {
-    struct flow flow = { .src_port = tcpudp_header->src_port,
-                         .dst_port = tcpudp_header->dst_port,
-                         .src_ip = rte_ipv4_header->src_addr,
-                         .dst_ip = rte_ipv4_header->dst_addr,
-                         .protocol = rte_ipv4_header->next_proto_id, };
+    struct flow flow = {
+      .src_port = tcpudp_header->src_port,
+      .dst_port = tcpudp_header->dst_port,
+      .src_ip = rte_ipv4_header->src_addr,
+      .dst_ip = rte_ipv4_header->dst_addr,
+      .protocol = rte_ipv4_header->next_proto_id,
+    };
 
     int fwd = limit_clients(&flow, now);
 
