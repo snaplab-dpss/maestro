@@ -1,4 +1,4 @@
-NF_FILES := cl_main.c cl_config.c cl_state.c flow.c bucket.c sketch.c
+NF_FILES := cl_main.c cl_config.c cl_state.c flow.c client.c
 
 NF_ARGS := --lan 1 \
            --wan 0 \

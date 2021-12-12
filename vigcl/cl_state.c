@@ -9,26 +9,14 @@
 #include "libvig/models/verified/ether.h"
 #include "libvig/models/verified/map-control.h"
 #include "libvig/models/verified/vector-control.h"
+#include "libvig/models/unverified/sketch-control.h"
 #include "libvig/models/verified/lpm-dir-24-8-control.h"
-
 #endif // KLEE_VERIFICATION
 
 struct State *allocated_nf_state = NULL;
 
-unsigned find_next_power_of_2_bigger_than(uint32_t d) {
-  assert(d <= 0x80000000);
-  unsigned n = 1;
-
-  while (n < d) {
-    n *= 2;
-  }
-
-  return n;
-}
-
 struct State *alloc_state(uint32_t max_flows, uint32_t sketch_capacity,
                           uint16_t max_clients, uint32_t dev_count) {
-  assert(SKETCH_HASHES <= SKETCH_SALTS_BANK_SIZE);
 
   if (allocated_nf_state != NULL)
     return allocated_nf_state;
@@ -37,9 +25,6 @@ struct State *alloc_state(uint32_t max_flows, uint32_t sketch_capacity,
 
   if (ret == NULL)
     return NULL;
-
-  ret->sketch.threshold = max_clients;
-  ret->sketch.capacity = sketch_capacity;
 
   ret->max_flows = max_flows;
   ret->dev_count = dev_count;
@@ -60,32 +45,10 @@ struct State *alloc_state(uint32_t max_flows, uint32_t sketch_capacity,
     return NULL;
   }
 
-  unsigned total_sketch_capacity =
-      find_next_power_of_2_bigger_than(sketch_capacity * SKETCH_HASHES);
-
-  ret->sketch.clients = NULL;
-  if (map_allocate(hash_eq, hash_hash, total_sketch_capacity,
-                   &(ret->sketch.clients)) == 0) {
+  ret->sketch = NULL;
+  if (sketch_allocate(client_hash, sketch_capacity, max_clients,
+                      &(ret->sketch)) == 0) {
     return NULL;
-  }
-
-  ret->sketch.keys = NULL;
-  if (vector_allocate(sizeof(struct hash), total_sketch_capacity, hash_allocate,
-                      &(ret->sketch.keys)) == 0) {
-    return NULL;
-  }
-
-  ret->sketch.buckets = NULL;
-  if (vector_allocate(sizeof(struct bucket), total_sketch_capacity,
-                      bucket_allocate, &(ret->sketch.buckets)) == 0) {
-    return NULL;
-  }
-
-  for (int i = 0; i < SKETCH_HASHES; i++) {
-    ret->sketch.allocators[i] = NULL;
-    if (dchain_allocate(sketch_capacity, &(ret->sketch.allocators[i])) == 0) {
-      return NULL;
-    }
   }
 
 #ifdef KLEE_VERIFICATION
@@ -95,16 +58,10 @@ struct State *alloc_state(uint32_t max_flows, uint32_t sketch_capacity,
   vector_set_layout(ret->flows_keys, flow_descrs,
                     sizeof(flow_descrs) / sizeof(flow_descrs[0]), flow_nests,
                     sizeof(flow_nests) / sizeof(flow_nests[0]), "flow");
-  map_set_layout(ret->sketch.clients, hash_descrs,
-                 sizeof(hash_descrs) / sizeof(hash_descrs[0]), hash_nests,
-                 sizeof(hash_nests) / sizeof(hash_nests[0]), "hash");
-  vector_set_layout(ret->sketch.keys, hash_descrs,
-                    sizeof(hash_descrs) / sizeof(hash_descrs[0]), hash_nests,
-                    sizeof(hash_nests) / sizeof(hash_nests[0]), "hash");
-  vector_set_layout(ret->sketch.buckets, bucket_descrs,
-                    sizeof(bucket_descrs) / sizeof(bucket_descrs[0]),
-                    bucket_nests,
-                    sizeof(bucket_nests) / sizeof(bucket_nests[0]), "bucket");
+  sketch_set_layout(ret->sketch, client_descrs,
+                    sizeof(client_descrs) / sizeof(client_descrs[0]),
+                    client_nests,
+                    sizeof(client_nests) / sizeof(client_nests[0]), "client");
 #endif // KLEE_VERIFICATION
 
   allocated_nf_state = ret;

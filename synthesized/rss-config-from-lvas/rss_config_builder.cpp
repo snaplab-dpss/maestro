@@ -79,6 +79,67 @@ void RSSConfigBuilder::load_rss_config_options() {
   delete[] opts;
 }
 
+void RSSConfigBuilder::filter_constraints() {
+  std::vector<R3S::R3S_pf_t> pfs = unique_packet_fields_dependencies;
+
+  // get the smallest set of pfs
+  for (auto constraint : constraints) {
+    std::vector<unsigned> devices = { constraint->get_devices().first,
+                                      constraint->get_devices().second };
+    for (auto device : devices) {
+      auto saved_constraint_pfs = constraint->get_packet_fields(device);
+
+      if (saved_constraint_pfs.size() == 0 ||
+          saved_constraint_pfs.size() >= pfs.size()) {
+        continue;
+      }
+
+      bool not_found = false;
+      for (auto pf : saved_constraint_pfs) {
+        auto found_it = std::find(pfs.begin(), pfs.end(), pf);
+        if (found_it == pfs.end()) {
+          not_found = true;
+          break;
+        }
+      }
+
+      if (not_found) {
+        return;
+      }
+
+      pfs.clear();
+      pfs = saved_constraint_pfs;
+    }
+  }
+
+  if (pfs.size() == unique_packet_fields_dependencies.size()) {
+    return;
+  }
+
+  // There are some constraints that use a smaller number of PFs.
+
+  constraints.erase(
+      std::remove_if(
+          constraints.begin(), constraints.end(),
+          [&](const std::shared_ptr<Constraint> &constraint) {
+            std::vector<unsigned> devices = {
+              constraint->get_devices().first, constraint->get_devices().second
+            };
+            for (auto device : devices) {
+              auto saved_constraint_pfs = constraint->get_packet_fields(device);
+              auto eq = std::equal(saved_constraint_pfs.begin(),
+                                   saved_constraint_pfs.end(), pfs.begin());
+              if (!eq) {
+                return true;
+              }
+            }
+            return false;
+          }),
+      constraints.end());
+
+  // TODO: we should update the R3S configuration
+}
+
 void RSSConfigBuilder::fill_libvig_access_constraints(
     const std::vector<LibvigAccess> &accesses) {
   R3S::Z3_context ctx = R3S::R3S_cfg_get_z3_context(cfg);
@@ -330,6 +391,7 @@ void RSSConfigBuilder::generate_solver_constraints() {
 
       Constraint *constraint =
           new LibvigAccessConstraint(libvig_access_constraint);
+
       constraints.emplace_back(constraint);
     }
   }
@@ -1036,7 +1098,6 @@ R3S::Z3_ast RSSConfigBuilder::constraint_to_solver_input(
 
 R3S::Z3_ast RSSConfigBuilder::make_solver_constraints(
     R3S::R3S_cfg_t cfg, R3S::R3S_packet_ast_t p1, R3S::R3S_packet_ast_t p2) {
-
   auto constraints =
       *((std::vector<std::shared_ptr<Constraint> > *)R3S::R3S_cfg_get_user_data(
           cfg));

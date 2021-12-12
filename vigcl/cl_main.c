@@ -39,11 +39,7 @@ void expire_entries(vigor_time_t time) {
   vigor_time_t client_last_time = time_u - client_expiration_time_ns;
   expire_items_single_map(state->flow_allocator, state->flows_keys,
                           state->flows, flow_last_time);
-  for (int i = 0; i < SKETCH_HASHES; i++) {
-    expire_items_single_map_offseted(
-        state->sketch.allocators[i], state->sketch.keys, state->sketch.clients,
-        client_last_time, i * state->sketch.capacity);
-  }
+  sketch_expire(state->sketch, client_last_time);
 }
 
 int allocate_flow(struct flow *flow, vigor_time_t time) {
@@ -79,14 +75,13 @@ int limit_clients(struct flow *flow, vigor_time_t now) {
   int flow_index = -1;
   int present = map_get(state->flows, flow, &flow_index);
 
-  struct sketch_key key = { .src_ip = flow->src_ip, .dst_ip = flow->dst_ip };
-  struct sketch_data data;
+  struct client client = { .src_ip = flow->src_ip, .dst_ip = flow->dst_ip };
 
-  sketch_compute_hashes(&state->sketch, &key, &data);
+  sketch_compute_hashes(state->sketch, &client);
 
   if (present) {
     dchain_rejuvenate_index(state->flow_allocator, flow_index, now);
-    sketch_refresh(&state->sketch, &data, now);
+    sketch_refresh(state->sketch, now);
     return true;
   }
 
@@ -98,20 +93,19 @@ int limit_clients(struct flow *flow, vigor_time_t now) {
     return true;
   }
 
-  int overflow = sketch_fetch(&state->sketch, &data);
+  int overflow = sketch_fetch(state->sketch);
 
   if (overflow) {
     return false;
   }
 
-  sketch_touch_buckets(&state->sketch, &data, now);
+  sketch_touch_buckets(state->sketch, now);
 
   return true;
 }
 
 int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
                vigor_time_t now, struct rte_mbuf *mbuf) {
-
   struct rte_ether_hdr *rte_ether_header = nf_then_get_rte_ether_header(buffer);
 
   uint8_t *ip_options;

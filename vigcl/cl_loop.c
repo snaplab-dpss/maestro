@@ -6,29 +6,23 @@
 #include "libvig/models/verified/double-chain-control.h"
 #include "libvig/models/verified/map-control.h"
 #include "libvig/models/verified/vector-control.h"
+#include "libvig/models/unverified/sketch-control.h"
 
 void loop_reset(struct Map **flows, struct Vector **flows_keys,
-                struct DoubleChain **flow_allocator, struct Sketch *sketch,
+                struct DoubleChain **flow_allocator, struct Sketch **sketch,
                 uint32_t max_flows, uint32_t dev_count, unsigned int lcore_id,
                 vigor_time_t *time) {
   map_reset(*flows);
   vector_reset(*flows_keys);
   dchain_reset(*flow_allocator, max_flows);
-
-  map_reset(sketch->clients);
-  vector_reset(sketch->keys);
-  vector_reset(sketch->buckets);
-
-  for (int i = 0; i < SKETCH_HASHES; i++) {
-    dchain_reset(sketch->allocators[i], sketch->capacity);
-  }
+  sketch_reset((*sketch));
 
   *time = restart_time();
 }
 
 void loop_invariant_consume(struct Map **flows, struct Vector **flows_keys,
                             struct DoubleChain **flow_allocator,
-                            struct Sketch *sketch, uint32_t max_flows,
+                            struct Sketch **sketch, uint32_t max_flows,
                             uint32_t dev_count, unsigned int lcore_id,
                             vigor_time_t time) {
   klee_trace_ret();
@@ -37,17 +31,7 @@ void loop_invariant_consume(struct Map **flows, struct Vector **flows_keys,
   klee_trace_param_ptr(flows_keys, sizeof(struct Vector *), "flows_keys");
   klee_trace_param_ptr(flow_allocator, sizeof(struct DoubleChain *),
                        "flow_allocator");
-
-  klee_trace_param_ptr(&sketch->clients, sizeof(struct Map *),
-                       "sketch_clients");
-  klee_trace_param_ptr(&sketch->keys, sizeof(struct Vector *), "sketch_keys");
-  klee_trace_param_ptr(&sketch->buckets, sizeof(struct Vector *),
-                       "sketch_buckets");
-
-  for (int i = 0; i < SKETCH_HASHES; i++) {
-    klee_trace_param_ptr(&sketch->allocators[i], sizeof(struct DoubleChain *),
-                         "sketch_allocators");
-  }
+  klee_trace_param_ptr(sketch, sizeof(struct Sketch *), "sketch");
 
   klee_trace_param_u32(max_flows, "max_flows");
   klee_trace_param_u32(dev_count, "dev_count");
@@ -57,7 +41,7 @@ void loop_invariant_consume(struct Map **flows, struct Vector **flows_keys,
 
 void loop_invariant_produce(struct Map **flows, struct Vector **flows_keys,
                             struct DoubleChain **flow_allocator,
-                            struct Sketch *sketch, uint32_t max_flows,
+                            struct Sketch **sketch, uint32_t max_flows,
                             uint32_t dev_count, unsigned int *lcore_id,
                             vigor_time_t *time) {
   klee_trace_ret();
@@ -66,17 +50,7 @@ void loop_invariant_produce(struct Map **flows, struct Vector **flows_keys,
   klee_trace_param_ptr(flows_keys, sizeof(struct Vector *), "flows_keys");
   klee_trace_param_ptr(flow_allocator, sizeof(struct DoubleChain *),
                        "flow_allocator");
-
-  klee_trace_param_ptr(&sketch->clients, sizeof(struct Map *),
-                       "sketch_clients");
-  klee_trace_param_ptr(&sketch->keys, sizeof(struct Vector *), "sketch_keys");
-  klee_trace_param_ptr(&sketch->buckets, sizeof(struct Vector *),
-                       "sketch_buckets");
-
-  for (int i = 0; i < SKETCH_HASHES; i++) {
-    klee_trace_param_ptr(&sketch->allocators[i], sizeof(struct DoubleChain *),
-                         "sketch_allocators");
-  }
+  klee_trace_param_ptr(sketch, sizeof(struct Sketch *), "sketch");
 
   klee_trace_param_u32(max_flows, "max_flows");
   klee_trace_param_u32(dev_count, "dev_count");
@@ -86,7 +60,7 @@ void loop_invariant_produce(struct Map **flows, struct Vector **flows_keys,
 
 void loop_iteration_border(struct Map **flows, struct Vector **flows_keys,
                            struct DoubleChain **flow_allocator,
-                           struct Sketch *sketch, uint32_t max_flows,
+                           struct Sketch **sketch, uint32_t max_flows,
                            uint32_t dev_count, unsigned int lcore_id,
                            vigor_time_t time) {
   loop_invariant_consume(flows, flows_keys, flow_allocator, sketch, max_flows,

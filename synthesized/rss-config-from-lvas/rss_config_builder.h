@@ -17,7 +17,7 @@ class RSSConfigBuilder {
 
 private:
   R3S::R3S_cfg_t cfg;
-  std::vector< std::shared_ptr<Constraint> > constraints;
+  std::vector<std::shared_ptr<Constraint> > constraints;
 
   std::vector<LibvigAccessConstraint> libvig_access_constraints;
   std::vector<CallPathsConstraint> call_paths_constraints;
@@ -42,26 +42,40 @@ private:
       const std::pair<LibvigAccess, LibvigAccess> &pair);
 
   void fill_unique_devices(const std::vector<LibvigAccess> &accesses);
-  std::vector<LibvigAccess> filter_reads_without_writes_on_objects(const std::vector<LibvigAccess> &accesses);
+  std::vector<LibvigAccess> filter_reads_without_writes_on_objects(
+      const std::vector<LibvigAccess> &accesses);
 
   void optimize_constraints();
   void remove_constraints_from_object(unsigned int obj);
   void remove_constraints_with_access(unsigned int access_id);
-  void remove_constraints_with_pfs(unsigned int device, std::vector<R3S::R3S_pf_t> pfs, std::string call_path);
-  void remove_equivalent_index_dchain_constraints(unsigned int device, const std::vector<R3S::R3S_pf_t> packet_fields);
-  void analyse_dchain_interpretations(const std::vector<LibvigAccess>& accesses);
-  bool is_write_modifying(const std::vector<LibvigAccess>&cp, LibvigAccess write);
-  bool are_call_paths_equivalent(const std::vector<LibvigAccess>& cp1, const std::vector<LibvigAccess>& cp2);
-  void verify_dchain_correctness(const std::vector<LibvigAccess>& accesses, const LibvigAccess& dchain_verify);
+  void remove_constraints_with_pfs(unsigned int device,
+                                   std::vector<R3S::R3S_pf_t> pfs,
+                                   std::string call_path);
+  void remove_equivalent_index_dchain_constraints(
+      unsigned int device, const std::vector<R3S::R3S_pf_t> packet_fields);
+  void
+  analyse_dchain_interpretations(const std::vector<LibvigAccess> &accesses);
+  bool is_write_modifying(const std::vector<LibvigAccess> &cp,
+                          LibvigAccess write);
+  bool are_call_paths_equivalent(const std::vector<LibvigAccess> &cp1,
+                                 const std::vector<LibvigAccess> &cp2);
+  void verify_dchain_correctness(const std::vector<LibvigAccess> &accesses,
+                                 const LibvigAccess &dchain_verify);
 
-  void fill_libvig_access_constraints(const std::vector<LibvigAccess> &accesses);
+  void filter_constraints();
+  void
+  fill_libvig_access_constraints(const std::vector<LibvigAccess> &accesses);
   void generate_solver_constraints();
 
-  static std::vector< std::shared_ptr<Constraint> > get_constraints_between_devices(std::vector< std::shared_ptr<Constraint> > constraints,
-                                                                                    unsigned int p1_device, unsigned int p2_device);
+  static std::vector<std::shared_ptr<Constraint> >
+  get_constraints_between_devices(
+      std::vector<std::shared_ptr<Constraint> > constraints,
+      unsigned int p1_device, unsigned int p2_device);
 
-  static R3S::Z3_ast constraint_to_solver_input(R3S::R3S_cfg_t cfg, R3S::R3S_packet_ast_t p1, R3S::R3S_packet_ast_t p2,
-                                                std::shared_ptr<Constraint> constraint);
+  static R3S::Z3_ast
+  constraint_to_solver_input(R3S::R3S_cfg_t cfg, R3S::R3S_packet_ast_t p1,
+                             R3S::R3S_packet_ast_t p2,
+                             std::shared_ptr<Constraint> constraint);
 
   static R3S::Z3_ast make_solver_constraints(R3S::R3S_cfg_t cfg,
                                              R3S::R3S_packet_ast_t p1,
@@ -70,8 +84,8 @@ private:
 public:
   RSSConfigBuilder(
       const std::vector<LibvigAccess> &accesses,
-      const std::vector<CallPathsConstraint>& _call_paths_constraints)
-   : call_paths_constraints(_call_paths_constraints) {
+      const std::vector<CallPathsConstraint> &_call_paths_constraints)
+      : call_paths_constraints(_call_paths_constraints) {
 
     R3S::R3S_cfg_init(&cfg);
     R3S::R3S_cfg_set_skew_analysis(cfg, true);
@@ -101,6 +115,7 @@ public:
 
     load_rss_config_options();
     generate_solver_constraints();
+    filter_constraints();
     optimize_constraints();
 
     Logger::debug() << "\nR3S configuration:\n" << R3S::R3S_cfg_to_string(cfg)
@@ -108,13 +123,17 @@ public:
   }
 
   const R3S::R3S_cfg_t &get_cfg() const { return cfg; }
-  const std::vector<LibvigAccessConstraint> &get_libvig_access_constraints() const { return libvig_access_constraints; }
+  const std::vector<LibvigAccessConstraint> &
+  get_libvig_access_constraints() const {
+    return libvig_access_constraints;
+  }
   RSSConfig &get_generated_rss_cfg() { return rss_config; }
 
   static R3S::Z3_ast ast_replace(R3S::Z3_context ctx, R3S::Z3_ast root,
                                  R3S::Z3_ast target, R3S::Z3_ast dst);
 
-  static R3S::Z3_ast ast_equal_association(R3S::Z3_context ctx, R3S::Z3_ast root,
+  static R3S::Z3_ast ast_equal_association(R3S::Z3_context ctx,
+                                           R3S::Z3_ast root,
                                            R3S::Z3_ast target);
 
   void build_rss_config();
@@ -124,4 +143,4 @@ public:
 
   ~RSSConfigBuilder() { R3S::R3S_cfg_delete(cfg); }
 };
-}
+} // namespace ParallelSynthesizer
