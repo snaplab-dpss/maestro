@@ -14,11 +14,6 @@
 
 #include <rte_malloc.h>
 
-const uint32_t SKETCH_SALTS[SKETCH_SALTS_BANK_SIZE] = {
-  0xec99b144, 0x18a3b351, 0x4a030346, 0x3122358b,
-  0x444db70b, 0x3a7762cc, 0xed3076f5, 0x5ef8e5f7
-};
-
 struct internal_data {
   unsigned hashes[SKETCH_HASHES];
   int present[SKETCH_HASHES];

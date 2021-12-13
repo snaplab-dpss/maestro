@@ -11,13 +11,10 @@
 
 #include "libvig/verified/vigor-time.h"
 
-const uint32_t SKETCH_SALTS[SKETCH_SALTS_BANK_SIZE] = {
-  0x340383a7, 0x3fa0e53,  0x5ee248d8, 0x1945e5a8, 0x339d4d37, 0x6d7d2c7a,
-  0x62ea1f85, 0x225f3e96, 0x6194be65, 0xadb69ebf, 0x9274586f, 0xd6d3b5a5,
-  0x8c8374e0, 0x20945598, 0x22f0e4b2, 0xd85c4cb4, 0xc7be4454, 0xb9532c0c,
-  0x72010bb0, 0x988923d1, 0xa84d727b, 0xa2e58e1e, 0x639a3592, 0x2f5f683a,
-  0xd6644952, 0x6f5a81f1, 0x2f7315ec, 0x4a1bc6b2, 0xfc3e479e, 0xe6f5590b,
-  0x5495073d, 0x45ca40b4,
+struct internal_data {
+  unsigned hashes[SKETCH_HASHES];
+  int present[SKETCH_HASHES];
+  int buckets_indexes[SKETCH_HASHES];
 };
 
 struct Sketch {
@@ -30,10 +27,7 @@ struct Sketch {
   uint16_t threshold;
 
   map_key_hash *kh;
-
-  unsigned hashes[SKETCH_HASHES];
-  int present[SKETCH_HASHES];
-  int buckets_indexes[SKETCH_HASHES];
+  struct internal_data internal;
 };
 
 struct hash {
@@ -131,23 +125,24 @@ int sketch_allocate(map_key_hash *kh, uint32_t capacity, uint16_t threshold,
 
 void sketch_compute_hashes(struct Sketch *sketch, void *key) {
   for (int i = 0; i < SKETCH_HASHES; i++) {
-    sketch->buckets_indexes[i] = -1;
-    sketch->present[i] = 0;
-    sketch->hashes[i] = 0;
+    sketch->internal.buckets_indexes[i] = -1;
+    sketch->internal.present[i] = 0;
+    sketch->internal.hashes[i] = 0;
 
-    sketch->hashes[i] =
-        __builtin_ia32_crc32si(sketch->hashes[i], SKETCH_SALTS[i]);
-    sketch->hashes[i] =
-        __builtin_ia32_crc32si(sketch->hashes[i], sketch->kh(key));
-    sketch->hashes[i] %= sketch->capacity;
+    sketch->internal.hashes[i] =
+        __builtin_ia32_crc32si(sketch->internal.hashes[i], SKETCH_SALTS[i]);
+    sketch->internal.hashes[i] =
+        __builtin_ia32_crc32si(sketch->internal.hashes[i], sketch->kh(key));
+    sketch->internal.hashes[i] %= sketch->capacity;
   }
 }
 
 void sketch_refresh(struct Sketch *sketch, vigor_time_t now) {
   for (int i = 0; i < SKETCH_HASHES; i++) {
-    map_get(sketch->clients, &sketch->hashes[i], &sketch->buckets_indexes[i]);
-    dchain_rejuvenate_index(sketch->allocators[i], sketch->buckets_indexes[i],
-                            now);
+    map_get(sketch->clients, &sketch->internal.hashes[i],
+            &sketch->internal.buckets_indexes[i]);
+    dchain_rejuvenate_index(sketch->allocators[i],
+                            sketch->internal.buckets_indexes[i], now);
   }
 }
 
@@ -157,14 +152,15 @@ int sketch_fetch(struct Sketch *sketch) {
   uint32_t bucket_min = 0;
 
   for (int i = 0; i < SKETCH_HASHES; i++) {
-    sketch->present[i] = map_get(sketch->clients, &sketch->hashes[i],
-                                 &sketch->buckets_indexes[i]);
+    sketch->internal.present[i] =
+        map_get(sketch->clients, &sketch->internal.hashes[i],
+                &sketch->internal.buckets_indexes[i]);
 
-    if (!sketch->present[i]) {
+    if (!sketch->internal.present[i]) {
       continue;
     }
 
-    int offseted = sketch->buckets_indexes[i] + sketch->capacity * i;
+    int offseted = sketch->internal.buckets_indexes[i] + sketch->capacity * i;
     vector_borrow(sketch->buckets, offseted, (void **)&buckets_values[i]);
 
     if (!bucket_min_set || bucket_min > *buckets_values[i]) {
@@ -181,7 +177,8 @@ int sketch_fetch(struct Sketch *sketch) {
 int sketch_touch_buckets(struct Sketch *sketch, vigor_time_t now) {
   for (int i = 0; i < SKETCH_HASHES; i++) {
     int bucket_index = -1;
-    int present = map_get(sketch->clients, &sketch->hashes[i], &bucket_index);
+    int present =
+        map_get(sketch->clients, &sketch->internal.hashes[i], &bucket_index);
 
     if (!present) {
       int allocated_client =
@@ -200,7 +197,7 @@ int sketch_touch_buckets(struct Sketch *sketch, vigor_time_t now) {
       vector_borrow(sketch->keys, offseted, (void **)&saved_hash);
       vector_borrow(sketch->buckets, offseted, (void **)&saved_bucket);
 
-      (*saved_hash) = sketch->hashes[i];
+      (*saved_hash) = sketch->internal.hashes[i];
       (*saved_bucket) = 0;
       map_put(sketch->clients, saved_hash, bucket_index);
 

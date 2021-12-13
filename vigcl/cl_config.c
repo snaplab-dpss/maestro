@@ -150,7 +150,7 @@ void nf_config_usage(void) {
 }
 
 void nf_config_print(void) {
-  NF_INFO("\n--- Client Limiter Config ---\n");
+  NF_INFO("\n--- Connection Limiter Config ---\n");
 
   NF_INFO("LAN Device: %" PRIu16, config.lan_device);
   NF_INFO("WAN Device: %" PRIu16, config.wan_device);
