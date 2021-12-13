@@ -19,6 +19,12 @@ const uint32_t SKETCH_SALTS[SKETCH_SALTS_BANK_SIZE] = {
   0x444db70b, 0x3a7762cc, 0xed3076f5, 0x5ef8e5f7
 };
 
+struct internal_data {
+  unsigned hashes[SKETCH_HASHES];
+  int present[SKETCH_HASHES];
+  int buckets_indexes[SKETCH_HASHES];
+} __attribute__((aligned(64)));
+
 struct SketchLocks {
   struct MapLocks *clients;
   struct VectorLocks *keys;
@@ -30,9 +36,7 @@ struct SketchLocks {
 
   map_key_hash *kh;
 
-  unsigned hashes[SKETCH_HASHES];
-  int present[SKETCH_HASHES];
-  int buckets_indexes[SKETCH_HASHES];
+  struct internal_data internal[RTE_MAX_LCORE];
 };
 
 struct hash {
@@ -41,12 +45,6 @@ struct hash {
 
 struct bucket {
   uint32_t value;
-};
-
-struct sketch_data {
-  unsigned hashes[SKETCH_HASHES];
-  int present[SKETCH_HASHES];
-  int buckets_indexes[SKETCH_HASHES];
 };
 
 unsigned find_next_power_of_2_bigger_than(uint32_t d) {
@@ -130,52 +128,51 @@ int sketch_locks_allocate(map_key_hash *kh, uint32_t capacity,
 }
 
 void sketch_locks_compute_hashes(struct SketchLocks *sketch, void *key) {
-  bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
-  bool *write_state_ptr = &RTE_PER_LCORE(write_state);
-
-  // TODO: this could actually be improved, every core can calculate hashes
-  // independently
-  if (!*write_state_ptr) {
-    *write_attempt_ptr = true;
-    return;
-  }
+  unsigned int lcore_id = rte_lcore_id();
 
   for (int i = 0; i < SKETCH_HASHES; i++) {
-    sketch->buckets_indexes[i] = -1;
-    sketch->present[i] = 0;
-    sketch->hashes[i] = 0;
+    sketch->internal[lcore_id].buckets_indexes[i] = -1;
+    sketch->internal[lcore_id].present[i] = 0;
+    sketch->internal[lcore_id].hashes[i] = 0;
 
-    sketch->hashes[i] =
-        __builtin_ia32_crc32si(sketch->hashes[i], SKETCH_SALTS[i]);
-    sketch->hashes[i] =
-        __builtin_ia32_crc32si(sketch->hashes[i], sketch->kh(key));
-    sketch->hashes[i] %= sketch->capacity;
+    sketch->internal[lcore_id].hashes[i] = __builtin_ia32_crc32si(
+        sketch->internal[lcore_id].hashes[i], SKETCH_SALTS[i]);
+    sketch->internal[lcore_id].hashes[i] = __builtin_ia32_crc32si(
+        sketch->internal[lcore_id].hashes[i], sketch->kh(key));
+    sketch->internal[lcore_id].hashes[i] %= sketch->capacity;
   }
 }
 
 void sketch_locks_refresh(struct SketchLocks *sketch, vigor_time_t now) {
+  unsigned int lcore_id = rte_lcore_id();
+
   for (int i = 0; i < SKETCH_HASHES; i++) {
-    map_locks_get(sketch->clients, &sketch->hashes[i],
-                  &sketch->buckets_indexes[i]);
+    map_locks_get(sketch->clients, &sketch->internal[lcore_id].hashes[i],
+                  &sketch->internal[lcore_id].buckets_indexes[i]);
     dchain_locks_rejuvenate_index(sketch->allocators[i],
-                                  sketch->buckets_indexes[i], now);
+                                  sketch->internal[lcore_id].buckets_indexes[i],
+                                  now);
   }
 }
 
 int sketch_locks_fetch(struct SketchLocks *sketch) {
+  unsigned int lcore_id = rte_lcore_id();
+
   int bucket_min_set = false;
   uint32_t *buckets_values[SKETCH_HASHES];
   uint32_t bucket_min = 0;
 
   for (int i = 0; i < SKETCH_HASHES; i++) {
-    sketch->present[i] = map_locks_get(sketch->clients, &sketch->hashes[i],
-                                       &sketch->buckets_indexes[i]);
+    sketch->internal[lcore_id].present[i] =
+        map_locks_get(sketch->clients, &sketch->internal[lcore_id].hashes[i],
+                      &sketch->internal[lcore_id].buckets_indexes[i]);
 
-    if (!sketch->present[i]) {
+    if (!sketch->internal[lcore_id].present[i]) {
       continue;
     }
 
-    int offseted = sketch->buckets_indexes[i] + sketch->capacity * i;
+    int offseted =
+        sketch->internal[lcore_id].buckets_indexes[i] + sketch->capacity * i;
     vector_locks_borrow(sketch->buckets, offseted, (void **)&buckets_values[i]);
 
     if (!bucket_min_set || bucket_min > *buckets_values[i]) {
@@ -190,6 +187,8 @@ int sketch_locks_fetch(struct SketchLocks *sketch) {
 }
 
 int sketch_locks_touch_buckets(struct SketchLocks *sketch, vigor_time_t now) {
+  unsigned int lcore_id = rte_lcore_id();
+
   bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
   bool *write_state_ptr = &RTE_PER_LCORE(write_state);
 
@@ -200,8 +199,8 @@ int sketch_locks_touch_buckets(struct SketchLocks *sketch, vigor_time_t now) {
 
   for (int i = 0; i < SKETCH_HASHES; i++) {
     int bucket_index = -1;
-    int present =
-        map_locks_get(sketch->clients, &sketch->hashes[i], &bucket_index);
+    int present = map_locks_get(
+        sketch->clients, &sketch->internal[lcore_id].hashes[i], &bucket_index);
 
     if (!present) {
       int allocated_client = dchain_locks_allocate_new_index(
@@ -220,7 +219,7 @@ int sketch_locks_touch_buckets(struct SketchLocks *sketch, vigor_time_t now) {
       vector_locks_borrow(sketch->keys, offseted, (void **)&saved_hash);
       vector_locks_borrow(sketch->buckets, offseted, (void **)&saved_bucket);
 
-      (*saved_hash) = sketch->hashes[i];
+      (*saved_hash) = sketch->internal[lcore_id].hashes[i];
       (*saved_bucket) = 0;
       map_locks_put(sketch->clients, saved_hash, bucket_index);
 

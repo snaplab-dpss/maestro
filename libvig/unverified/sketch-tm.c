@@ -19,6 +19,12 @@ const uint32_t SKETCH_SALTS[SKETCH_SALTS_BANK_SIZE] = {
   0x444db70b, 0x3a7762cc, 0xed3076f5, 0x5ef8e5f7
 };
 
+struct internal_data {
+  unsigned hashes[SKETCH_HASHES];
+  int present[SKETCH_HASHES];
+  int buckets_indexes[SKETCH_HASHES];
+} __attribute__((aligned(64)));
+
 struct SketchTM {
   struct Map *clients;
   struct Vector *keys;
@@ -29,10 +35,7 @@ struct SketchTM {
   uint16_t threshold;
 
   map_key_hash *kh;
-
-  unsigned hashes[SKETCH_HASHES];
-  int present[SKETCH_HASHES];
-  int buckets_indexes[SKETCH_HASHES];
+  struct internal_data internal[RTE_MAX_LCORE];
 };
 
 struct hash {
@@ -41,12 +44,6 @@ struct hash {
 
 struct bucket {
   uint32_t value;
-};
-
-struct sketch_data {
-  unsigned hashes[SKETCH_HASHES];
-  int present[SKETCH_HASHES];
-  int buckets_indexes[SKETCH_HASHES];
 };
 
 unsigned find_next_power_of_2_bigger_than(uint32_t d) {
@@ -130,41 +127,51 @@ int sketch_tm_allocate(map_key_hash *kh, uint32_t capacity, uint16_t threshold,
 }
 
 void sketch_tm_compute_hashes(struct SketchTM *sketch, void *key) {
-  for (int i = 0; i < SKETCH_HASHES; i++) {
-    sketch->buckets_indexes[i] = -1;
-    sketch->present[i] = 0;
-    sketch->hashes[i] = 0;
+  unsigned int lcore_id = rte_lcore_id();
 
-    sketch->hashes[i] =
-        __builtin_ia32_crc32si(sketch->hashes[i], SKETCH_SALTS[i]);
-    sketch->hashes[i] =
-        __builtin_ia32_crc32si(sketch->hashes[i], sketch->kh(key));
-    sketch->hashes[i] %= sketch->capacity;
+  for (int i = 0; i < SKETCH_HASHES; i++) {
+    sketch->internal[lcore_id].buckets_indexes[i] = -1;
+    sketch->internal[lcore_id].present[i] = 0;
+    sketch->internal[lcore_id].hashes[i] = 0;
+
+    sketch->internal[lcore_id].hashes[i] = __builtin_ia32_crc32si(
+        sketch->internal[lcore_id].hashes[i], SKETCH_SALTS[i]);
+    sketch->internal[lcore_id].hashes[i] = __builtin_ia32_crc32si(
+        sketch->internal[lcore_id].hashes[i], sketch->kh(key));
+    sketch->internal[lcore_id].hashes[i] %= sketch->capacity;
   }
 }
 
 void sketch_tm_refresh(struct SketchTM *sketch, vigor_time_t now) {
+  unsigned int lcore_id = rte_lcore_id();
+
   for (int i = 0; i < SKETCH_HASHES; i++) {
-    map_get(sketch->clients, &sketch->hashes[i], &sketch->buckets_indexes[i]);
+    map_get(sketch->clients, &sketch->internal[lcore_id].hashes[i],
+            &sketch->internal[lcore_id].buckets_indexes[i]);
     dchain_tm_rejuvenate_index(sketch->allocators[i],
-                               sketch->buckets_indexes[i], now);
+                               sketch->internal[lcore_id].buckets_indexes[i],
+                               now);
   }
 }
 
 int sketch_tm_fetch(struct SketchTM *sketch) {
+  unsigned int lcore_id = rte_lcore_id();
+
   int bucket_min_set = false;
   uint32_t *buckets_values[SKETCH_HASHES];
   uint32_t bucket_min = 0;
 
   for (int i = 0; i < SKETCH_HASHES; i++) {
-    sketch->present[i] = map_get(sketch->clients, &sketch->hashes[i],
-                                 &sketch->buckets_indexes[i]);
+    sketch->internal[lcore_id].present[i] =
+        map_get(sketch->clients, &sketch->internal[lcore_id].hashes[i],
+                &sketch->internal[lcore_id].buckets_indexes[i]);
 
-    if (!sketch->present[i]) {
+    if (!sketch->internal[lcore_id].present[i]) {
       continue;
     }
 
-    int offseted = sketch->buckets_indexes[i] + sketch->capacity * i;
+    int offseted =
+        sketch->internal[lcore_id].buckets_indexes[i] + sketch->capacity * i;
     vector_borrow(sketch->buckets, offseted, (void **)&buckets_values[i]);
 
     if (!bucket_min_set || bucket_min > *buckets_values[i]) {
@@ -179,9 +186,12 @@ int sketch_tm_fetch(struct SketchTM *sketch) {
 }
 
 int sketch_tm_touch_buckets(struct SketchTM *sketch, vigor_time_t now) {
+  unsigned int lcore_id = rte_lcore_id();
+
   for (int i = 0; i < SKETCH_HASHES; i++) {
     int bucket_index = -1;
-    int present = map_get(sketch->clients, &sketch->hashes[i], &bucket_index);
+    int present = map_get(sketch->clients,
+                          &sketch->internal[lcore_id].hashes[i], &bucket_index);
 
     if (!present) {
       int allocated_client = dchain_tm_allocate_new_index(sketch->allocators[i],
@@ -200,7 +210,7 @@ int sketch_tm_touch_buckets(struct SketchTM *sketch, vigor_time_t now) {
       vector_borrow(sketch->keys, offseted, (void **)&saved_hash);
       vector_borrow(sketch->buckets, offseted, (void **)&saved_bucket);
 
-      (*saved_hash) = sketch->hashes[i];
+      (*saved_hash) = sketch->internal[lcore_id].hashes[i];
       (*saved_bucket) = 0;
       map_put(sketch->clients, saved_hash, bucket_index);
 

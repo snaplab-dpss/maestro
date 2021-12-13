@@ -24,7 +24,7 @@ from multiprocessing import Pool
 
 from numpy import percentile
 
-MAX_CORES=18
+MAX_CORES=16
 LUT_SIZE=512
 
 PCAP_PARTITIONS_MAX_SIZE = 100 # MB
@@ -360,7 +360,7 @@ def run(key, pcap, _verbose=False):
 	lut_counters = [ sum(lut_entry) for lut_entry in zip(*lut_counters_partitioned) ]
 
 	luts = []
-	for cores in range(2, 11):
+	for cores in range(2, MAX_CORES + 1):
 		if CONFIG['verbose']: print(cores, "cores")
 		lut = find_good_lut(cores, lut_counters)
 		luts.append(lut)
