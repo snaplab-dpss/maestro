@@ -198,11 +198,6 @@ int sketch_locks_touch_buckets(struct SketchLocks *sketch, vigor_time_t now) {
         sketch->clients, &sketch->internal[lcore_id].hashes[i], &bucket_index);
 
     if (!present) {
-      if (!*write_state_ptr) {
-        *write_attempt_ptr = true;
-        return;
-      }
-
       int allocated_client = dchain_locks_allocate_new_index(
           sketch->allocators[i], &bucket_index, now);
 
