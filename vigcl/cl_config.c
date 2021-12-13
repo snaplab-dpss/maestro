@@ -111,9 +111,9 @@ void nf_config_init(int argc, char **argv) {
         break;
 
       case 'T':
-        config.flow_expiration_time =
+        config.client_expiration_time =
             nf_util_parse_int(optarg, "expire-client", 10, '\0');
-        if (config.flow_expiration_time <= 0) {
+        if (config.client_expiration_time <= 0) {
           PARSE_ERROR("Client expiration time must be strictly positive.\n");
         }
         break;
