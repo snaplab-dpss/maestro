@@ -2,7 +2,7 @@
 
 // Careful: SKETCH_HASHES needs to be <= SKETCH_SALTS_BANK_SIZE
 #define SKETCH_HASHES 8
-#define SKETCH_SALTS_BANK_SIZE 8
+#define SKETCH_SALTS_BANK_SIZE 32
 
 #include <stdint.h>
 
