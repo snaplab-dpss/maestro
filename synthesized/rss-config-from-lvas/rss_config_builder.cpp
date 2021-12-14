@@ -117,7 +117,6 @@ void RSSConfigBuilder::filter_constraints() {
   }
 
   // There are some constraints that use a smaller number of PFs.
-
   constraints.erase(
       std::remove_if(
           constraints.begin(), constraints.end(),
@@ -127,6 +126,10 @@ void RSSConfigBuilder::filter_constraints() {
             };
             for (auto device : devices) {
               auto saved_constraint_pfs = constraint->get_packet_fields(device);
+              if (saved_constraint_pfs.size() != pfs.size()) {
+                return true;
+              }
+
               auto eq = std::equal(saved_constraint_pfs.begin(),
                                    saved_constraint_pfs.end(), pfs.begin());
               if (!eq) {
