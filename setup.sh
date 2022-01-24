@@ -130,7 +130,7 @@ popd
 sudo DEBIAN_FRONTEND=noninteractive \
      apt-get install -y opam m4 libgmp-dev
 
-opam init -y
+opam init --disable-sandboxing -y
 eval "$(opam env)"
 # Opam 1.x doesn't have "create", later versions require it but only the first time
 if opam --version | grep '^1.' >/dev/null ; then
