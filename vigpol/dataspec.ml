@@ -14,7 +14,7 @@ let containers = ["dyn_map", Map ("ip_addr", "capacity", "");
 let constraints = ["dyn_val_condition", ( "DynamicValue",
                                           [Bop (Le, {t=Unknown;v=Int 0}, {t=Unknown;v=Id "bucket_time"});
                                            Bop (Le, {t=Unknown;v=Id "bucket_time"}, {t=Unknown;v=Id "t"});
-                                           Bop (Le, {t=Unknown;v=Id "bucket_size"}, {t=Unknown;v=Int 1000000000000000});
+                                           Bop (Le, {t=Unknown;v=Id "bucket_size"}, {t=Unknown;v=Int 10000000000});
                                           ])]
 
 let gen_custom_includes = ref []
