@@ -20,6 +20,7 @@ function test_cl {
         --vdev "net_tap0,iface=test_wan" \
         --vdev "net_tap1,iface=test_lan" \
         --lcores 0 \
+        --no-huge \
         --no-shconf -- \
         --lan 1 \
         --wan 0 \

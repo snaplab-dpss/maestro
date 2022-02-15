@@ -20,6 +20,7 @@ function test_policer {
   sudo ./build/app/nf \
         --vdev "net_tap0,iface=test_wan" \
         --vdev "net_tap1,iface=test_lan" \
+        --no-huge \
         --no-shconf -- \
         --lan 1 \
         --wan 0 \

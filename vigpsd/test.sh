@@ -22,6 +22,7 @@ function test_psd {
         --vdev "net_tap0,iface=test_wan" \
         --vdev "net_tap1,iface=test_lan" \
         --lcores 0 \
+        --no-huge \
         --no-shconf -- \
         --capacity $CAPACITY \
         --max-ports $MAX_PORTS \

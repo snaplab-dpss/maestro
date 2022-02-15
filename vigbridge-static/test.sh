@@ -20,9 +20,10 @@ function test_bridge {
   sudo ./build/app/bridge \
         --vdev "net_tap0,iface=test_wan" \
         --vdev "net_tap1,iface=test_lan" \
+        --no-huge \
         --no-shconf -- \
         --expire 10 --capacity 100 --config no-file.cfg \
-        #>/dev/null 2>/dev/null &
+        >/dev/null 2>/dev/null &
   NF_PID=$!
 
   while [ ! -f /sys/class/net/test_lan/tun_flags -o \
