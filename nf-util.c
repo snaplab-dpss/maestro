@@ -13,7 +13,7 @@
 #include "nf-log.h"
 
 #ifdef KLEE_VERIFICATION
-#  include <klee/klee.h>
+#include <klee/klee.h>
 #endif
 
 void *chunks_borrowed[MAX_N_CHUNKS];
@@ -87,7 +87,7 @@ void nf_set_rte_ipv4_udptcp_checksum(struct rte_ipv4_hdr *ip_header,
   assert(packet_is_last_borrowed_chunk(packet, l4_header));
   ip_header->hdr_checksum = klee_int("checksum");
 }
-#else  // KLEE_VERIFICATION
+#else   // KLEE_VERIFICATION
 void nf_set_rte_ipv4_udptcp_checksum(struct rte_ipv4_hdr *ip_header,
                                      struct tcpudp_hdr *l4_header,
                                      void *packet) {
@@ -97,19 +97,19 @@ void nf_set_rte_ipv4_udptcp_checksum(struct rte_ipv4_hdr *ip_header,
   // rte_be_to_cpu_16(ip_header->total_length) - sizeof(struct tcpudp_hdr));
   // assert((char*)payload == ((char*)l4_header + sizeof(struct tcpudp_hdr)));
 
-  ip_header->hdr_checksum = 0; // Assumed by cksum calculation
+  ip_header->hdr_checksum = 0;  // Assumed by cksum calculation
   if (ip_header->next_proto_id == IPPROTO_TCP) {
     struct rte_tcp_hdr *tcp_header = (struct rte_tcp_hdr *)l4_header;
-    tcp_header->cksum = 0; // Assumed by cksum calculation
+    tcp_header->cksum = 0;  // Assumed by cksum calculation
     tcp_header->cksum = rte_ipv4_udptcp_cksum(ip_header, tcp_header);
   } else if (ip_header->next_proto_id == IPPROTO_UDP) {
     struct rte_udp_hdr *udp_header = (struct rte_udp_hdr *)l4_header;
-    udp_header->dgram_cksum = 0; // Assumed by cksum calculation
+    udp_header->dgram_cksum = 0;  // Assumed by cksum calculation
     udp_header->dgram_cksum = rte_ipv4_udptcp_cksum(ip_header, udp_header);
   }
   ip_header->hdr_checksum = rte_ipv4_cksum(ip_header);
 }
-#endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION
 
 uintmax_t nf_util_parse_int(const char *str, const char *name, int base,
                             char next) {
@@ -126,7 +126,7 @@ uintmax_t nf_util_parse_int(const char *str, const char *name, int base,
 
 char *nf_mac_to_str(struct rte_ether_addr *addr) {
   // format is xx:xx:xx:xx:xx:xx\0
-  uint16_t buffer_size = 6 * 2 + 5 + 1; // FIXME: why dynamic alloc here?
+  uint16_t buffer_size = 6 * 2 + 5 + 1;  // FIXME: why dynamic alloc here?
   char *buffer = (char *)calloc(buffer_size, sizeof(char));
   if (buffer == NULL) {
     rte_exit(EXIT_FAILURE, "Out of memory in nf_mac_to_str!");
@@ -142,8 +142,8 @@ char *nf_mac_to_str(struct rte_ether_addr *addr) {
 char *nf_rte_ipv4_to_str(uint32_t addr) {
   // format is xxx.xxx.xxx.xxx\0
   uint16_t buffer_size = 4 * 3 + 3 + 1;
-  char *buffer = (char *)calloc(buffer_size,
-                                sizeof(char)); // FIXME: why dynamic alloc here?
+  char *buffer = (char *)calloc(
+      buffer_size, sizeof(char));  // FIXME: why dynamic alloc here?
   if (buffer == NULL) {
     rte_exit(EXIT_FAILURE, "Out of memory in nf_rte_ipv4_to_str!");
   }

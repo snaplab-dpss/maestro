@@ -8,8 +8,8 @@
 #define prealloc_size (256)
 
 #define ALLOW(map) klee_allow_access((map), sizeof(struct DoubleMap))
-#define DENY(map)                                                              \
-  klee_forbid_access((map), sizeof(struct DoubleMap),                          \
+#define DENY(map)                                     \
+  klee_forbid_access((map), sizeof(struct DoubleMap), \
                      "allocated_map_do_not_dereference")
 
 struct DoubleMap {
@@ -87,12 +87,11 @@ void dmap_set_layout(struct DoubleMap *map,
   DENY(map);
 }
 
-__attribute__((noinline)) int
-dmap_allocate(map_keys_equality eq_a, map_key_hash hsh_a,
-              map_keys_equality eq_b, map_key_hash hsh_b, int value_size,
-              uq_value_copy v_cpy, uq_value_destr v_destr,
-              dmap_extract_keys dexk, dmap_pack_keys dpk, unsigned capacity,
-              unsigned keys_capacity, struct DoubleMap **map_out) {
+__attribute__((noinline)) int dmap_allocate(
+    map_keys_equality eq_a, map_key_hash hsh_a, map_keys_equality eq_b,
+    map_key_hash hsh_b, int value_size, uq_value_copy v_cpy,
+    uq_value_destr v_destr, dmap_extract_keys dexk, dmap_pack_keys dpk,
+    unsigned capacity, unsigned keys_capacity, struct DoubleMap **map_out) {
   klee_trace_ret();
   klee_trace_param_fptr(eq_a, "eq_a");
   klee_trace_param_fptr(hsh_a, "hsh_a");
@@ -264,7 +263,7 @@ __attribute__((noinline)) int dmap_erase(struct DoubleMap *map, int index) {
   klee_trace_param_i32(index, "index");
 
   klee_assert(map != NULL);
-  klee_assert(0); // This model does not support erasure.
+  klee_assert(0);  // This model does not support erasure.
   return 0;
 }
 
@@ -309,7 +308,7 @@ __attribute__((noinline)) unsigned dmap_size(struct DoubleMap *map) {
   // To avoid symbolic-pointer-dereference,
   // consciously trace "map" as a simple value.
   klee_trace_param_u64((uint64_t)map, "map");
-  klee_assert(0); // This model does not support size requests.
+  klee_assert(0);  // This model does not support size requests.
   return -1;
 }
 

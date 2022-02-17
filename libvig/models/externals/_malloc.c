@@ -4,14 +4,14 @@
  */
 #ifndef KLEE_VERIFICATION
 
-#  include <assert.h>
-#  include <stdalign.h>
-#  include <stdbool.h>
-#  include <stddef.h>
-#  include <stdlib.h>
-#  include <string.h>
+#include <assert.h>
+#include <stdalign.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 
-#  define MALLOC_MEM_SIZE 80000000
+#define MALLOC_MEM_SIZE 80000000
 
 extern void *malloc(size_t size);
 extern void *realloc(void *ptr, size_t new_size);

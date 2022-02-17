@@ -12,8 +12,8 @@
 #include "hhh_config.h"
 #include "hhh_state.h"
 
-#define SWAP_ENDIANNESS_32_BIT(n)                                              \
-  (((n >> 24) & 0x000000ff) | ((n >> 8) & 0x0000ff00) |                        \
+#define SWAP_ENDIANNESS_32_BIT(n)                       \
+  (((n >> 24) & 0x000000ff) | ((n >> 8) & 0x0000ff00) | \
    ((n << 8) & 0x00ff0000) | ((n << 24) & 0xff000000))
 
 struct nf_config config;
@@ -33,7 +33,7 @@ bool nf_init(void) {
 }
 
 int64_t expire_entries(vigor_time_t time) {
-  assert(time >= 0); // we don't support the past
+  assert(time >= 0);  // we don't support the past
   vigor_time_t exp_time =
       VIGOR_TIME_SECONDS_MULTIPLIER * config.burst / state->threshold_rate;
   uint64_t time_u = (uint64_t)time;

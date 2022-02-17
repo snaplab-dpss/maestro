@@ -10,15 +10,15 @@
 
 const uint16_t DEFAULT_LAN = 1;
 const uint16_t DEFAULT_WAN = 0;
-const uint64_t DEFAULT_LINK_CAPACITY = 10000000;  // 10Mbps
-const uint8_t DEFAULT_THRESHOLD = 50;             // 50%
-const uint32_t DEFAULT_SUBNETS_MASK = 0x00808080; // /8, /16, and /24
-const uint64_t DEFAULT_BURST = 100000;            // 100kB
-const uint32_t DEFAULT_CAPACITY = 128;            // IPs
+const uint64_t DEFAULT_LINK_CAPACITY = 10000000;   // 10Mbps
+const uint8_t DEFAULT_THRESHOLD = 50;              // 50%
+const uint32_t DEFAULT_SUBNETS_MASK = 0x00808080;  // /8, /16, and /24
+const uint64_t DEFAULT_BURST = 100000;             // 100kB
+const uint32_t DEFAULT_CAPACITY = 128;             // IPs
 
-#define PARSE_ERROR(format, ...)                                               \
-  nf_config_usage();                                                           \
-  fprintf(stderr, format, ##__VA_ARGS__);                                      \
+#define PARSE_ERROR(format, ...)          \
+  nf_config_usage();                      \
+  fprintf(stderr, format, ##__VA_ARGS__); \
   exit(EXIT_FAILURE);
 
 void nf_config_init(int argc, char **argv) {
@@ -34,15 +34,14 @@ void nf_config_init(int argc, char **argv) {
   unsigned nb_devices = rte_eth_dev_count_avail();
 
   struct option long_options[] = {
-    { "lan", required_argument, NULL, 'l' },
-    { "wan", required_argument, NULL, 'w' },
-    { "link", required_argument, NULL, 'r' },
-    { "threshold", required_argument, NULL, 't' },
-    { "subnets-mask", required_argument, NULL, 's' },
-    { "burst", required_argument, NULL, 'b' },
-    { "capacity", required_argument, NULL, 'c' },
-    { NULL, 0, NULL, 0 }
-  };
+      {"lan", required_argument, NULL, 'l'},
+      {"wan", required_argument, NULL, 'w'},
+      {"link", required_argument, NULL, 'r'},
+      {"threshold", required_argument, NULL, 't'},
+      {"subnets-mask", required_argument, NULL, 's'},
+      {"burst", required_argument, NULL, 'b'},
+      {"capacity", required_argument, NULL, 'c'},
+      {NULL, 0, NULL, 0}};
 
   int opt;
   while ((opt = getopt_long(argc, argv, "l:w:r:t:m:M:c:", long_options,
@@ -106,24 +105,31 @@ void nf_config_init(int argc, char **argv) {
 }
 
 void nf_config_usage(void) {
-  NF_INFO("Usage:\n"
-          "[DPDK EAL options] --\n"
-          "\t--lan <device>: LAN device,"
-          " default: %" PRIu16 ".\n"
-          "\t--wan <device>: WAN device,"
-          " default: %" PRIu16 ".\n"
-          "\t--link <link>: link capacity in bits/s,"
-          " default: %" PRIu64 ".\n"
-          "\t--threshold <threshold>: heavy hitter threshold integer in %%,"
-          " default: %" PRIu8 ".\n"
-          "\t--subnets-mask <subnets_mask>: masked subnets targeted by de HHH,"
-          " default: %" SCNx32 ".\n"
-          "\t--burst <size>: HHH burst size in bytes,"
-          " default: %" PRIu64 ".\n"
-          "\t--capacity <n>: HHH table capacity,"
-          " default: %" PRIu32 ".\n",
-          DEFAULT_LAN, DEFAULT_WAN, DEFAULT_LINK_CAPACITY, DEFAULT_THRESHOLD,
-          DEFAULT_SUBNETS_MASK, DEFAULT_BURST, DEFAULT_CAPACITY);
+  NF_INFO(
+      "Usage:\n"
+      "[DPDK EAL options] --\n"
+      "\t--lan <device>: LAN device,"
+      " default: %" PRIu16
+      ".\n"
+      "\t--wan <device>: WAN device,"
+      " default: %" PRIu16
+      ".\n"
+      "\t--link <link>: link capacity in bits/s,"
+      " default: %" PRIu64
+      ".\n"
+      "\t--threshold <threshold>: heavy hitter threshold integer in %%,"
+      " default: %" PRIu8
+      ".\n"
+      "\t--subnets-mask <subnets_mask>: masked subnets targeted by de HHH,"
+      " default: %" SCNx32
+      ".\n"
+      "\t--burst <size>: HHH burst size in bytes,"
+      " default: %" PRIu64
+      ".\n"
+      "\t--capacity <n>: HHH table capacity,"
+      " default: %" PRIu32 ".\n",
+      DEFAULT_LAN, DEFAULT_WAN, DEFAULT_LINK_CAPACITY, DEFAULT_THRESHOLD,
+      DEFAULT_SUBNETS_MASK, DEFAULT_BURST, DEFAULT_CAPACITY);
 }
 
 char *subnets_to_string(uint32_t subnets_mask) {

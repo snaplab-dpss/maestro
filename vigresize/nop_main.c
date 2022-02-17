@@ -80,11 +80,11 @@ int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
 
   // =========================================================
   // Example 4: add new header after ethernet header
-  nf_return_chunk(buffer); // return TCP/UDP
+  nf_return_chunk(buffer);  // return TCP/UDP
   if (ip_options) {
-    nf_return_chunk(buffer); // return IP options
+    nf_return_chunk(buffer);  // return IP options
   }
-  nf_return_chunk(buffer); // return IP
+  nf_return_chunk(buffer);  // return IP
 
   size_t new_hdr_length = 8;
   uint8_t *new_hdr =

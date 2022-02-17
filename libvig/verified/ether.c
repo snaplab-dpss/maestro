@@ -1,32 +1,31 @@
 #include "libvig/verified/ether.h"
 
 bool rte_ether_addr_eq(void* a, void* b)
-//@ requires [?f1]rte_ether_addrp(a, ?aid) &*& [?f2]rte_ether_addrp(b, ?bid);
-/*@ ensures [f1]rte_ether_addrp(a, aid) &*& [f2]rte_ether_addrp(b, bid) &*&
-            (result ? aid == bid : aid != bid); @*/
+    //@ requires [?f1]rte_ether_addrp(a, ?aid) &*& [?f2]rte_ether_addrp(b,
+    //?bid);
+    /*@ ensures [f1]rte_ether_addrp(a, aid) &*& [f2]rte_ether_addrp(b, bid) &*&
+                (result ? aid == bid : aid != bid); @*/
 {
-  struct rte_ether_addr* id1 = (struct rte_ether_addr*) a;
-  struct rte_ether_addr* id2 = (struct rte_ether_addr*) b;
+  struct rte_ether_addr* id1 = (struct rte_ether_addr*)a;
+  struct rte_ether_addr* id2 = (struct rte_ether_addr*)b;
   //@ open [f1]rte_ether_addrp(a, aid);
   //@ open [f2]rte_ether_addrp(b, bid);
-  return (id1->addr_bytes[0] == id2->addr_bytes[0])
-     AND (id1->addr_bytes[1] == id2->addr_bytes[1])
-     AND (id1->addr_bytes[2] == id2->addr_bytes[2])
-     AND (id1->addr_bytes[3] == id2->addr_bytes[3])
-     AND (id1->addr_bytes[4] == id2->addr_bytes[4])
-     AND (id1->addr_bytes[5] == id2->addr_bytes[5]);
+  return (id1->addr_bytes[0] == id2->addr_bytes[0])AND(id1->addr_bytes[1] ==
+                                                       id2->addr_bytes[1])
+      AND(id1->addr_bytes[2] == id2->addr_bytes[2])
+      AND(id1->addr_bytes[3] == id2->addr_bytes[3])
+      AND(id1->addr_bytes[4] == id2->addr_bytes[4])
+      AND(id1->addr_bytes[5] == id2->addr_bytes[5]);
   //@ close [f1]rte_ether_addrp(a, aid);
   //@ close [f2]rte_ether_addrp(b, bid);
-
 }
 
-
 void rte_ether_addr_allocate(void* obj)
-//@ requires chars(obj, sizeof(struct rte_ether_addr), _);
-//@ ensures rte_ether_addrp(obj, DEFAULT_RTE_ETHER_ADDR);
+    //@ requires chars(obj, sizeof(struct rte_ether_addr), _);
+    //@ ensures rte_ether_addrp(obj, DEFAULT_RTE_ETHER_ADDR);
 {
 
-  struct rte_ether_addr* id = (struct rte_ether_addr*) obj;
+  struct rte_ether_addr* id = (struct rte_ether_addr*)obj;
   //@ close_struct((struct rte_ether_addr*) obj);
   //@ assert id->addr_bytes[0..6] |-> ?addr_bytes_lst;
   /*@   switch(addr_bytes_lst) { case cons(h0, t0):
@@ -59,10 +58,11 @@ void rte_ether_addr_allocate(void* obj)
 
 #ifndef KLEE_VERIFICATION
 unsigned rte_ether_addr_hash(void* obj)
-//@ requires [?f]rte_ether_addrp(obj, ?v);
-//@ ensures [f]rte_ether_addrp(obj, v) &*& result == _rte_ether_addr_hash(v);
+    //@ requires [?f]rte_ether_addrp(obj, ?v);
+    //@ ensures [f]rte_ether_addrp(obj, v) &*& result ==
+    //_rte_ether_addr_hash(v);
 {
-  struct rte_ether_addr* id = (struct rte_ether_addr*) obj;
+  struct rte_ether_addr* id = (struct rte_ether_addr*)obj;
 
   //@ open [f]rte_ether_addrp(obj, v);
   uint8_t addr_bytes_0 = id->addr_bytes[0];
@@ -88,4 +88,4 @@ unsigned rte_ether_addr_hash(void* obj)
   hash = __builtin_ia32_crc32si(hash, addr_bytes_5);
   return hash;
 }
-#endif// KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION

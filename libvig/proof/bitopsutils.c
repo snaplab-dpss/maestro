@@ -10,7 +10,8 @@
 
     lemma void pow_nat_div_rem(int x, nat n)
         requires    0 < x &*& n != zero;
-        ensures     pow_nat(x, n) / x == pow_nat(x, nat_predecessor(n)) &*& pow_nat(x, n) % x == 0;
+        ensures     pow_nat(x, n) / x == pow_nat(x, nat_predecessor(n)) &*&
+pow_nat(x, n) % x == 0;
     {
         switch(n) {
             case zero:
@@ -38,11 +39,11 @@
             case zero:
             case succ(m_pred):
                 switch(n) {
-                    case zero: 
+                    case zero:
                         assert (pow_nat(x, n) == 1);
                         assert (pow_nat(x, m) == x * pow_nat(x, m_pred));
                         pow_nat_bounds(x, m_pred);
-                    case succ(n_pred): 
+                    case succ(n_pred):
                         pow_nat_gt(x, n_pred, m_pred);
                 }
         }
@@ -50,8 +51,9 @@
 
     // ------------- bits_of_int -------------
 
-    lemma_auto(length(snd(bits_of_int(x, n)))) void length_bits_of_int(int x, nat n) 
-        requires    true; 
+    lemma_auto(length(snd(bits_of_int(x, n)))) void length_bits_of_int(int x,
+nat n)
+        requires    true;
         ensures     length(snd(bits_of_int(x, n))) == int_of_nat(n);
     {
         switch(n) {
@@ -62,7 +64,8 @@
 
     lemma void bits_of_int_zero(nat n)
         requires    true;
-        ensures     true == forall(snd(bits_of_int(0, n)), (eq)(false)) &*& fst(bits_of_int(0, n)) == 0;
+        ensures     true == forall(snd(bits_of_int(0, n)), (eq)(false)) &*&
+fst(bits_of_int(0, n)) == 0;
     {
         switch(n) {
             case zero:
@@ -94,8 +97,10 @@
         requires
             int_of_nat(m) <= int_of_nat(n);
         ensures
-            true == forall(take(int_of_nat(m), snd(bits_of_int(pow_nat(2, m)-1, n))), (eq)(true)) &*& 
-            true == forall(drop(int_of_nat(m), snd(bits_of_int(pow_nat(2, m)-1, n))), (eq)(false)) &*& 
+            true == forall(take(int_of_nat(m), snd(bits_of_int(pow_nat(2, m)-1,
+n))), (eq)(true)) &*&
+            true == forall(drop(int_of_nat(m), snd(bits_of_int(pow_nat(2, m)-1,
+n))), (eq)(false)) &*&
             0 == fst(bits_of_int(pow_nat(2, m)-1, n));
     {
         switch(m) {
@@ -106,7 +111,8 @@
                     case zero:
                     case succ(n_pred):
                         bits_of_int_pow2_mask(n_pred, m_pred);
-                        assert (snd(bits_of_int(pow_nat(2, m)-1, n)) == cons( (pow_nat(2, m)-1)%2==1 , snd(bits_of_int((pow_nat(2, m)-1)/2, n_pred)) ) );
+                        assert (snd(bits_of_int(pow_nat(2, m)-1, n)) == cons(
+(pow_nat(2, m)-1)%2==1 , snd(bits_of_int((pow_nat(2, m)-1)/2, n_pred)) ) );
 
                         pow_nat_div_rem(2, m);
                         pow_nat_bounds(2, m_pred);
@@ -124,7 +130,8 @@
 
     lemma void length_bits_of_int_and(list<bool> x_bits, list<bool> y_bits)
         requires    true;
-        ensures     length(bits_of_int_and(x_bits, y_bits)) == ((length(x_bits) < length(y_bits)) ? length(y_bits) : length(x_bits));
+        ensures     length(bits_of_int_and(x_bits, y_bits)) == ((length(x_bits)
+< length(y_bits)) ? length(y_bits) : length(x_bits));
     {
         switch(x_bits) {
             case nil:
@@ -137,8 +144,10 @@
     }
 
     lemma void bits_of_int_and_zero(list<bool> x_bits, list<bool> y_bits)
-        requires    length(x_bits) == length(y_bits) &*& true == forall(y_bits, (eq)(false)); 
-        ensures     true == forall(bits_of_int_and(x_bits, y_bits), (eq)(false));
+        requires    length(x_bits) == length(y_bits) &*& true == forall(y_bits,
+(eq)(false));
+        ensures     true == forall(bits_of_int_and(x_bits, y_bits),
+(eq)(false));
     {
         switch(x_bits) {
             case nil:
@@ -150,15 +159,17 @@
         }
     }
 
-    lemma void bits_of_int_and_mask(list<bool> k_bits, list<bool> mask_bits, int m) 
-        requires 
-            length(k_bits) == length(mask_bits) &*& 
-            true == forall(take(m, mask_bits), (eq)(true)) &*& 
+    lemma void bits_of_int_and_mask(list<bool> k_bits, list<bool> mask_bits, int
+m)
+        requires
+            length(k_bits) == length(mask_bits) &*&
+            true == forall(take(m, mask_bits), (eq)(true)) &*&
             true == forall(drop(m, mask_bits), (eq)(false)) &*&
             0 <= m &*& m < length(k_bits);
         ensures
             take(m, k_bits) == take(m, bits_of_int_and(k_bits, mask_bits)) &*&
-            true == forall(drop(m, bits_of_int_and(k_bits, mask_bits)), (eq)(false));
+            true == forall(drop(m, bits_of_int_and(k_bits, mask_bits)),
+(eq)(false));
     {
         switch(k_bits) {
             case nil:
@@ -177,7 +188,8 @@
 
     lemma void Z_bits_of_int_and_equiv(list<bool> xs, list<bool> ys)
         requires    length(xs) == length(ys);
-        ensures     Z_and(Z_of_bits(Zsign(false), xs), Z_of_bits(Zsign(false), ys)) == Z_of_bits(Zsign(false), bits_of_int_and(xs, ys));
+        ensures     Z_and(Z_of_bits(Zsign(false), xs), Z_of_bits(Zsign(false),
+ys)) == Z_of_bits(Zsign(false), bits_of_int_and(xs, ys));
     {
         switch(xs) {
             case nil: length_0_nil(ys);
@@ -191,7 +203,8 @@
 
     lemma void int_of_Z_of_bits(list<bool> bits)
         requires    true;
-        ensures     int_of_Z(Z_of_bits(Zsign(false), bits)) == int_of_bits(0, bits);
+        ensures     int_of_Z(Z_of_bits(Zsign(false), bits)) == int_of_bits(0,
+bits);
     {
         switch(bits) {
             case nil:
@@ -199,17 +212,19 @@
         }
     }
 
-    lemma void bits_of_int_and_def(int x, list<bool> x_bits, int y, list<bool> y_bits, nat n) 
-        requires 
-            bits_of_int(x, n) == pair(0, x_bits) &*& 
-            bits_of_int(y, n) == pair(0, y_bits) &*& 
+    lemma void bits_of_int_and_def(int x, list<bool> x_bits, int y, list<bool>
+y_bits, nat n)
+        requires
+            bits_of_int(x, n) == pair(0, x_bits) &*&
+            bits_of_int(y, n) == pair(0, y_bits) &*&
             0 <= x &*& x < pow_nat(2, n) &*& 0 <= y &*& y < pow_nat(2, n);
         ensures
             (x & y) == int_of_bits(0, bits_of_int_and(x_bits, y_bits));
     {
         Z_of_uintN(x, n);
         Z_of_uintN(y, n);
-        bitand_def(x, Z_of_bits(Zsign(false), x_bits), y, Z_of_bits(Zsign(false), y_bits));
+        bitand_def(x, Z_of_bits(Zsign(false), x_bits), y,
+Z_of_bits(Zsign(false), y_bits));
 
         length_bits_of_int(x, n);
         length_bits_of_int(y, n);
@@ -292,8 +307,10 @@
                     case succ(n_pred):
                         int int_bits = int_of_bits(0, bits);
                         int int_bs0 = int_of_bits(0, bs0);
-                        list<bool> bits_int_bits = snd(bits_of_int(int_bits, n));
-                        list<bool> bits_int_bs0 = snd(bits_of_int(int_bs0, n_pred));
+                        list<bool> bits_int_bits = snd(bits_of_int(int_bits,
+n));
+                        list<bool> bits_int_bs0 = snd(bits_of_int(int_bs0,
+n_pred));
 
                         bits_of_int_of_bits(bs0, n_pred);
                         assert (bs0 == snd(bits_of_int(int_bs0, n_pred)));
@@ -304,12 +321,14 @@
                             int_of_bits_bounds(bits);
                             div_rem_nonneg(int_bits, 2);
                             assert (int_bs0*2 == int_bits);
-                            assert ( bits_int_bits == cons(int_bits%2==1, bits_int_bs0) );
+                            assert ( bits_int_bits == cons(int_bits%2==1,
+bits_int_bs0) );
                         } else {
                             int_of_bits_bounds(bits);
                             div_rem_nonneg(int_bits, 2);
-                            assert (int_bits%2==1); 
-                            assert ( bits_int_bits == cons(int_bits%2==1, bits_int_bs0) );
+                            assert (int_bits%2==1);
+                            assert ( bits_int_bits == cons(int_bits%2==1,
+bits_int_bs0) );
                         }
                 }
         }

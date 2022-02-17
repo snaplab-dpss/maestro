@@ -10,7 +10,7 @@
 
 #ifndef NULL
 #define NULL 0
-#endif // NULL
+#endif  // NULL
 
 struct DoubleChainLocks {
   struct dchain_locks_cell *cells[RTE_MAX_LCORE];
@@ -25,8 +25,7 @@ int dchain_locks_allocate(int index_range,
   struct DoubleChainLocks *old_chain_out = *chain_out;
   struct DoubleChainLocks *chain_alloc = (struct DoubleChainLocks *)rte_malloc(
       NULL, sizeof(struct DoubleChainLocks), 0);
-  if (chain_alloc == NULL)
-    return 0;
+  if (chain_alloc == NULL) return 0;
   *chain_out = (struct DoubleChainLocks *)chain_alloc;
 
   unsigned lcore_id;

@@ -6,9 +6,9 @@
 //@ #include "../proof/stdex.gh"
 
 enum DCHAIN_ENUM {
-    ALLOC_LIST_HEAD = 0,
-    FREE_LIST_HEAD = 1,
-    INDEX_SHIFT = DCHAIN_RESERVED
+  ALLOC_LIST_HEAD = 0,
+  FREE_LIST_HEAD = 1,
+  INDEX_SHIFT = DCHAIN_RESERVED
 };
 
 /*@
@@ -147,12 +147,14 @@ enum DCHAIN_ENUM {
            cons(dcell(ind+1,ind+1), empty_cells_seg(zero, ind+1)));
   }
 
-  lemma void put_cell_back_ind(struct dchain_cell* cells, nat len, int start_ind)
+  lemma void put_cell_back_ind(struct dchain_cell* cells, nat len, int
+  start_ind)
   requires dcellsp(cells, int_of_nat(len), empty_cells_seg(len, start_ind)) &*&
            dcellp(cells+int_of_nat(len),
                   dcell(int_of_nat(len)+start_ind+1,
                         int_of_nat(len)+start_ind+1));
-  ensures dcellsp(cells, int_of_nat(len) + 1, empty_cells_seg(succ(len), start_ind));
+  ensures dcellsp(cells, int_of_nat(len) + 1, empty_cells_seg(succ(len),
+  start_ind));
   {
     switch(len) {
       case zero:
@@ -166,7 +168,8 @@ enum DCHAIN_ENUM {
   requires dcellsp(cells, len, empty_cells_seg(nat_of_int(len), start_ind)) &*&
            dcellp(cells+len, dcell(len+start_ind+1,len+start_ind+1)) &*&
            0 <= len;
-  ensures dcellsp(cells, len + 1, empty_cells_seg(nat_of_int(len+1), start_ind));
+  ensures dcellsp(cells, len + 1, empty_cells_seg(nat_of_int(len+1),
+  start_ind));
   {
     put_cell_back_ind(cells, nat_of_int(len), start_ind);
   }
@@ -252,8 +255,10 @@ enum DCHAIN_ENUM {
           assert int_of_nat(succ(from)) != int_of_nat(to);
           full_free_list_some_engaged(n, succ(from), to, i+1);
           some_engaged_over_bigger_list(n, succ(from), to, i);
-          assert true == some_engaged(full_free_list_fp(len, i), succ(from), to);
-          assert true == mem(int_of_nat(from) + INDEX_SHIFT, full_free_list_fp(len, i));
+          assert true == some_engaged(full_free_list_fp(len, i), succ(from),
+  to);
+          assert true == mem(int_of_nat(from) + INDEX_SHIFT,
+  full_free_list_fp(len, i));
           consolidate_some_engaged(full_free_list_fp(len, i), from, to);
         }
     }
@@ -318,7 +323,8 @@ enum DCHAIN_ENUM {
            0 < ind &*&
            true == forall(pref, (dbounded)(size));
   ensures dcellsp(cells + ind, int_of_nat(len)+1, ?lst) &*&
-          free_listp(append(pref, lst), full_free_list_fp(len, ind+1), 1, ind) &*&
+          free_listp(append(pref, lst), full_free_list_fp(len, ind+1), 1, ind)
+  &*&
           true == forall(append(pref, lst), (dbounded)(size));
   {
     switch(len) {
@@ -332,7 +338,8 @@ enum DCHAIN_ENUM {
         open dcellsp(cells + ind, int_of_nat(len), empty_cells_seg(len, ind));
         assert dcellp(cells + ind, dcell(ind+1,ind+1));
         assert ind+1+int_of_nat(n) == ind+int_of_nat(len);
-        mul_subst(ind+1+int_of_nat(n), ind+int_of_nat(len), sizeof(struct dchain_cell));
+        mul_subst(ind+1+int_of_nat(n), ind+int_of_nat(len), sizeof(struct
+  dchain_cell));
         forall_append(pref, cons(dcell(ind+1,ind+1), nil), (dbounded)(size));
         empty_dchain_produced_tail(cells, n, ind+1, size,
                                    append(pref,cons(dcell(ind+1,ind+1), nil)));
@@ -353,7 +360,8 @@ enum DCHAIN_ENUM {
 
   lemma void empty_dchain_produced(struct dchain_cell* cells, int len)
   requires dcellp(cells, dcell(0,0)) &*& dcellsp(cells+1, len,
-                                                 empty_cells_seg(nat_of_int(len), 1)) &*&
+                                                 empty_cells_seg(nat_of_int(len),
+  1)) &*&
            dcellp(cells + len + 1, dcell(1,1)) &*&
            0 < len;
   ensures dcellsp(cells, len+2, ?lst) &*&
@@ -370,46 +378,47 @@ enum DCHAIN_ENUM {
   @*/
 
 void dchain_impl_init(struct dchain_cell *cells, int size)
-/*@ requires 0 < size &*&
-             size < INT_MAX - 2 &*&
-             dcellsp(cells, size + DCHAIN_RESERVED, _); @*/
-/*@ ensures dchainip(empty_dchaini_fp(size), cells); @*/
+    /*@ requires 0 < size &*&
+                 size < INT_MAX - 2 &*&
+                 dcellsp(cells, size + DCHAIN_RESERVED, _); @*/
+    /*@ ensures dchainip(empty_dchaini_fp(size), cells); @*/
 {
   //@ open dcellsp(cells, size + 2, _);
   //@ dcell_limits(cells);
-  struct dchain_cell* al_head = cells + ALLOC_LIST_HEAD;
+  struct dchain_cell *al_head = cells + ALLOC_LIST_HEAD;
   al_head->prev = 0;
   al_head->next = 0;
   int i = INDEX_SHIFT;
   //@ open dcellsp(cells + 1, size + 1, _);
   //@ dcell_limits(cells + 1);
-  struct dchain_cell* fl_head = cells + FREE_LIST_HEAD;
+  struct dchain_cell *fl_head = cells + FREE_LIST_HEAD;
   fl_head->next = i;
   fl_head->prev = fl_head->next;
   //@ initial_empty_cell(FREE_LIST_HEAD);
   while (i < (size + INDEX_SHIFT - 1))
-    /*@ invariant INDEX_SHIFT <= i &*&
-                  i <= size + INDEX_SHIFT -1 &*&
-                  cells > (struct dchain_cell*)0 &*&
-                  dcellsp(cells + i, size + DCHAIN_RESERVED - i, _) &*&
-                  dcellsp(cells + FREE_LIST_HEAD, i - FREE_LIST_HEAD,
-                          empty_cells_seg(nat_of_int(i - FREE_LIST_HEAD),
-                                          FREE_LIST_HEAD));
-                  @*/
-    //@ decreases size + INDEX_SHIFT - 1 - i;
+      /*@ invariant INDEX_SHIFT <= i &*&
+                    i <= size + INDEX_SHIFT -1 &*&
+                    cells > (struct dchain_cell*)0 &*&
+                    dcellsp(cells + i, size + DCHAIN_RESERVED - i, _) &*&
+                    dcellsp(cells + FREE_LIST_HEAD, i - FREE_LIST_HEAD,
+                            empty_cells_seg(nat_of_int(i - FREE_LIST_HEAD),
+                                            FREE_LIST_HEAD));
+                    @*/
+      //@ decreases size + INDEX_SHIFT - 1 - i;
   {
     //@ open dcellsp(cells + i, size + DCHAIN_RESERVED - i, _);
     //@ dcell_limits(cells + i);
-    struct dchain_cell* current = cells + i;
-    current->next = i+1;
+    struct dchain_cell *current = cells + i;
+    current->next = i + 1;
     current->prev = current->next;
-    //@ put_cell_back(cells + FREE_LIST_HEAD, i - FREE_LIST_HEAD, FREE_LIST_HEAD);
+    //@ put_cell_back(cells + FREE_LIST_HEAD, i - FREE_LIST_HEAD,
+    //FREE_LIST_HEAD);
     ++i;
   }
   //@ assert i == size + INDEX_SHIFT - 1;
   //@ open dcellsp(cells + i, size + DCHAIN_RESERVED - i, _);
   //@ dcell_limits(cells + i);
-  struct dchain_cell* last = cells + i;
+  struct dchain_cell *last = cells + i;
   last->next = FREE_LIST_HEAD;
   last->prev = last->next;
   //@ assert i == size + 1;
@@ -665,7 +674,6 @@ void dchain_impl_init(struct dchain_cell *cells, int size)
   }
 @*/
 
-
 /*@
   lemma void free_list_update_unrelevant(list<dcell> cls, list<int> fl,
                                          int start, int i,
@@ -737,8 +745,10 @@ void dchain_impl_init(struct dchain_cell *cells, int size)
   {
     open alloc_listp(cls, nil, start, start);
     nth_update(ins, ins, dcell(start, start), cls);
-    nth_update(start, start, dcell(ins, ins), update(ins, dcell(start, start), cls));
-    nth_update(ins, start, dcell(ins, ins), update(ins, dcell(start, start), cls));
+    nth_update(start, start, dcell(ins, ins), update(ins, dcell(start, start),
+  cls));
+    nth_update(ins, start, dcell(ins, ins), update(ins, dcell(start, start),
+  cls));
     close alloc_listp(update(start, dcell(ins, ins),
                        update(ins, dcell(start, start), cls)),
                       nil,
@@ -753,9 +763,11 @@ void dchain_impl_init(struct dchain_cell *cells, int size)
   @*/
 
 /*@
-  lemma void two_alloc_lists_equal(list<dcell> cls, list<int> al1, list<int> al2,
+  lemma void two_alloc_lists_equal(list<dcell> cls, list<int> al1, list<int>
+  al2,
                                    int start, int i)
-  requires alloc_listp(cls, al1, start, i) &*& alloc_listp(cls, al2, start, i) &*&
+  requires alloc_listp(cls, al1, start, i) &*& alloc_listp(cls, al2, start, i)
+  &*&
            false == mem(start, al1) &*& false == mem(start, al2);
   ensures alloc_listp(cls, al1, start, i) &*& al1 == al2;
   {
@@ -774,7 +786,8 @@ void dchain_impl_init(struct dchain_cell *cells, int size)
     close alloc_listp(cls, al1, start, i);
   }
 
-  lemma void duplicate_alloc_listp(list<dcell> cls, list<int> al, int start, int i)
+  lemma void duplicate_alloc_listp(list<dcell> cls, list<int> al, int start, int
+  i)
   requires alloc_listp(cls, al, start, i);
   ensures alloc_listp(cls, al, start, i) &*& alloc_listp(cls, al, start, i);
   {
@@ -850,7 +863,8 @@ void dchain_impl_init(struct dchain_cell *cells, int size)
   @*/
 
 /*@
-  lemma void last_alloc_list_mem(list<dcell> cls, list<int> al, int start, int i)
+  lemma void last_alloc_list_mem(list<dcell> cls, list<int> al, int start, int
+  i)
   requires alloc_listp(cls, al, start, i) &*&
            nth(start, cls) == dcell(?prev,?next) &*&
            al != nil;
@@ -910,10 +924,12 @@ void dchain_impl_init(struct dchain_cell *cells, int size)
                        update(old_last, dcell(old_last_prev, ins), cls));
             nth_update_unrelevant(ins, start, dcell(ins, old_first),
                                   update(ins, dcell(old_last, start),
-                                   update(old_last, dcell(old_last_prev, ins), cls)));
+                                   update(old_last, dcell(old_last_prev, ins),
+  cls)));
             close alloc_listp(update(start, dcell(ins, old_first),
                                update(ins, dcell(old_last, start),
-                                update(old_last, dcell(old_last_prev, ins), cls))),
+                                update(old_last, dcell(old_last_prev, ins),
+  cls))),
                               nil,
                               start,
                               ins);
@@ -921,13 +937,16 @@ void dchain_impl_init(struct dchain_cell *cells, int size)
             assert 0 <= old_last &*& old_last < length(cls);
             nth_update(old_last, old_last, dcell(old_last_prev, ins), cls);
             nth_update_unrelevant(old_last, ins, dcell(old_last, start),
-                                  update(old_last, dcell(old_last_prev, ins), cls));
+                                  update(old_last, dcell(old_last_prev, ins),
+  cls));
             nth_update_unrelevant(old_last, start, dcell(ins, old_first),
                                   update(ins, dcell(old_last, start),
-                                   update(old_last, dcell(old_last_prev, ins), cls)));
+                                   update(old_last, dcell(old_last_prev, ins),
+  cls)));
             close alloc_listp(update(start, dcell(ins, old_first),
                                update(ins, dcell(old_last, start),
-                                update(old_last, dcell(old_last_prev, ins), cls))),
+                                update(old_last, dcell(old_last_prev, ins),
+  cls))),
                               cons(ins, nil),
                               start,
                               h);
@@ -945,10 +964,12 @@ void dchain_impl_init(struct dchain_cell *cells, int size)
             assert h != ins;
             nth_update_unrelevant(h, old_last, dcell(old_last_prev, ins), cls);
             nth_update_unrelevant(h, ins, dcell(old_last, start),
-                                  update(old_last, dcell(old_last_prev, ins), cls));
+                                  update(old_last, dcell(old_last_prev, ins),
+  cls));
             nth_update_unrelevant(h, start, dcell(ins, old_first),
                                   update(ins, dcell(old_last, start),
-                                    update(old_last, dcell(old_last_prev, ins), cls)));
+                                    update(old_last, dcell(old_last_prev, ins),
+  cls)));
             break;
         }
         if (i == old_last) {
@@ -964,10 +985,12 @@ void dchain_impl_init(struct dchain_cell *cells, int size)
         } else {
           nth_update_unrelevant(i, old_last, dcell(old_last_prev, ins), cls);
           nth_update_unrelevant(i, ins, dcell(old_last, start),
-                                update(old_last, dcell(old_last_prev, ins), cls));
+                                update(old_last, dcell(old_last_prev, ins),
+  cls));
           nth_update_unrelevant(i, start, dcell(ins, old_first),
                                 update(ins, dcell(old_last, start),
-                                 update(old_last, dcell(old_last_prev, ins), cls)));
+                                 update(old_last, dcell(old_last_prev, ins),
+  cls)));
         }
 
         close alloc_listp(update(start, dcell(ins, old_first),
@@ -1077,7 +1100,8 @@ void dchain_impl_init(struct dchain_cell *cells, int size)
     close free_listp(cls, fl1, start, i);
   }
 
-  lemma void duplicate_free_listp(list<dcell> cls, list<int> fl, int start, int i)
+  lemma void duplicate_free_listp(list<dcell> cls, list<int> fl, int start, int
+  i)
   requires free_listp(cls, fl, start, i);
   ensures free_listp(cls, fl, start, i) &*& free_listp(cls, fl, start, i);
   {
@@ -1163,7 +1187,8 @@ ensures true == all_engaged(append(al, cons(fh, nil)), ft, size);
     case succ(n):
       move_cell_to_alloc_engaged(al, fl, n);
       if (int_of_nat(n) + INDEX_SHIFT == fh) {
-        assert true == mem(int_of_nat(n) + INDEX_SHIFT, append(al, cons(fh, nil)));
+        assert true == mem(int_of_nat(n) + INDEX_SHIFT, append(al, cons(fh,
+nil)));
         assert false == mem(int_of_nat(n) + INDEX_SHIFT, ft);
       } else {
       }
@@ -1195,16 +1220,16 @@ ensures true == all_engaged(append(al, cons(fh, nil)), ft, size);
   @*/
 
 int dchain_impl_allocate_new_index(struct dchain_cell *cells, int *index)
-/*@ requires dchainip(?dc, cells) &*& *index |-> ?i; @*/
-/*@ ensures (dchaini_out_of_space_fp(dc) ?
-             (result == 0 &*&
-              dchainip(dc, cells) &*&
-              *index |-> i) :
-             (result == 1 &*&
-              *index |-> ?ni &*&
-              0 <= ni &*& ni < dchaini_irange_fp(dc) &*&
-              false == dchaini_allocated_fp(dc, ni) &*&
-              dchainip(dchaini_allocate_fp(dc, ni), cells))); @*/
+    /*@ requires dchainip(?dc, cells) &*& *index |-> ?i; @*/
+    /*@ ensures (dchaini_out_of_space_fp(dc) ?
+                 (result == 0 &*&
+                  dchainip(dc, cells) &*&
+                  *index |-> i) :
+                 (result == 1 &*&
+                  *index |-> ?ni &*&
+                  0 <= ni &*& ni < dchaini_irange_fp(dc) &*&
+                  false == dchaini_allocated_fp(dc, ni) &*&
+                  dchainip(dchaini_allocate_fp(dc, ni), cells))); @*/
 {
   //@ open dchainip(dc, cells);
   //@ int size = dchaini_irange_fp(dc);
@@ -1217,11 +1242,10 @@ int dchain_impl_allocate_new_index(struct dchain_cell *cells, int *index)
   //@ mul_nonnegative(size, sizeof(struct dchain_cell));
   //@ dcells_limits(cells);
   //@ extract_heads(cells, cls);
-  struct dchain_cell* fl_head = cells + FREE_LIST_HEAD;
-  struct dchain_cell* al_head = cells + ALLOC_LIST_HEAD;
+  struct dchain_cell *fl_head = cells + FREE_LIST_HEAD;
+  struct dchain_cell *al_head = cells + ALLOC_LIST_HEAD;
   int allocated = fl_head->next;
-  if (allocated == FREE_LIST_HEAD)
-  {
+  if (allocated == FREE_LIST_HEAD) {
     //@ attach_heads(cells, cls);
     //@ short_circuited_free_list(cls, fl);
     //@ assert(size <= length(al));
@@ -1241,7 +1265,7 @@ int dchain_impl_allocate_new_index(struct dchain_cell *cells, int *index)
   //@ assert FREE_LIST_HEAD != allocated;
   //@ dcells_limits(cells+INDEX_SHIFT);
   //@ extract_cell(cells, cls, allocated);
-  struct dchain_cell* allocp = cells + allocated;
+  struct dchain_cell *allocp = cells + allocated;
   // Extract the link from the "empty" chain.
   fl_head->next = allocp->next;
   fl_head->prev = fl_head->next;
@@ -1249,15 +1273,20 @@ int dchain_impl_allocate_new_index(struct dchain_cell *cells, int *index)
   // Add the link to the "new"-end "alloc" chain.
   allocp->next = ALLOC_LIST_HEAD;
   allocp->prev = al_head->prev;
-  //@ dcell nalloc = dcell(dchain_cell_get_prev(nth(ALLOC_LIST_HEAD,cls)),ALLOC_LIST_HEAD);
+  //@ dcell nalloc =
+  //dcell(dchain_cell_get_prev(nth(ALLOC_LIST_HEAD,cls)),ALLOC_LIST_HEAD);
   //@ int allocpnext = dchain_cell_get_next(nth(allocated, cls));
   //@ forall_nth(cls, (dbounded)(size+INDEX_SHIFT), allocated);
   //@ dcell n_fl_head = dcell(allocpnext,allocpnext);
-  //@ list<dcell> ncls = update(FREE_LIST_HEAD, n_fl_head, update(allocated, nalloc, cls));
-  //@ drop_update_unrelevant(INDEX_SHIFT, FREE_LIST_HEAD, n_fl_head, update(allocated, nalloc, cls));
+  //@ list<dcell> ncls = update(FREE_LIST_HEAD, n_fl_head, update(allocated,
+  //nalloc, cls));
+  //@ drop_update_unrelevant(INDEX_SHIFT, FREE_LIST_HEAD, n_fl_head,
+  //update(allocated, nalloc, cls));
   //@ drop_update_relevant(INDEX_SHIFT, allocated, nalloc, cls);
-  //@ take_update_unrelevant(allocated-INDEX_SHIFT, allocated-INDEX_SHIFT, nalloc, drop(INDEX_SHIFT, cls));
-  //@ drop_update_unrelevant(allocated+1, FREE_LIST_HEAD, n_fl_head, update(allocated, nalloc, cls));
+  //@ take_update_unrelevant(allocated-INDEX_SHIFT, allocated-INDEX_SHIFT,
+  //nalloc, drop(INDEX_SHIFT, cls));
+  //@ drop_update_unrelevant(allocated+1, FREE_LIST_HEAD, n_fl_head,
+  //update(allocated, nalloc, cls));
   //@ drop_update_unrelevant(allocated+1, allocated, nalloc, cls);
   //@ glue_cells(cells, ncls, allocated);
   //@ forall_nth(cls, (dbounded)(size+INDEX_SHIFT), ALLOC_LIST_HEAD);
@@ -1286,12 +1315,13 @@ int dchain_impl_allocate_new_index(struct dchain_cell *cells, int *index)
         assert true == mem(last_alloc, al);
       }
     @*/
-  struct dchain_cell* alloc_head_prevp = cells + al_head->prev;
+  struct dchain_cell *alloc_head_prevp = cells + al_head->prev;
   alloc_head_prevp->next = allocated;
   al_head->prev = allocated;
   //@ assert(last_alloc != FREE_LIST_HEAD);
   //@ assert true == mem(allocated, fl);
-  //@ if (last_alloc == allocated) { free_alloc_disjoint(al, fl, allocated, nat_of_int(size));}
+  //@ if (last_alloc == allocated) { free_alloc_disjoint(al, fl, allocated,
+  //nat_of_int(size));}
   //@ assert(nth(last_alloc, cls) == nth(last_alloc, ncls));
   //@ forall_nth(cls, (dbounded)(size+INDEX_SHIFT), last_alloc);
   /*@
@@ -1301,19 +1331,24 @@ int dchain_impl_allocate_new_index(struct dchain_cell *cells, int *index)
       drop_update_unrelevant(INDEX_SHIFT, ALLOC_LIST_HEAD, n_al_head, ncls);
       attach_heads(cells, rcls);
     } else {
-      dcell n_last_alloc = dcell(dchain_cell_get_prev(nth(last_alloc, cls)),allocated);
-      dcell n_al_head = dcell(allocated, dchain_cell_get_next(nth(ALLOC_LIST_HEAD,cls)));
-      list<dcell> rcls = update(ALLOC_LIST_HEAD, n_al_head, update(last_alloc, n_last_alloc, ncls));
-      drop_update_unrelevant(INDEX_SHIFT, ALLOC_LIST_HEAD, n_al_head, update(last_alloc, n_last_alloc, ncls));
+      dcell n_last_alloc = dcell(dchain_cell_get_prev(nth(last_alloc,
+    cls)),allocated);
+      dcell n_al_head = dcell(allocated,
+    dchain_cell_get_next(nth(ALLOC_LIST_HEAD,cls)));
+      list<dcell> rcls = update(ALLOC_LIST_HEAD, n_al_head, update(last_alloc,
+    n_last_alloc, ncls));
+      drop_update_unrelevant(INDEX_SHIFT, ALLOC_LIST_HEAD, n_al_head,
+    update(last_alloc, n_last_alloc, ncls));
       drop_update_relevant(INDEX_SHIFT, last_alloc, n_last_alloc, ncls);
-      take_update_unrelevant(last_alloc-INDEX_SHIFT, last_alloc-INDEX_SHIFT, n_last_alloc, drop(INDEX_SHIFT, ncls));
-      drop_update_unrelevant(last_alloc+1, ALLOC_LIST_HEAD, n_al_head, update(last_alloc, n_last_alloc, ncls));
+      take_update_unrelevant(last_alloc-INDEX_SHIFT, last_alloc-INDEX_SHIFT,
+    n_last_alloc, drop(INDEX_SHIFT, ncls));
+      drop_update_unrelevant(last_alloc+1, ALLOC_LIST_HEAD, n_al_head,
+    update(last_alloc, n_last_alloc, ncls));
       drop_update_unrelevant(last_alloc+1, last_alloc, n_last_alloc, ncls);
       glue_cells(cells, rcls, last_alloc);
       attach_heads(cells, rcls);
     }
     @*/
-
 
   *index = allocated - INDEX_SHIFT;
   //@ length_tail(fl);
@@ -1355,8 +1390,10 @@ int dchain_impl_allocate_new_index(struct dchain_cell *cells, int *index)
                                   tail(fl), FREE_LIST_HEAD, FREE_LIST_HEAD,
                                   ALLOC_LIST_HEAD, dcell(allocated, allocated));
     } else {
-      dcell n_last_alloc = dcell(dchain_cell_get_prev(nth(last_alloc, cls)),allocated);
-      dcell n_al_head = dcell(allocated, dchain_cell_get_next(nth(ALLOC_LIST_HEAD,cls)));
+      dcell n_last_alloc = dcell(dchain_cell_get_prev(nth(last_alloc,
+    cls)),allocated);
+      dcell n_al_head = dcell(allocated,
+    dchain_cell_get_next(nth(ALLOC_LIST_HEAD,cls)));
       forall_update(cls, (dbounded)(size+INDEX_SHIFT), allocated, nalloc);
       forall_update(update(allocated, nalloc, cls),
                     (dbounded)(size+INDEX_SHIFT), FREE_LIST_HEAD, n_fl_head);
@@ -1364,9 +1401,11 @@ int dchain_impl_allocate_new_index(struct dchain_cell *cells, int *index)
                     last_alloc, n_last_alloc);
       forall_update(update(last_alloc, n_last_alloc, ncls),
                     (dbounded)(size+INDEX_SHIFT), ALLOC_LIST_HEAD, n_al_head);
-      update_update(update(allocated, nalloc, cls), 1, n_fl_head, last_alloc, n_last_alloc);
+      update_update(update(allocated, nalloc, cls), 1, n_fl_head, last_alloc,
+    n_last_alloc);
       update_update(update(last_alloc, n_last_alloc,
-                     update(allocated, nalloc, cls)), 0, n_al_head, 1, n_fl_head);
+                     update(allocated, nalloc, cls)), 0, n_al_head, 1,
+    n_fl_head);
       update_update(cls, allocated, nalloc, last_alloc, n_last_alloc);
       insert_alloc_list(cls, al, ALLOC_LIST_HEAD, allocated);
       alloc_list_update_unrelevant(update(ALLOC_LIST_HEAD, n_al_head,
@@ -1654,7 +1693,7 @@ ensures alloc_listp(cls, al, start, start) &*&
       switch(t) {
         case nil: break;
         case cons(th,tt):
-      }       
+      }
       close alloc_listp(cls, t, start, h);
   }
   close alloc_listp(cls, al, start, start);
@@ -1796,7 +1835,8 @@ ensures alloc_listp(update(n, dcell(p, nn),
           } else {
             nth_update_unrelevant(i, p, dcell(pp, n), cls);
           }
-          nth_update_unrelevant(i, n, dcell(p, nn), update(p, dcell(pp, n), cls));
+          nth_update_unrelevant(i, n, dcell(p, nn), update(p, dcell(pp, n),
+cls));
         }
         if (h == n) {
           assert i == x;
@@ -1806,7 +1846,8 @@ ensures alloc_listp(update(n, dcell(p, nn),
           } else {
             nth_update_unrelevant(h, p, dcell(pp, n), cls);
           }
-          nth_update_unrelevant(h, n, dcell(p, nn), update(p, dcell(pp, n), cls));
+          nth_update_unrelevant(h, n, dcell(p, nn), update(p, dcell(pp, n),
+cls));
         }
         close alloc_listp(update(n, dcell(p, nn),
                            update(p, dcell(pp, n), cls)),
@@ -1837,13 +1878,13 @@ ensures alloc_listp(update(n, dcell(p, nn),
 @*/
 
 int dchain_impl_free_index(struct dchain_cell *cells, int index)
-/*@ requires dchainip(?dc, cells) &*&
-             0 <= index &*& index < dchaini_irange_fp(dc); @*/
-/*@ ensures (dchaini_allocated_fp(dc, index) ?
-             (dchainip(dchaini_remove_fp(dc, index), cells) &*&
-              result == 1) :
-             (dchainip(dc, cells) &*&
-              result == 0)); @*/
+    /*@ requires dchainip(?dc, cells) &*&
+                 0 <= index &*& index < dchaini_irange_fp(dc); @*/
+    /*@ ensures (dchaini_allocated_fp(dc, index) ?
+                 (dchainip(dchaini_remove_fp(dc, index), cells) &*&
+                  result == 1) :
+                 (dchainip(dc, cells) &*&
+                  result == 0)); @*/
 {
   //@ open dchainip(dc, cells);
   //@ int size = dchaini_irange_fp(dc);
@@ -1855,7 +1896,7 @@ int dchain_impl_free_index(struct dchain_cell *cells, int index)
   //@ extract_heads(cells, cls);
   int freed = index + INDEX_SHIFT;
   //@ extract_cell(cells, cls, freed);
-  struct dchain_cell* freedp = cells + freed;
+  struct dchain_cell *freedp = cells + freed;
   int freed_prev = freedp->prev;
   int freed_next = freedp->next;
   //@ glue_cells(cells, cls, freed);
@@ -1881,12 +1922,13 @@ int dchain_impl_free_index(struct dchain_cell *cells, int index)
   }
 
   //@ mul_nonnegative(size, sizeof(struct dchain_cell));
-  struct dchain_cell* fr_head = cells + FREE_LIST_HEAD;
+  struct dchain_cell *fr_head = cells + FREE_LIST_HEAD;
 
   //@ assert false == mem(freed, fl);
   //@ free_alloc_disjoint(al, fl, freed, nat_of_int(size));
   //@ assert true == mem(freed, al);
-  //@ alloc_list_prev_next_mem(cls, al, ALLOC_LIST_HEAD, freed, ALLOC_LIST_HEAD);
+  //@ alloc_list_prev_next_mem(cls, al, ALLOC_LIST_HEAD, freed,
+  //ALLOC_LIST_HEAD);
   /*@
     if (freed_prev == freed_next) {
       assert freed_prev == ALLOC_LIST_HEAD;
@@ -1908,7 +1950,7 @@ int dchain_impl_free_index(struct dchain_cell *cells, int index)
 
   // Extract the link from the "alloc" chain.
   //@ mul_nonnegative(freed_prev, sizeof(struct dchain_cell));
-  struct dchain_cell* freed_prevp = cells + freed_prev;
+  struct dchain_cell *freed_prevp = cells + freed_prev;
   freed_prevp->next = freed_next;
 
   //@ list<dcell> ncls1;
@@ -1937,7 +1979,7 @@ int dchain_impl_free_index(struct dchain_cell *cells, int index)
     }
     @*/
 
-  struct dchain_cell* freed_nextp = cells + freed_next;
+  struct dchain_cell *freed_nextp = cells + freed_next;
   freed_nextp->prev = freed_prev;
 
   //@ list<dcell> ncls2;
@@ -1980,13 +2022,15 @@ int dchain_impl_free_index(struct dchain_cell *cells, int index)
   fr_head->next = freed;
   fr_head->prev = fr_head->next;
   //@ list<dcell> ncls4 = update(FREE_LIST_HEAD, dcell(freed, freed), ncls3);
-  //@ drop_update_unrelevant(INDEX_SHIFT, FREE_LIST_HEAD, dcell(freed, freed), ncls3);
+  //@ drop_update_unrelevant(INDEX_SHIFT, FREE_LIST_HEAD, dcell(freed, freed),
+  //ncls3);
   //@ attach_heads(cells, ncls4);
   //@ lbounded_then_start_nonmem(al, ALLOC_LIST_HEAD);
   //@ alloc_list_no_dups_head(cls, al, ALLOC_LIST_HEAD, ALLOC_LIST_HEAD);
   /*@
     if (freed_prev == freed_next) {
-    // update(1, dcell(freed,freed), update(freed, nfreed, update(0, nalh, cls)));
+    // update(1, dcell(freed,freed), update(freed, nfreed, update(0, nalh,
+    cls)));
 
       close alloc_listp(ncls2, nil, ALLOC_LIST_HEAD, ALLOC_LIST_HEAD);
       alloc_list_update_unrelevant(ncls2, nil, ALLOC_LIST_HEAD,
@@ -2107,16 +2151,16 @@ int dchain_impl_free_index(struct dchain_cell *cells, int index)
   @*/
 
 int dchain_impl_get_oldest_index(struct dchain_cell *cells, int *index)
-/*@ requires dchainip(?dc, cells) &*& *index |-> ?i; @*/
-/*@ ensures dchainip(dc, cells) &*&
-            (dchaini_is_empty_fp(dc) ?
-             (*index |-> i &*&
-              result == 0) :
-             (*index |-> ?oi &*&
-              oi == dchaini_get_oldest_index_fp(dc) &*&
-              0 <= oi &*& oi < dchaini_irange_fp(dc) &*&
-              true == dchaini_allocated_fp(dc, oi) &*&
-              result == 1)); @*/
+    /*@ requires dchainip(?dc, cells) &*& *index |-> ?i; @*/
+    /*@ ensures dchainip(dc, cells) &*&
+                (dchaini_is_empty_fp(dc) ?
+                 (*index |-> i &*&
+                  result == 0) :
+                 (*index |-> ?oi &*&
+                  oi == dchaini_get_oldest_index_fp(dc) &*&
+                  0 <= oi &*& oi < dchaini_irange_fp(dc) &*&
+                  true == dchaini_allocated_fp(dc, oi) &*&
+                  result == 1)); @*/
 {
   //@ open dchainip(dc, cells);
   //@ int size = dchaini_irange_fp(dc);
@@ -2189,13 +2233,13 @@ int dchain_impl_get_oldest_index(struct dchain_cell *cells, int *index)
   @*/
 
 int dchain_impl_rejuvenate_index(struct dchain_cell *cells, int index)
-/*@ requires dchainip(?dc, cells) &*&
-             0 <= index &*& index < dchaini_irange_fp(dc); @*/
-/*@ ensures (dchaini_allocated_fp(dc, index) ?
-             (dchainip(dchaini_rejuvenate_fp(dc, index), cells) &*&
-              result == 1) :
-             (dchainip(dc, cells) &*&
-              result == 0)); @*/
+    /*@ requires dchainip(?dc, cells) &*&
+                 0 <= index &*& index < dchaini_irange_fp(dc); @*/
+    /*@ ensures (dchaini_allocated_fp(dc, index) ?
+                 (dchainip(dchaini_rejuvenate_fp(dc, index), cells) &*&
+                  result == 1) :
+                 (dchainip(dc, cells) &*&
+                  result == 0)); @*/
 {
   //@ open dchainip(dc, cells);
   //@ int size = dchaini_irange_fp(dc);
@@ -2248,7 +2292,8 @@ int dchain_impl_rejuvenate_index(struct dchain_cell *cells, int index)
                                FREE_LIST_HEAD); @*/
     //@ free_alloc_disjoint(al, fl, lifted, nat_of_int(size));
     //@ assert true == mem(lifted, al);
-    //@ alloc_list_prev_next_mem(cls, al, ALLOC_LIST_HEAD, lifted, ALLOC_LIST_HEAD);
+    //@ alloc_list_prev_next_mem(cls, al, ALLOC_LIST_HEAD, lifted,
+    //ALLOC_LIST_HEAD);
     /*@
     if (lifted_next == ALLOC_LIST_HEAD) {
       lbounded_then_start_nonmem(fl, ALLOC_LIST_HEAD);
@@ -2284,7 +2329,8 @@ int dchain_impl_rejuvenate_index(struct dchain_cell *cells, int index)
   struct dchain_cell *lifted_prevp = cells + lifted_prev;
   lifted_prevp->next = lifted_next;
 
-  //@ dcell nlifted_prev = dcell(dchain_cell_get_prev(nth(lifted_prev, cls)), lifted_next);
+  //@ dcell nlifted_prev = dcell(dchain_cell_get_prev(nth(lifted_prev, cls)),
+  //lifted_next);
   //@ list<dcell> ncls1 = update(lifted_prev, nlifted_prev, cls);
   /*@
     if (lifted_prev != ALLOC_LIST_HEAD) {
@@ -2307,7 +2353,8 @@ int dchain_impl_rejuvenate_index(struct dchain_cell *cells, int index)
   struct dchain_cell *lifted_nextp = cells + lifted_next;
   lifted_nextp->prev = lifted_prev;
 
-  //@ dcell nlifted_next = dcell(lifted_prev, dchain_cell_get_next(nth(lifted_next, cls)));
+  //@ dcell nlifted_next = dcell(lifted_prev,
+  //dchain_cell_get_next(nth(lifted_next, cls)));
   //@ list<dcell> ncls2 = update(lifted_next, nlifted_next, ncls1);
   /*@
     if (lifted_next != ALLOC_LIST_HEAD) {
@@ -2336,11 +2383,14 @@ int dchain_impl_rejuvenate_index(struct dchain_cell *cells, int index)
   //@ neq_mem_remove(FREE_LIST_HEAD, lifted, al);
   //@ alloc_list_remove(cls, al, ALLOC_LIST_HEAD, lifted);
 
-  //@ open alloc_listp(ncls2, remove(lifted, al), ALLOC_LIST_HEAD, ALLOC_LIST_HEAD);
+  //@ open alloc_listp(ncls2, remove(lifted, al), ALLOC_LIST_HEAD,
+  //ALLOC_LIST_HEAD);
   //@ assert remove(lifted, al) == cons(?oldest, _);
-  //@ close alloc_listp(ncls2, remove(lifted, al), ALLOC_LIST_HEAD, ALLOC_LIST_HEAD);
+  //@ close alloc_listp(ncls2, remove(lifted, al), ALLOC_LIST_HEAD,
+  //ALLOC_LIST_HEAD);
 
-  //@ last_alloc_list_mem(ncls2, remove(lifted, al), ALLOC_LIST_HEAD, ALLOC_LIST_HEAD);
+  //@ last_alloc_list_mem(ncls2, remove(lifted, al), ALLOC_LIST_HEAD,
+  //ALLOC_LIST_HEAD);
   //@ assert true == mem(al_head_prev, remove(lifted, al));
   //@ dcell nlifted = dcell(al_head_prev, ALLOC_LIST_HEAD);
   //@ list<dcell> ncls3 = update(lifted, nlifted, ncls2);
@@ -2357,8 +2407,10 @@ int dchain_impl_rejuvenate_index(struct dchain_cell *cells, int index)
   //@ forall_nth(cls, (dbounded)(size+INDEX_SHIFT), lifted_prev);
   //@ forall_nth(cls, (dbounded)(size+INDEX_SHIFT), lifted_next);
   //@ forall_nth(cls, (dbounded)(size+INDEX_SHIFT), ALLOC_LIST_HEAD);
-  //@ forall_update(cls, (dbounded)(size+INDEX_SHIFT), lifted_prev, nlifted_prev);
-  //@ forall_update(ncls1, (dbounded)(size+INDEX_SHIFT), lifted_next, nlifted_next);
+  //@ forall_update(cls, (dbounded)(size+INDEX_SHIFT), lifted_prev,
+  //nlifted_prev);
+  //@ forall_update(ncls1, (dbounded)(size+INDEX_SHIFT), lifted_next,
+  //nlifted_next);
   //@ forall_update(ncls2, (dbounded)(size+INDEX_SHIFT), lifted, nlifted);
   //@ forall_nth(ncls3, (dbounded)(size+INDEX_SHIFT), ALLOC_LIST_HEAD);
   //@ extract_cell(cells, ncls3, al_head_prev);
@@ -2368,27 +2420,34 @@ int dchain_impl_rejuvenate_index(struct dchain_cell *cells, int index)
   struct dchain_cell *al_head_prevp = cells + al_head_prev;
   al_head_prevp->next = lifted;
   //@ list<dcell> ncls4;
-  //@ dcell nal_head_prev = dcell(dchain_cell_get_prev(nth(al_head_prev, ncls2)), lifted);
+  //@ dcell nal_head_prev = dcell(dchain_cell_get_prev(nth(al_head_prev,
+  //ncls2)), lifted);
   //@ ncls4 = update(al_head_prev, nal_head_prev, ncls3);
   //@ drop_update_relevant(INDEX_SHIFT, al_head_prev, nal_head_prev, ncls3);
   /*@ take_update_unrelevant(al_head_prev-INDEX_SHIFT, al_head_prev-INDEX_SHIFT,
                              nal_head_prev, drop(INDEX_SHIFT, ncls3));
                              @*/
-  //@ drop_update_unrelevant(al_head_prev+1, al_head_prev, nal_head_prev, ncls3);
+  //@ drop_update_unrelevant(al_head_prev+1, al_head_prev, nal_head_prev,
+  //ncls3);
   //@ glue_cells(cells, ncls4, al_head_prev);
   al_head->prev = lifted;
-  //@ dcell nal_head = dcell(lifted, dchain_cell_get_next(nth(ALLOC_LIST_HEAD, ncls2)));
+  //@ dcell nal_head = dcell(lifted, dchain_cell_get_next(nth(ALLOC_LIST_HEAD,
+  //ncls2)));
   //@ list<dcell> ncls5 = update(ALLOC_LIST_HEAD, nal_head, ncls4);
   //@ drop_update_unrelevant(INDEX_SHIFT, ALLOC_LIST_HEAD, nal_head, ncls4);
   //@ attach_heads(cells, ncls5);
   //@ forall_nth(ncls2, (dbounded)(size+INDEX_SHIFT), al_head_prev);
-  //@ forall_update(ncls3, (dbounded)(size+INDEX_SHIFT), al_head_prev, nal_head_prev);
-  //@ forall_update(ncls4, (dbounded)(size+INDEX_SHIFT), ALLOC_LIST_HEAD, nal_head);
+  //@ forall_update(ncls3, (dbounded)(size+INDEX_SHIFT), al_head_prev,
+  //nal_head_prev);
+  //@ forall_update(ncls4, (dbounded)(size+INDEX_SHIFT), ALLOC_LIST_HEAD,
+  //nal_head);
   //@ lbounded_then_start_nonmem(remove(lifted, al), ALLOC_LIST_HEAD);
-  //@ assert alloc_listp(ncls2, remove(lifted, al), ALLOC_LIST_HEAD, ALLOC_LIST_HEAD);
+  //@ assert alloc_listp(ncls2, remove(lifted, al), ALLOC_LIST_HEAD,
+  //ALLOC_LIST_HEAD);
   //@ insert_alloc_list(ncls2, remove(lifted, al), ALLOC_LIST_HEAD, lifted);
   //@ update_update(ncls2, al_head_prev, nal_head_prev, lifted, nlifted);
-  //@ assert alloc_listp(ncls5, append(remove(lifted, al), cons(lifted, nil)), 0, 0);
+  //@ assert alloc_listp(ncls5, append(remove(lifted, al), cons(lifted, nil)),
+  //0, 0);
   /*@
     {
       assert true == mem(al_head_prev, remove(lifted, al));
@@ -2407,7 +2466,8 @@ int dchain_impl_rejuvenate_index(struct dchain_cell *cells, int index)
     }
     @*/
   //@ forall_remove(al, lifted, (lbounded)(INDEX_SHIFT));
-  //@ forall_append(remove(lifted, al), cons(lifted, nil), (lbounded)(INDEX_SHIFT));
+  //@ forall_append(remove(lifted, al), cons(lifted, nil),
+  //(lbounded)(INDEX_SHIFT));
   //@ rejuvenate_still_all_engaged(al, fl, lifted, nat_of_int(size));
   //@ list<int> alist = dchaini_alist_fp(dc);
   //@ shift_inds_remove(al, lifted, alist);
@@ -2419,10 +2479,10 @@ int dchain_impl_rejuvenate_index(struct dchain_cell *cells, int index)
 }
 
 int dchain_impl_is_index_allocated(struct dchain_cell *cells, int index)
-/*@ requires dchainip(?dc, cells) &*&
-             0 <= index &*& index < dchaini_irange_fp(dc); @*/
-/*@ ensures dchainip(dc, cells) &*&
-            dchaini_allocated_fp(dc, index) ? result == 1 : result == 0; @*/
+    /*@ requires dchainip(?dc, cells) &*&
+                 0 <= index &*& index < dchaini_irange_fp(dc); @*/
+    /*@ ensures dchainip(dc, cells) &*&
+                dchaini_allocated_fp(dc, index) ? result == 1 : result == 0; @*/
 {
   //@ open dchainip(dc, cells);
   //@ int size = dchaini_irange_fp(dc);

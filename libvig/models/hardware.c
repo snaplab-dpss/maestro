@@ -1,29 +1,27 @@
 #ifdef VIGOR_MODEL_HARDWARE
 
-#  include "hardware.h"
+#include "hardware.h"
 
-#  include <endian.h>
-#  include <stdbool.h>
-#  include <stdio.h>
-#  include <stdlib.h>
-#  include <string.h>
+#include <endian.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#  include "rte_ip.h"
-#  include "rte_ether.h"
-#  include "rte_cycles.h"         // to include the next one cleanly
-#  include "generic/rte_cycles.h" // for rte_delay_us_callback_register
+#include "rte_ip.h"
+#include "rte_ether.h"
+#include "rte_cycles.h"          // to include the next one cleanly
+#include "generic/rte_cycles.h"  // for rte_delay_us_callback_register
 
-#  include "libvig/verified/packet-io.h"
-#  include "libvig/models/verified/packet-io-control.h"
+#include "libvig/verified/packet-io.h"
+#include "libvig/models/verified/packet-io-control.h"
 
-#  include <klee/klee.h>
-
+#include <klee/klee.h>
 
 struct stub_mbuf_content {
   struct rte_ether_hdr ether;
   struct rte_ipv4_hdr ipv4;
 };
-
 
 typedef uint32_t (*stub_register_read)(struct stub_device *dev,
                                        uint32_t offset);
@@ -31,15 +29,15 @@ typedef uint32_t (*stub_register_write)(struct stub_device *dev,
                                         uint32_t offset, uint32_t new_value);
 
 struct stub_register {
-  bool present; // to distinguish registers we model from others
+  bool present;  // to distinguish registers we model from others
   uint32_t initial_value;
   bool readable;
-  uint32_t writable_mask;    // 0 = readonly, 1 = writeable
-  stub_register_read read;   // possibly NULL
-  stub_register_write write; // possibly NULL
+  uint32_t writable_mask;     // 0 = readonly, 1 = writeable
+  stub_register_read read;    // possibly NULL
+  stub_register_write write;  // possibly NULL
 };
 
-static struct stub_register REGISTERS[0x11060]; // index == address
+static struct stub_register REGISTERS[0x11060];  // index == address
 
 // Incremented at each delay; in nanoseconds.
 uint64_t TIME;
@@ -50,17 +48,17 @@ static bool tx_completed;
 static bool free_called;
 
 // Helper bit macros
-#  define GET_BIT(n, k) (((n) >> (k)) & 1)
-#  define SET_BIT(n, k, v)                                                     \
-    if ((v) == 0) {                                                            \
-      n = (n & ~(1 << (k)));                                                   \
-    } else {                                                                   \
-      n = (n | (1 << (k)));                                                    \
-    }
+#define GET_BIT(n, k) (((n) >> (k)) & 1)
+#define SET_BIT(n, k, v)   \
+  if ((v) == 0) {          \
+    n = (n & ~(1 << (k))); \
+  } else {                 \
+    n = (n | (1 << (k)));  \
+  }
 
 // Helper register macros
-#  define DEV_MEM(dev, offset, type) *((type *)(dev->mem_shadow + (offset)))
-#  define DEV_REG(dev, offset) DEV_MEM(dev, offset, uint32_t)
+#define DEV_MEM(dev, offset, type) *((type *)(dev->mem_shadow + (offset)))
+#define DEV_REG(dev, offset) DEV_MEM(dev, offset, uint32_t)
 
 // Unless otherwise stated, all citations here refer to
 // https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/82599-10-gbe-controller-datasheet.pdf
@@ -69,7 +67,7 @@ static bool free_called;
 // of them and they all start at 0, so we just leave them alone
 
 void stub_delay(unsigned int us) {
-  TIME += us * 1000; // TIME is in ns
+  TIME += us * 1000;  // TIME is in ns
 }
 
 static void stub_device_reset(struct stub_device *dev) {
@@ -84,11 +82,11 @@ static void stub_device_reset(struct stub_device *dev) {
 
 static void stub_device_start(struct stub_device *dev) {
   // Get the address of the receive descriptor for queue 0
-  uint64_t rdba = ((uint64_t)DEV_REG(dev, 0x01000))            // RDBAL
-                  | (((uint64_t)DEV_REG(dev, 0x01004)) << 32); // RDBAH
+  uint64_t rdba = ((uint64_t)DEV_REG(dev, 0x01000))             // RDBAL
+                  | (((uint64_t)DEV_REG(dev, 0x01004)) << 32);  // RDBAH
 
   // Clear the head of the descriptor
-  DEV_REG(dev, 0x01010) = 0; // RDH
+  DEV_REG(dev, 0x01010) = 0;  // RDH
   // Make sure we have enough space
   uint32_t rdt = DEV_REG(dev, 0x01018);
   klee_assert(rdt >= 1);
@@ -130,7 +128,7 @@ static void stub_device_start(struct stub_device *dev) {
   }
 
   struct stub_mbuf_content *mbuf_content =
-    (struct stub_mbuf_content*) malloc(MBUF_MIN_SIZE);
+      (struct stub_mbuf_content *)malloc(MBUF_MIN_SIZE);
   if (mbuf_content == NULL) {
     klee_abort();
   }
@@ -150,8 +148,10 @@ static void stub_device_start(struct stub_device *dev) {
   // Write the packet into the proper place
   memcpy((void *)mbuf_addr, mbuf_content, packet_len);
 
-  // check both locations of the register... bit hacky cause we don't really support register mirrors
-  if ((((DEV_REG(dev, 0x01014) >> 25) & 0b111) == 0) & (((DEV_REG(dev, 0x02100) >> 25) & 0b111) == 0)) {
+  // check both locations of the register... bit hacky cause we don't really
+  // support register mirrors
+  if ((((DEV_REG(dev, 0x01014) >> 25) & 0b111) == 0) &
+      (((DEV_REG(dev, 0x02100) >> 25) & 0b111) == 0)) {
     // Legacy descriptors, which TinyNF uses
 
     // First line unmodified
@@ -187,22 +187,21 @@ static void stub_device_start(struct stub_device *dev) {
   uint64_t wb0 =
       0b0000000000000000000000000000000010000000000000000000000000000000;
 
-
-#  if __BYTE_ORDER == __BIG_ENDIAN
+#if __BYTE_ORDER == __BIG_ENDIAN
   bool is_ipv4 = mbuf_content->ether.ether_type == 0x0800;
   bool is_ipv6 = mbuf_content->ether.ether_type == 0x86DD;
-#  else
+#else
   bool is_ipv4 = mbuf_content->ether.ether_type == 0x0008;
   bool is_ipv6 = mbuf_content->ether.ether_type == 0xDD86;
-#  endif
+#endif
 
   bool is_tcp = is_ipv4 & (mbuf_content->ipv4.next_proto_id == 6);
   bool is_udp = is_ipv4 & (mbuf_content->ipv4.next_proto_id == 17);
   bool is_sctp = is_ipv4 & (mbuf_content->ipv4.next_proto_id == 132);
 
-  // NOTE: Allowing all of those to be symbols means the symbex takes
-  // suuuuper-long... worth doing sometimes, but not all the time
-#  if 0
+// NOTE: Allowing all of those to be symbols means the symbex takes
+// suuuuper-long... worth doing sometimes, but not all the time
+#if 0
 	bool is_ip = is_ipv4 | is_ipv6;
 	bool is_ip_broadcast = is_ip & (klee_int("received_is_ip_broadcast") != 0);
 
@@ -215,13 +214,13 @@ static void stub_device_start(struct stub_device *dev) {
 
 	bool is_ipsec_esp = !not_ipsec & (klee_int("received_is_ipsec_esp") != 0);
 	bool is_ipsec_ah = !not_ipsec & (!is_ipsec_esp & (klee_int("received_is_ipsec_ah") != 0));
-#  else
+#else
   bool is_ip_broadcast = false, has_ip_ext = false, is_linksec = false,
        not_ipsec = true, is_nfs = false, is_ipsec_esp = false,
        is_ipsec_ah = false;
-#  endif
+#endif
 
-#  define BIT(index, cond) SET_BIT(wb0, index, cond);
+#define BIT(index, cond) SET_BIT(wb0, index, cond);
   BIT(4, is_ipv4);
   BIT(5, is_ipv4 & has_ip_ext);
   BIT(6, is_ipv6);
@@ -233,10 +232,10 @@ static void stub_device_start(struct stub_device *dev) {
   BIT(12, is_ipsec_esp);
   BIT(13, is_ipsec_ah);
   BIT(14, is_linksec);
-  BIT(15, 0); // non-L2 packet - TODO we should try that, but then the entire
-              // meaning of packet_type changes...
-  BIT(16, 0); // reserved
-#  undef BIT
+  BIT(15, 0);  // non-L2 packet - TODO we should try that, but then the entire
+               // meaning of packet_type changes...
+  BIT(16, 0);  // reserved
+#undef BIT
 
   // Second Line
   // 0-19: Extended Status / NEXTP
@@ -268,17 +267,18 @@ static void stub_device_start(struct stub_device *dev) {
 
   SET_BIT(wb1, 7,
           (is_ipv4 & (
-  // Multicast addr?
-#  if __BYTE_ORDER == __BIG_ENDIAN
+// Multicast addr?
+#if __BYTE_ORDER == __BIG_ENDIAN
                          ((mbuf_content->ipv4.dst_addr >= 0xE0000000) &
                           (mbuf_content->ipv4.dst_addr < 0xF0000000))
-#  else
+#else
                          (((mbuf_content->ipv4.dst_addr & 0xFF) >= 0xE0) &
                           ((mbuf_content->ipv4.dst_addr & 0xFF) < 0xF0))
-#  endif
+#endif
                          // Or just a broadcast, which can be pretty much
                          // anything
-                         | is_ip_broadcast)));
+                         |
+                         is_ip_broadcast)));
 
   // "The 82599 writes back the receive descriptor immediately following the
   // packet write into system memory."
@@ -313,10 +313,10 @@ static uint32_t stub_register_i2cctl_write(struct stub_device *dev,
   // I2C devices" NOTE: START setup and STOP setup are both >= TIME_LOW so we
   // just ignore them
   const int TIME_START_HOLD =
-      4000; // SDA must keep its value for this long after a start
+      4000;  // SDA must keep its value for this long after a start
   const int TIME_BETWEEN_STOP_START = 4700;
-  const int TIME_LOW = 4700;  // minimum time for the clock to be in LOW
-  const int TIME_HIGH = 4000; // minimum time for the clock to be in HIGH
+  const int TIME_LOW = 4700;   // minimum time for the clock to be in LOW
+  const int TIME_HIGH = 4000;  // minimum time for the clock to be in HIGH
 
   // I2C/SFP States
   // -1 is default
@@ -424,7 +424,7 @@ static uint32_t stub_register_i2cctl_write(struct stub_device *dev,
       //  line LOW and it remains stable LOW suring the HIGH period of this
       //  clock pulse."
 
-      SET_BIT(new_value, 2, 0); // bit 2 is "data in"
+      SET_BIT(new_value, 2, 0);  // bit 2 is "data in"
 
       // Set the state since we sent an ACK
       // If it's an I2C write, the SFP address follows
@@ -489,7 +489,7 @@ static uint32_t stub_register_i2cctl_write(struct stub_device *dev,
       // "To specify a sequential read, the host responds with an acknowledge"
       // "The sequence is terminated when the host responds with a NACK and a
       // STOP"
-      if (sda_new == 0) { // remember, 0 is ACK because it's a pull-up
+      if (sda_new == 0) {  // remember, 0 is ACK because it's a pull-up
         dev->sfp_address++;
       } else {
         dev->i2c_state = SFP_END;
@@ -498,90 +498,90 @@ static uint32_t stub_register_i2cctl_write(struct stub_device *dev,
       return new_value;
     }
 
-    cursor = 7 - cursor; // "Data is transferred with the most significant bit
-                         // (MSB) first"
+    cursor = 7 - cursor;  // "Data is transferred with the most significant bit
+                          // (MSB) first"
 
     int sfp_registers[] = {
-      // 0: Identifier
-      0x03, // SFP/SFP+
+        // 0: Identifier
+        0x03,  // SFP/SFP+
 
-      // 1: Extended identifier
-      0x00, // nothing TODO
+        // 1: Extended identifier
+        0x00,  // nothing TODO
 
-      // 2: Connector Type
-      //    Table 4-3 from https://doc.xdevs.com/doc/Seagate/SFF-8024.PDF
-      0x00, // unknown/unspecified TODO
+        // 2: Connector Type
+        //    Table 4-3 from https://doc.xdevs.com/doc/Seagate/SFF-8024.PDF
+        0x00,  // unknown/unspecified TODO
 
-      // 3-10: Transciever
-      // https://www.intel.com/content/www/us/en/support/articles/000005528/network-and-i-o/ethernet-products.html
-      // says that SR and LR are supported
-      // table 5-3 says those are byte 3 bit 4 and byte 3 bit 5 respectively
-      // let's do SR for now TODO
-      0x10, // 3
-      0x00, // 4
-      0x00, // 5
-      0x00, // 6
-      0x00, // 7
-      0x00, // 8
-      0x00, // 9
-      0x00, // 10
+        // 3-10: Transciever
+        // https://www.intel.com/content/www/us/en/support/articles/000005528/network-and-i-o/ethernet-products.html
+        // says that SR and LR are supported
+        // table 5-3 says those are byte 3 bit 4 and byte 3 bit 5 respectively
+        // let's do SR for now TODO
+        0x10,  // 3
+        0x00,  // 4
+        0x00,  // 5
+        0x00,  // 6
+        0x00,  // 7
+        0x00,  // 8
+        0x00,  // 9
+        0x00,  // 10
 
-      // 11: Encoding
-      //     table 4-2 from SFF-8024
-      0x00, // unknown/unspecified TODO
+        // 11: Encoding
+        //     table 4-2 from SFF-8024
+        0x00,  // unknown/unspecified TODO
 
-      // 12: Nominal signaling rate, units of 100 Mb/s
-      100, // 10 Gb/s
+        // 12: Nominal signaling rate, units of 100 Mb/s
+        100,  // 10 Gb/s
 
-      // 13: Rate identifier (table 5-6)
-      0x00, // unknown TODO
+        // 13: Rate identifier (table 5-6)
+        0x00,  // unknown TODO
 
-      // 14: Length, unit of kilometers
-      0x00, // not that long... TODO?
+        // 14: Length, unit of kilometers
+        0x00,  // not that long... TODO?
 
-      // 15: Length, unit of 100 meters
-      0x01, // total length 100 meters
+        // 15: Length, unit of 100 meters
+        0x01,  // total length 100 meters
 
-      // 16: Length for 50um OM2 fiber, unit of 10 meters
-      0x01, // TODO?
+        // 16: Length for 50um OM2 fiber, unit of 10 meters
+        0x01,  // TODO?
 
-      // 17: Length for 62.5um OM2 fiber, unit of 10 meters
-      0x01, // TODO?
+        // 17: Length for 62.5um OM2 fiber, unit of 10 meters
+        0x01,  // TODO?
 
-      // 18: Length for 50um OM4 fiber, unit of 10m; or copper cable, unit of 1m
-      0x01, // TODO?
+        // 18: Length for 50um OM4 fiber, unit of 10m; or copper cable, unit of
+        // 1m
+        0x01,  // TODO?
 
-      // 19: Length for 50um OM3 fiber, unit of 10m
-      0x01, // TODO?
+        // 19: Length for 50um OM3 fiber, unit of 10m
+        0x01,  // TODO?
 
-      // 20-35: SFP Vendor Name, ASCII "padded on the right with ASCII spaces"
-      'S', 'T', 'U', 'B', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
-      ' ',
+        // 20-35: SFP Vendor Name, ASCII "padded on the right with ASCII spaces"
+        'S',  'T',  'U',  'B',  ' ', ' ', ' ', ' ',
+        ' ',  ' ',  ' ',  ' ',  ' ', ' ', ' ', ' ',
 
-      // 36: Transciever extended code (table 4-4 from SFF-8024)
-      0x00, // unknown/unspecified TODO
+        // 36: Transciever extended code (table 4-4 from SFF-8024)
+        0x00,  // unknown/unspecified TODO
 
-      // 37-39: IEEE company ID (OUI)
-      //     http://standards-oui.ieee.org/oui.txt
-      0x00, 0xA0, 0xC9, // Intel (picked one at random...)
+        // 37-39: IEEE company ID (OUI)
+        //     http://standards-oui.ieee.org/oui.txt
+        0x00, 0xA0, 0xC9,  // Intel (picked one at random...)
 
-      // 40-55: Vendor Part Number
-      //        see bits 3-10 above for link with PNs
-      'F', 'T', 'L', 'X', '8', '5', '7', '1', 'D', '3', 'B', 'C', 'V', 'I', 'T',
-      '1',
+        // 40-55: Vendor Part Number
+        //        see bits 3-10 above for link with PNs
+        'F',  'T',  'L',  'X',  '8', '5', '7', '1',
+        'D',  '3',  'B',  'C',  'V', 'I', 'T', '1',
 
-      // 56-59: Vendor Revision
-      0x00, 0x00, 0x00, 0x01, // TODO?
+        // 56-59: Vendor Revision
+        0x00, 0x00, 0x00, 0x01,  // TODO?
 
-      // 60-61: Wavelength
-      0x00, 0x00, // unknown TODO
+        // 60-61: Wavelength
+        0x00, 0x00,  // unknown TODO
 
-      // 62: Unallocated
-      -1,
+        // 62: Unallocated
+        -1,
 
-      // 63: CC_BASE - check code
-      0
-    };
+        // 63: CC_BASE - check code
+        0};
 
     // "The check code is a one byte code that can be used to verify that the
     // first 64 bytes of two-wire interface information in the SFP is valid.
@@ -611,7 +611,7 @@ static uint32_t stub_register_i2cctl_write(struct stub_device *dev,
 
   //	klee_assert(dev->i2c_state != SFP_END); // should have gotten a STOP?
 
-  return new_value; // TODO
+  return new_value;  // TODO
 }
 
 static uint32_t stub_register_ctrl_write(struct stub_device *dev,
@@ -658,103 +658,53 @@ static uint32_t stub_register_eerd_write(struct stub_device *dev,
   }
 
   // "EEPROM General Map" page 217
-  uint16_t eeprom_map[] = {
-    0, // 0x00
-    0, // 0x01,
-    0, // 0x02 - UNDOCUMENTED
-    0, // 0x03
-    0, // 0x04
-    0, // 0x05
-    0, // 0x06
-    0, // 0x07
-    0, // 0x08
-    0, // 0x09
-    0, // 0x0A
-    0, // 0x0B
-    0, // 0x0C
-    0, // 0x0D
-    0, // 0x0E
-    0, // 0x0F
-    0,
-    0,
-    0,
-    0,
-    0, // 0x10-0x14
-    0,
-    0, // 0x15-0x16
-    0, // 0x17
-    0,
-    0, // 0x18-0x19
-    0, // 0x20
-    0,
-    0,
-    0,
-    0,
-    0, // 0x21-25
-    0, // 0x26
-    0, // 0x27
-    0, // 0x28
-    0,
-    0,
-    0,
-    0,
-    0,
-    0, // 0x29-0x2E
-    0, // 0x2F
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0, // 0x30-0x36
-    0, // 0x37
-    0, // 0x38
-    0,
-    0,
-    0,
-    0,
-    0,
-    0, // 0x39-0x3E
-    0, // 0x3F - CHECKSUM, LEAVE ZERO HERE
-    // begin of firmware module
-    0, // 0x0
-    0, // 0x1
-    0, // 0x2
-    0, // 0x3
-    0, // 0x4 - Pass Through Patch Configuration Pointer
-    0, // 0x5
-    0, // 0x6
-    0, // 0x7
-    0, // 0x8
-    0, // 0x9
-    0, // 0xA
-    // begin of Pass Through Patch Condiguration
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-  };
+  uint16_t eeprom_map[] = {0,                    // 0x00
+                           0,                    // 0x01,
+                           0,                    // 0x02 - UNDOCUMENTED
+                           0,                    // 0x03
+                           0,                    // 0x04
+                           0,                    // 0x05
+                           0,                    // 0x06
+                           0,                    // 0x07
+                           0,                    // 0x08
+                           0,                    // 0x09
+                           0,                    // 0x0A
+                           0,                    // 0x0B
+                           0,                    // 0x0C
+                           0,                    // 0x0D
+                           0,                    // 0x0E
+                           0,                    // 0x0F
+                           0, 0, 0, 0, 0,        // 0x10-0x14
+                           0, 0,                 // 0x15-0x16
+                           0,                    // 0x17
+                           0, 0,                 // 0x18-0x19
+                           0,                    // 0x20
+                           0, 0, 0, 0, 0,        // 0x21-25
+                           0,                    // 0x26
+                           0,                    // 0x27
+                           0,                    // 0x28
+                           0, 0, 0, 0, 0, 0,     // 0x29-0x2E
+                           0,                    // 0x2F
+                           0, 0, 0, 0, 0, 0, 0,  // 0x30-0x36
+                           0,                    // 0x37
+                           0,                    // 0x38
+                           0, 0, 0, 0, 0, 0,     // 0x39-0x3E
+                           0,  // 0x3F - CHECKSUM, LEAVE ZERO HERE
+                           // begin of firmware module
+                           0,  // 0x0
+                           0,  // 0x1
+                           0,  // 0x2
+                           0,  // 0x3
+                           0,  // 0x4 - Pass Through Patch Configuration Pointer
+                           0,  // 0x5
+                           0,  // 0x6
+                           0,  // 0x7
+                           0,  // 0x8
+                           0,  // 0x9
+                           0,  // 0xA
+                           // begin of Pass Through Patch Condiguration
+                           0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                           0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, };
   // Set the FW pointer to just after the basic block
   eeprom_map[0x0F] = 0x3F + 1;
   // Set the pass through patch conf pointer to just after the firmware module
@@ -802,27 +752,27 @@ static uint32_t stub_register_msca_write(struct stub_device *dev,
   if (((new_value >> 28) & 0b11) == 0b00) {
     int opcode = (new_value >> 26) & 0b11;
 
-    if (opcode == 0b00) { // address operation
+    if (opcode == 0b00) {  // address operation
       klee_assert(dev->current_mdi_address == -1);
       dev->current_mdi_address = new_value & 0xFF;
-    } else if (opcode == 0b11) { // read operation
+    } else if (opcode == 0b11) {  // read operation
       klee_assert(dev->current_mdi_address != -1);
 
       int phy_addr = (new_value >> 21) & 0b11111;
       int addr = new_value & 0xFF;
 
       uint32_t result = 0;
-      if (dev->current_mdi_address == 0) {        // control byte
-        result = 0x8000;                          // reset flag set
-      } else if (dev->current_mdi_address == 2) { // ID high byte
-        result = 1;                               // just needs to be nonzero
+      if (dev->current_mdi_address == 0) {         // control byte
+        result = 0x8000;                           // reset flag set
+      } else if (dev->current_mdi_address == 2) {  // ID high byte
+        result = 1;                                // just needs to be nonzero
       }
 
       DEV_REG(dev, 0x04260) =
-          result << 16; // register MSRWD holds the result in the upper 16 bits
+          result << 16;  // register MSRWD holds the result in the upper 16 bits
 
       dev->current_mdi_address = -1;
-    } else if (opcode == 0b01) { // write operation
+    } else if (opcode == 0b01) {  // write operation
       klee_assert(dev->current_mdi_address != -1);
 
       int phy_addr = (new_value >> 21) & 0b11111;
@@ -834,11 +784,11 @@ static uint32_t stub_register_msca_write(struct stub_device *dev,
 
       dev->current_mdi_address = -1;
     } else {
-      klee_abort(); // unsupported
+      klee_abort();  // unsupported
     }
   } else {
     // clause 22 format
-    klee_abort(); // unsupported
+    klee_abort();  // unsupported
   }
 
   return new_value;
@@ -880,8 +830,9 @@ static uint32_t stub_register_tdt_write(struct stub_device *dev,
   int n = (offset - 0x06018) / 0x40;
 
   // Get the address of the transmit descriptor for queue 0
-  uint64_t tdba = ((uint64_t)DEV_REG(dev, 0x06000 + 0x40*n))            // TDBAL
-                  | (((uint64_t)DEV_REG(dev, 0x06004 + 0x40*n)) << 32); // TDBAH
+  uint64_t tdba =
+      ((uint64_t)DEV_REG(dev, 0x06000 + 0x40 * n))             // TDBAL
+      | (((uint64_t)DEV_REG(dev, 0x06004 + 0x40 * n)) << 32);  // TDBAH
 
   // Descriptor is 128 bits, see page 353, table 7-39 "Descriptor Read Format"
   // (which the NIC reads to know how to send a packet)
@@ -901,13 +852,14 @@ static uint32_t stub_register_tdt_write(struct stub_device *dev,
   uint16_t buf_len;
   // Legacy descriptors (TinyNF) or advanced ones (DPDK)?
   if (GET_BIT(buf_props, 29) == 0) {
-    // this should be outside of the if, but our DPDK patches write 0 to TDT for simplicity...
+    // this should be outside of the if, but our DPDK patches write 0 to TDT for
+    // simplicity...
     if (new_value == 0) {
       return 0;
     }
 
     klee_assert(GET_BIT(buf_props, 24) == 1);
-    klee_assert(GET_BIT(buf_props, 24+1) == 1);
+    klee_assert(GET_BIT(buf_props, 24 + 1) == 1);
     klee_assert(GET_BIT(buf_props, 32) == 0);
 
     buf_len = buf_props & 0xFF;
@@ -922,11 +874,13 @@ static uint32_t stub_register_tdt_write(struct stub_device *dev,
     // 18: Whetner LinkSec is applied
     // 19: Whether the packet has an IEEE1588 timestamp
     // 20-23: Descriptor type, must be 0011
-    // 24: End of Packet, should be 1 since we don't support multi-buffer packets
+    // 24: End of Packet, should be 1 since we don't support multi-buffer
+    // packets
     // 25: Insert FCS (should be 0)
     // 26: Reserved
     // 27: Report Status, whether SW wants HW to report DMA completion status in
-    // addition to an interrupt 28: Reserved 29: Descriptor Extension (must be 1)
+    // addition to an interrupt 28: Reserved 29: Descriptor Extension (must be
+    // 1)
     // 30: VLAN Packet (should be 0)
     // 31: Transmit Segmentation Enable (should be 0)
     // 32: Descriptor Done (must be 0, we'll set to 1 once we're done)
@@ -968,7 +922,7 @@ static uint32_t stub_register_tdt_write(struct stub_device *dev,
   }
 
   // Clear the head of the descriptor
-  DEV_REG(dev, 0x06010 + 0x40*n) = 0; // TDH
+  DEV_REG(dev, 0x06010 + 0x40 *n) = 0;  // TDH
 
   // In RDRXCTL:
   uint32_t rdrxctl = DEV_REG(dev, 0x02F00);
@@ -980,7 +934,7 @@ static uint32_t stub_register_tdt_write(struct stub_device *dev,
 
   // "Software should set [RSCACKC, bit 25] to 1" only makes sense
   //  if RSC is enabled.
-  uint32_t rscctl = DEV_REG(dev, 0x0102c + 0x40*n);
+  uint32_t rscctl = DEV_REG(dev, 0x0102c + 0x40 * n);
 
   klee_assert((GET_BIT(rdrxctl, 25) == 1) || (GET_BIT(rscctl, 0) == 0));
   SET_BIT(rdrxctl, 25, 0);
@@ -1001,7 +955,7 @@ static uint32_t stub_register_tdt_write(struct stub_device *dev,
 
   // Write phase
   // descr[0] is reserved, no change
-  descr[1] = descr[1] | ((uint64_t)1) << 32; // Set Descriptor Done, bit 32
+  descr[1] = descr[1] | ((uint64_t)1) << 32;  // Set Descriptor Done, bit 32
 
   return new_value;
 }
@@ -1027,7 +981,7 @@ static uint32_t stub_register_swsm_read(struct stub_device *dev,
                                         uint32_t offset) {
   uint32_t current_value = DEV_REG(dev, offset);
   SET_BIT(current_value, 1,
-          1); // LSB is the semaphore bit - always set after a read
+          1);  // LSB is the semaphore bit - always set after a read
   return current_value;
 }
 
@@ -1042,7 +996,7 @@ static uint32_t stub_register_swsm_write(struct stub_device *dev,
   klee_assert((GET_BIT(current_value, 1) != 0) | (GET_BIT(new_value, 1) != 1) |
               (GET_BIT(current_value, 0) == 1));
 
-  return new_value; // OK, we only check
+  return new_value;  // OK, we only check
 }
 
 static uint32_t stub_register_swfwsync_write(struct stub_device *dev,
@@ -1060,7 +1014,7 @@ static uint32_t stub_register_swfwsync_write(struct stub_device *dev,
     klee_assert(GET_BIT(new_value, n) + GET_BIT(current_value, n + 5) <= 1);
   }
 
-  return new_value; // OK, we only check
+  return new_value;  // OK, we only check
 }
 
 static uint32_t stub_register_autoc_write(struct stub_device *dev,
@@ -1082,17 +1036,17 @@ static uint32_t stub_register_esdp_write(struct stub_device *dev,
 }
 
 static void stub_registers_init(void) {
-#  define REG(addr, val, mask)                                                 \
-    do {                                                                       \
-      klee_assert(!REGISTERS[addr].present);                                   \
-      struct stub_register reg = { .present = true,                            \
-                                   .initial_value = val,                       \
-                                   .readable = true,                           \
-                                   .writable_mask = mask,                      \
-                                   .read = NULL,                               \
-                                   .write = NULL };                            \
-      REGISTERS[addr] = reg;                                                   \
-    } while (0);
+#define REG(addr, val, mask)                           \
+  do {                                                 \
+    klee_assert(!REGISTERS[addr].present);             \
+    struct stub_register reg = {.present = true,       \
+                                .initial_value = val,  \
+                                .readable = true,      \
+                                .writable_mask = mask, \
+                                .read = NULL,          \
+                                .write = NULL};        \
+    REGISTERS[addr] = reg;                             \
+  } while (0);
 
   // page 543
   // Device Control Register — CTRL (0x00000 / 0x00004; RW)
@@ -1146,7 +1100,8 @@ static void stub_registers_init(void) {
   // NOTE: The ixgbe driver checks that SDP2 value is 1 and SDP3 value is 0,
   // and assumes the link is down otherwise. TODO Why?
   // Also, it turns off a laser by writing here...
-  // This register in general seems to be the home of a lot of dubious undocumented
+  // This register in general seems to be the home of a lot of dubious
+  // undocumented
   // stuff that we have to live with. :(
 
   // 0-7: SDPn Data Value, where 'n' is bit number (0 - default)
@@ -1167,10 +1122,10 @@ static void stub_registers_init(void) {
   // 2: I2C Data In (0 - default; read-only)
   // 3: I2C Data Out (0 - default)
   // 4-31: Reserved
-  REG(0x00028, 0b00000000000000000000000000001111, // in a pull-up system like
-                                                   // I2C, 1 is the default
-      0b00000000000000000000000000001111);         // NOTE: 0 and 2 are RW, see
-                                           // i2cctl_write for an explanation
+  REG(0x00028, 0b00000000000000000000000000001111,  // in a pull-up system like
+                                                    // I2C, 1 is the default
+      0b00000000000000000000000000001111);          // NOTE: 0 and 2 are RW, see
+  // i2cctl_write for an explanation
   REGISTERS[0x00028].write = stub_register_i2cctl_write;
 
   // page 549
@@ -1239,7 +1194,8 @@ static void stub_registers_init(void) {
 
   // page 597
   // General Purpose Interrupt Enable - GPIE (0x00898; RW)
-  // All bits default to 0 and deal with MSI-X interrupts, which we don't care about
+  // All bits default to 0 and deal with MSI-X interrupts, which we don't care
+  // about
   REG(0x00898, 0b00000000000000000000000000000000,
       0b00000000000000000000000000000000);
 
@@ -1263,13 +1219,13 @@ static void stub_registers_init(void) {
   // compatibility with the 82598."
   for (int n = 0; n <= 127; n++) {
     if (n <= 15) {
-      REG(0x0100C + 0x40*n, 0b00000000000000001010001000000000,
+      REG(0x0100C + 0x40 * n, 0b00000000000000001010001000000000,
           0b11111111000000001010000000000000);
     }
 
     int address =
-        n <= 15 ? (0x02200 + 4 * n)
-                : n <= 63 ? (0x0100C + 0x40 * n) : (0x0D00C + 0x40 * (n - 64));
+        n <= 15 ? (0x02200 + 4 * n) : n <= 63 ? (0x0100C + 0x40 * n)
+                                              : (0x0D00C + 0x40 * (n - 64));
 
     // 0-4: Reserved (0)
     // 5: Descriptor DCA EN (0 - not enabled)
@@ -1304,13 +1260,13 @@ static void stub_registers_init(void) {
   // (000)
   for (int n = 0; n <= 127; n++) {
     if (n <= 15) {
-          REG(0x01014 + 0x40*n, 0b00000000000000000000010000000010,
-              0b00010011110000000011111100011111);
+      REG(0x01014 + 0x40 * n, 0b00000000000000000000010000000010,
+          0b00010011110000000011111100011111);
     }
 
-    int addr =
-        n <= 15 ? (0x02100 + 4 * n)
-                : n <= 53 ? (0x01014 + 0x40 * n) : (0x0D014 + 0x40 * (n - 64));
+    int addr = n <= 15 ? (0x02100 + 4 * n) : n <= 53
+                                                 ? (0x01014 + 0x40 * n)
+                                                 : (0x0D014 + 0x40 * (n - 64));
     REG(addr, 0b00000000000000000000010000000010,
         0b00010011110000000011111100011111);
   }
@@ -1572,8 +1528,8 @@ static void stub_registers_init(void) {
   // 30: MDI Command (0 - ready)
   // 31: Reserved
   REG(0x0425C, 0b00000000000000000000000000000000,
-      0b01011111111111111111111111111111); // bit 29 is read-only since it
-                                           // cannot be 1
+      0b01011111111111111111111111111111);  // bit 29 is read-only since it
+                                            // cannot be 1
   REGISTERS[0x0425C].write = stub_register_msca_write;
 
   // page 669
@@ -1884,7 +1840,7 @@ static void stub_registers_init(void) {
 
   // 0-31: Receive Address Low, lower 32 bits of the MAC addr ("field is defined
   // in big endian")
-  REG(0x0A200, 0x45678900, // FIXME not needed? NOTE: see VigNAT makefile
+  REG(0x0A200, 0x45678900,  // FIXME not needed? NOTE: see VigNAT makefile
       0xFFFFFFFF);
   for (int n = 1; n <= 127; n++) {
     REG(0x0A200 + 8 * n, 0x00000000, 0xFFFFFFFF);
@@ -1896,7 +1852,7 @@ static void stub_registers_init(void) {
 
   // 0-15: Receive Address High, upper 16 bits of MAC addr ("field is defined in
   // big endian") 16-30: Reserved (0) 31: Address Valid (0/1 - in/valid)
-  REG(0x0A204, 0x80000123, // FIXME not needed? NOTE: see RAL
+  REG(0x0A204, 0x80000123,  // FIXME not needed? NOTE: see RAL
       0x8000FFFF);
   for (int n = 1; n <= 127; n++) {
     REG(0x0A204 + 8 * n, 0x00000000, 0x8000FFFF);
@@ -2074,126 +2030,126 @@ static void stub_registers_init(void) {
   // starting at page 687
   // Statistics registers; all of them are 32-bit numbers and cleared on read
   const int stat_regs[] = {
-    0x04000, // CRC Error Count — CRCERRS
-    0x04004, // Illegal Byte Error Count — ILLERRC
-    0x04008, // Error Byte Packet Count — ERRBC
-    0x03FA0, // Rx Missed Packets Count — RXMPC[0]
-    0x03FA4, // Rx Missed Packets Count — RXMPC[1]
-    0x03FA8, // Rx Missed Packets Count — RXMPC[2]
-    0x03FAC, // Rx Missed Packets Count — RXMPC[3]
-    0x03FB0, // Rx Missed Packets Count — RXMPC[4]
-    0x03FB4, // Rx Missed Packets Count — RXMPC[5]
-    0x03FB8, // Rx Missed Packets Count — RXMPC[6]
-    0x03FBC, // Rx Missed Packets Count — RXMPC[7]
-    0x04034, // MAC Local Fault Count — MLFC
-    0x04038, // MAC Remote Fault Count — MRFC
-    0x04040, // Receive Length Error Count — RLEC
-    0x04292, // MAC Flow Control Register - MFLCN
-    0x08780, // Switch Security Violation Packet Count — SSVPC
-    0x03F60, // Link XON Transmitted Count — LXONTXC
-    0x041A4, // Link XON Received Count — LXONRXCNT
-    0x03F68, // Link XOFF Transmitted Count — LXOFFTXC
-    0x041A8, // Link XOFF Received Count — LXOFFRXCNT
-    0x03F00, // Priority XON Transmitted Count — PXONTXC[0]
-    0x03F04, // Priority XON Transmitted Count — PXONTXC[1]
-    0x03F08, // Priority XON Transmitted Count — PXONTXC[2]
-    0x03F0C, // Priority XON Transmitted Count — PXONTXC[3]
-    0x03F10, // Priority XON Transmitted Count — PXONTXC[4]
-    0x03F14, // Priority XON Transmitted Count — PXONTXC[5]
-    0x03F18, // Priority XON Transmitted Count — PXONTXC[6]
-    0x03F1C, // Priority XON Transmitted Count — PXONTXC[7]
-    0x04140, // Priority XON Received Count — PXONRXCNT[0]
-    0x04144, // Priority XON Received Count — PXONRXCNT[1]
-    0x04148, // Priority XON Received Count — PXONRXCNT[2]
-    0x0414C, // Priority XON Received Count — PXONRXCNT[3]
-    0x04150, // Priority XON Received Count — PXONRXCNT[4]
-    0x04154, // Priority XON Received Count — PXONRXCNT[5]
-    0x04158, // Priority XON Received Count — PXONRXCNT[6]
-    0x0415C, // Priority XON Received Count — PXONRXCNT[7]
-    0x03F20, // Priority XOFF Transmitted Count — PXOFFTXCNT[0]
-    0x03F24, // Priority XOFF Transmitted Count — PXOFFTXCNT[1]
-    0x03F28, // Priority XOFF Transmitted Count — PXOFFTXCNT[2]
-    0x03F2C, // Priority XOFF Transmitted Count — PXOFFTXCNT[3]
-    0x03F30, // Priority XOFF Transmitted Count — PXOFFTXCNT[4]
-    0x03F34, // Priority XOFF Transmitted Count — PXOFFTXCNT[5]
-    0x03F38, // Priority XOFF Transmitted Count — PXOFFTXCNT[6]
-    0x03F3C, // Priority XOFF Transmitted Count — PXOFFTXCNT[7]
-    0x04160, // Priority XOFF Received Count — PXOFFRXCNT[0]
-    0x04164, // Priority XOFF Received Count — PXOFFRXCNT[1]
-    0x04168, // Priority XOFF Received Count — PXOFFRXCNT[2]
-    0x0416C, // Priority XOFF Received Count — PXOFFRXCNT[3]
-    0x04170, // Priority XOFF Received Count — PXOFFRXCNT[4]
-    0x04174, // Priority XOFF Received Count — PXOFFRXCNT[5]
-    0x04178, // Priority XOFF Received Count — PXOFFRXCNT[6]
-    0x0417C, // Priority XOFF Received Count — PXOFFRXCNT[7]
-    0x03240, // Priority XON to XOFF Count — PXON2OFFCNT[0]
-    0x03244, // Priority XON to XOFF Count — PXON2OFFCNT[1]
-    0x03248, // Priority XON to XOFF Count — PXON2OFFCNT[2]
-    0x0324C, // Priority XON to XOFF Count — PXON2OFFCNT[3]
-    0x03250, // Priority XON to XOFF Count — PXON2OFFCNT[4]
-    0x03254, // Priority XON to XOFF Count — PXON2OFFCNT[5]
-    0x03258, // Priority XON to XOFF Count — PXON2OFFCNT[6]
-    0x0325C, // Priority XON to XOFF Count — PXON2OFFCNT[7]
-    0x041B0, // Good Rx Non-Filtered Packet Counter — RXNFGPC
-    0x041B4, // Good Rx Non-Filter Byte Counter Low — RXNFGBCL
-    0x041B8, // Good Rx Non-Filter Byte Counter High — RXNFGBCH
-    0x02F50, // DMA Good Rx Packet Counter — RXDGPC
-    0x02F54, // DMA Good Rx Byte Counter Low — RXDGBCL
-    0x02F58, // DMA Good Rx Byte Counter High — RXDGBCH
-    0x02F5C, // DMA Duplicated Good Rx Packet Counter — RXDDPC
-    0x02F60, // DMA Duplicated Good Rx Byte Counter Low — RXDDBCL
-    0x02F64, // DMA Duplicated Good Rx Byte Counter High — RXDDBCH
-    0x02F68, // DMA Good Rx LPBK Packet Counter — RXLPBKPC
-    0x02F6C, // DMA Good Rx LPBK Byte Counter Low — RXLPBKBCL
-    0x02F70, // DMA Good Rx LPBK Byte Counter High — RXLPBKBCH
-    0x02F74, // DMA Duplicated Good Rx LPBK Packet Counter — RXDLPBKPC
-    0x02F78, // DMA Duplicated Good Rx LPBK Byte Counter Low — RXDLPBKBCL
-    0x02F7C, // DMA Duplicated Good Rx LPBK Byte Counter High — RXDLPBKBCH
-    0x04080, // Good Packets Transmitted Count — GPTC
-    0x04090, // Good Octets Transmitted Count Low — GOTCL
-    0x04094, // Good Octets Transmitted Count High — GOTCH
-    0x087A0, // DMA Good Tx Packet Counter – TXDGPC
-    0x087A4, // DMA Good Tx Byte Counter Low – TXDGBCL
-    0x087A8, // DMA Good Tx Byte Counter High – TXDGBCH
-    0x040A4, // Receive Undersize Count — RUC
-    0x040A8, // Receive Fragment Count — RFC
-    0x040AC, // Receive Oversize Count — ROC
-    0x040B0, // Receive Jabber Count — RJC
-    0x040C0, // Total Octets Received Low — TORL
-    0x040C4, // Total Octets Received High — TORH
-    0x040D0, // Total Packets Received — TPR
-    0x040D4, // Total Packets Transmitted — TPT
-    0x040D8, // Packets Transmitted (64 Bytes) Count — PTC64
-    0x040DC, // Packets Transmitted [65–127 Bytes] Count — PTC127
-    0x040E0, // Packets Transmitted [128–255 Bytes] Count — PTC255
-    0x040E4, // Packets Transmitted [256–511 Bytes] Count — PTC511
-    0x040E8, // Packets Transmitted [512–1023 Bytes] Count — PTC1023
-    0x040EC, // Packets Transmitted [Greater Than 1024 Bytes] Count — PTC1522
-    0x040F0, // Multicast Packets Transmitted Count — MPTC
-    0x040F4, // Broadcast Packets Transmitted Count — BPTC
-    0x04010, // MAC Short Packet Discard Count — MSPDC
-    0x04120, // XSUM Error Count — XEC
-    0x05118, // FC CRC Error Count — FCCRC
-    0x0241C, // FCoE Rx Packets Dropped Count — FCOERPDC
-    0x02424, // FC Last Error Count — FCLAST
-    0x02428, // FCoE Packets Received Count — FCOEPRC
-    0x0242C, // FCOE DWord Received Count — FCOEDWRC
-    0x08784, // FCoE Packets Transmitted Count — FCOEPTC
-    0x08788, // FCoE DWord Transmitted Count — FCOEDWTC
-    0x0EE50, // Flow Director Filters Usage Statistics - FDIRUSTAT (page 657)
-    0x0EE54, // Flow Director Filters Failed Usage Statistics - FDIRFSTAT
-    0x0EE58, // Flow Director Filters Match Statistics — FDIRMATCH
-    0x0EE5C, // Flow Director Filters Miss Match Statistics — FDIRMISS (page
-             // 657)
-    // starting on page 639
-    0x08F64, // LinkSec Rx Packet OK — LSECRXOK[0]
-    0x08F68, // LinkSec Rx Packet OK — LSECRXOK[1]
-    0x08F6C, // LinkSec Rx Invalid — LSECRXINV[0]
-    0x08F70, // LinkSec Rx Invalid — LSECRXINV[1]
-    0x08F74, // LinkSec Rx Not valid count — LSECRXNV[0]
-    0x08F78, // LinkSec Rx Not valid count — LSECRXNV[1]
-    0x08F7C, // LinkSec Rx Unused SA Count — LSECRXUNSA
-    0x08F80, // LinkSec Rx Not Using SA Count — LSECRXNUSA
+      0x04000,  // CRC Error Count — CRCERRS
+      0x04004,  // Illegal Byte Error Count — ILLERRC
+      0x04008,  // Error Byte Packet Count — ERRBC
+      0x03FA0,  // Rx Missed Packets Count — RXMPC[0]
+      0x03FA4,  // Rx Missed Packets Count — RXMPC[1]
+      0x03FA8,  // Rx Missed Packets Count — RXMPC[2]
+      0x03FAC,  // Rx Missed Packets Count — RXMPC[3]
+      0x03FB0,  // Rx Missed Packets Count — RXMPC[4]
+      0x03FB4,  // Rx Missed Packets Count — RXMPC[5]
+      0x03FB8,  // Rx Missed Packets Count — RXMPC[6]
+      0x03FBC,  // Rx Missed Packets Count — RXMPC[7]
+      0x04034,  // MAC Local Fault Count — MLFC
+      0x04038,  // MAC Remote Fault Count — MRFC
+      0x04040,  // Receive Length Error Count — RLEC
+      0x04292,  // MAC Flow Control Register - MFLCN
+      0x08780,  // Switch Security Violation Packet Count — SSVPC
+      0x03F60,  // Link XON Transmitted Count — LXONTXC
+      0x041A4,  // Link XON Received Count — LXONRXCNT
+      0x03F68,  // Link XOFF Transmitted Count — LXOFFTXC
+      0x041A8,  // Link XOFF Received Count — LXOFFRXCNT
+      0x03F00,  // Priority XON Transmitted Count — PXONTXC[0]
+      0x03F04,  // Priority XON Transmitted Count — PXONTXC[1]
+      0x03F08,  // Priority XON Transmitted Count — PXONTXC[2]
+      0x03F0C,  // Priority XON Transmitted Count — PXONTXC[3]
+      0x03F10,  // Priority XON Transmitted Count — PXONTXC[4]
+      0x03F14,  // Priority XON Transmitted Count — PXONTXC[5]
+      0x03F18,  // Priority XON Transmitted Count — PXONTXC[6]
+      0x03F1C,  // Priority XON Transmitted Count — PXONTXC[7]
+      0x04140,  // Priority XON Received Count — PXONRXCNT[0]
+      0x04144,  // Priority XON Received Count — PXONRXCNT[1]
+      0x04148,  // Priority XON Received Count — PXONRXCNT[2]
+      0x0414C,  // Priority XON Received Count — PXONRXCNT[3]
+      0x04150,  // Priority XON Received Count — PXONRXCNT[4]
+      0x04154,  // Priority XON Received Count — PXONRXCNT[5]
+      0x04158,  // Priority XON Received Count — PXONRXCNT[6]
+      0x0415C,  // Priority XON Received Count — PXONRXCNT[7]
+      0x03F20,  // Priority XOFF Transmitted Count — PXOFFTXCNT[0]
+      0x03F24,  // Priority XOFF Transmitted Count — PXOFFTXCNT[1]
+      0x03F28,  // Priority XOFF Transmitted Count — PXOFFTXCNT[2]
+      0x03F2C,  // Priority XOFF Transmitted Count — PXOFFTXCNT[3]
+      0x03F30,  // Priority XOFF Transmitted Count — PXOFFTXCNT[4]
+      0x03F34,  // Priority XOFF Transmitted Count — PXOFFTXCNT[5]
+      0x03F38,  // Priority XOFF Transmitted Count — PXOFFTXCNT[6]
+      0x03F3C,  // Priority XOFF Transmitted Count — PXOFFTXCNT[7]
+      0x04160,  // Priority XOFF Received Count — PXOFFRXCNT[0]
+      0x04164,  // Priority XOFF Received Count — PXOFFRXCNT[1]
+      0x04168,  // Priority XOFF Received Count — PXOFFRXCNT[2]
+      0x0416C,  // Priority XOFF Received Count — PXOFFRXCNT[3]
+      0x04170,  // Priority XOFF Received Count — PXOFFRXCNT[4]
+      0x04174,  // Priority XOFF Received Count — PXOFFRXCNT[5]
+      0x04178,  // Priority XOFF Received Count — PXOFFRXCNT[6]
+      0x0417C,  // Priority XOFF Received Count — PXOFFRXCNT[7]
+      0x03240,  // Priority XON to XOFF Count — PXON2OFFCNT[0]
+      0x03244,  // Priority XON to XOFF Count — PXON2OFFCNT[1]
+      0x03248,  // Priority XON to XOFF Count — PXON2OFFCNT[2]
+      0x0324C,  // Priority XON to XOFF Count — PXON2OFFCNT[3]
+      0x03250,  // Priority XON to XOFF Count — PXON2OFFCNT[4]
+      0x03254,  // Priority XON to XOFF Count — PXON2OFFCNT[5]
+      0x03258,  // Priority XON to XOFF Count — PXON2OFFCNT[6]
+      0x0325C,  // Priority XON to XOFF Count — PXON2OFFCNT[7]
+      0x041B0,  // Good Rx Non-Filtered Packet Counter — RXNFGPC
+      0x041B4,  // Good Rx Non-Filter Byte Counter Low — RXNFGBCL
+      0x041B8,  // Good Rx Non-Filter Byte Counter High — RXNFGBCH
+      0x02F50,  // DMA Good Rx Packet Counter — RXDGPC
+      0x02F54,  // DMA Good Rx Byte Counter Low — RXDGBCL
+      0x02F58,  // DMA Good Rx Byte Counter High — RXDGBCH
+      0x02F5C,  // DMA Duplicated Good Rx Packet Counter — RXDDPC
+      0x02F60,  // DMA Duplicated Good Rx Byte Counter Low — RXDDBCL
+      0x02F64,  // DMA Duplicated Good Rx Byte Counter High — RXDDBCH
+      0x02F68,  // DMA Good Rx LPBK Packet Counter — RXLPBKPC
+      0x02F6C,  // DMA Good Rx LPBK Byte Counter Low — RXLPBKBCL
+      0x02F70,  // DMA Good Rx LPBK Byte Counter High — RXLPBKBCH
+      0x02F74,  // DMA Duplicated Good Rx LPBK Packet Counter — RXDLPBKPC
+      0x02F78,  // DMA Duplicated Good Rx LPBK Byte Counter Low — RXDLPBKBCL
+      0x02F7C,  // DMA Duplicated Good Rx LPBK Byte Counter High — RXDLPBKBCH
+      0x04080,  // Good Packets Transmitted Count — GPTC
+      0x04090,  // Good Octets Transmitted Count Low — GOTCL
+      0x04094,  // Good Octets Transmitted Count High — GOTCH
+      0x087A0,  // DMA Good Tx Packet Counter – TXDGPC
+      0x087A4,  // DMA Good Tx Byte Counter Low – TXDGBCL
+      0x087A8,  // DMA Good Tx Byte Counter High – TXDGBCH
+      0x040A4,  // Receive Undersize Count — RUC
+      0x040A8,  // Receive Fragment Count — RFC
+      0x040AC,  // Receive Oversize Count — ROC
+      0x040B0,  // Receive Jabber Count — RJC
+      0x040C0,  // Total Octets Received Low — TORL
+      0x040C4,  // Total Octets Received High — TORH
+      0x040D0,  // Total Packets Received — TPR
+      0x040D4,  // Total Packets Transmitted — TPT
+      0x040D8,  // Packets Transmitted (64 Bytes) Count — PTC64
+      0x040DC,  // Packets Transmitted [65–127 Bytes] Count — PTC127
+      0x040E0,  // Packets Transmitted [128–255 Bytes] Count — PTC255
+      0x040E4,  // Packets Transmitted [256–511 Bytes] Count — PTC511
+      0x040E8,  // Packets Transmitted [512–1023 Bytes] Count — PTC1023
+      0x040EC,  // Packets Transmitted [Greater Than 1024 Bytes] Count — PTC1522
+      0x040F0,  // Multicast Packets Transmitted Count — MPTC
+      0x040F4,  // Broadcast Packets Transmitted Count — BPTC
+      0x04010,  // MAC Short Packet Discard Count — MSPDC
+      0x04120,  // XSUM Error Count — XEC
+      0x05118,  // FC CRC Error Count — FCCRC
+      0x0241C,  // FCoE Rx Packets Dropped Count — FCOERPDC
+      0x02424,  // FC Last Error Count — FCLAST
+      0x02428,  // FCoE Packets Received Count — FCOEPRC
+      0x0242C,  // FCOE DWord Received Count — FCOEDWRC
+      0x08784,  // FCoE Packets Transmitted Count — FCOEPTC
+      0x08788,  // FCoE DWord Transmitted Count — FCOEDWTC
+      0x0EE50,  // Flow Director Filters Usage Statistics - FDIRUSTAT (page 657)
+      0x0EE54,  // Flow Director Filters Failed Usage Statistics - FDIRFSTAT
+      0x0EE58,  // Flow Director Filters Match Statistics — FDIRMATCH
+      0x0EE5C,  // Flow Director Filters Miss Match Statistics — FDIRMISS (page
+                // 657)
+      // starting on page 639
+      0x08F64,  // LinkSec Rx Packet OK — LSECRXOK[0]
+      0x08F68,  // LinkSec Rx Packet OK — LSECRXOK[1]
+      0x08F6C,  // LinkSec Rx Invalid — LSECRXINV[0]
+      0x08F70,  // LinkSec Rx Invalid — LSECRXINV[1]
+      0x08F74,  // LinkSec Rx Not valid count — LSECRXNV[0]
+      0x08F78,  // LinkSec Rx Not valid count — LSECRXNV[1]
+      0x08F7C,  // LinkSec Rx Unused SA Count — LSECRXUNSA
+      0x08F80,  // LinkSec Rx Not Using SA Count — LSECRXNUSA
   };
   for (int n = 0; n < sizeof(stat_regs) / sizeof(stat_regs[0]); n++) {
     REG(stat_regs[n], 0b00000000000000000000000000000000,
@@ -2201,13 +2157,13 @@ static void stub_registers_init(void) {
   }
   // these are RW
   const int stat_regs_rw[] = {
-    0x0405C, // Packets Received [64 Bytes] Count — PRC64
-    0x04060, // Packets Received [65–127 Bytes] Count — PRC127
-    0x04064, // Packets Received [128–255 Bytes] Count — PRC255
-    0x04068, // Packets Received [256–511 Bytes] Count — PRC511
-    0x0406C, // Packets Received [512–1023 Bytes] Count — PRC1023
-    0x04070, // Packets Received [1024 to Max Bytes] Count — PRC1522
-    0x02F40, // Rx DMA Statistic Counter Control — RXDSTATCTRL
+      0x0405C,  // Packets Received [64 Bytes] Count — PRC64
+      0x04060,  // Packets Received [65–127 Bytes] Count — PRC127
+      0x04064,  // Packets Received [128–255 Bytes] Count — PRC255
+      0x04068,  // Packets Received [256–511 Bytes] Count — PRC511
+      0x0406C,  // Packets Received [512–1023 Bytes] Count — PRC1023
+      0x04070,  // Packets Received [1024 to Max Bytes] Count — PRC1522
+      0x02F40,  // Rx DMA Statistic Counter Control — RXDSTATCTRL
   };
   for (int n = 0; n < sizeof(stat_regs_rw) / sizeof(stat_regs_rw[0]); n++) {
     REG(stat_regs_rw[n], 0b00000000000000000000000000000000,
@@ -2215,29 +2171,29 @@ static void stub_registers_init(void) {
   }
   // these are RO
   const int stat_regs_ro[] = {
-    0x04078, // Broadcast Packets Received Count — BPRC
-    0x0407C, // Multicast Packets Received Count — MPRC
-    0x04074, // Good Packets Received Count — GPRC
-    0x04088, // Good Octets Received Count Low — GORCL
-    0x0408C, // Good Octets Received Count High — GORCH
-    0x040B4, // Management Packets Received Count — MNGPRC
-    0x040B8, // Management Packets Dropped Count — MNGPDC
-    0x0CF90, // Management Packets Transmitted Count — MNGPTC
-    // and then, starting on page 634
-    0x08A3C, // Tx Untagged Packet Counter — LSECTXUT
-    0x08A40, // Encrypted Tx Packets — LSECTXPKTE
-    0x08A44, // Protected Tx Packets — LSECTXPKTP
-    0x08A48, // Encrypted Tx Octets — LSECTXOCTE
-    0x08A4C, // Protected Tx Octets — LSECTXOCTP
-    0x08F40, // LinkSec Untagged Rx Packet — LSECRXUT
-    0x08F44, // LinkSec Rx Octets Decrypted — LSECRXOCTE
-    0x08F48, // LinkSec Rx Octets Validated — LSECRXOCTP
-    0x08F4C, // LinkSec Rx Packet with Bad Tag — LSECRXBAD
-    0x08F50, // LinkSec Rx Packet No SCI — LSECRXNOSCI
-    0x08F54, // LinkSec Rx Packet Unknown SCI — LSECRXUNSCI
-    0x08F58, // LinkSec Rx Unchecked Packets — LSECRXUC
-    0x08F5C, // LinkSec Rx Delayed Packets — LSECRXDELAY
-    0x08F60, // LinkSec Rx Late Packets — LSECRXLATE
+      0x04078,  // Broadcast Packets Received Count — BPRC
+      0x0407C,  // Multicast Packets Received Count — MPRC
+      0x04074,  // Good Packets Received Count — GPRC
+      0x04088,  // Good Octets Received Count Low — GORCL
+      0x0408C,  // Good Octets Received Count High — GORCH
+      0x040B4,  // Management Packets Received Count — MNGPRC
+      0x040B8,  // Management Packets Dropped Count — MNGPDC
+      0x0CF90,  // Management Packets Transmitted Count — MNGPTC
+      // and then, starting on page 634
+      0x08A3C,  // Tx Untagged Packet Counter — LSECTXUT
+      0x08A40,  // Encrypted Tx Packets — LSECTXPKTE
+      0x08A44,  // Protected Tx Packets — LSECTXPKTP
+      0x08A48,  // Encrypted Tx Octets — LSECTXOCTE
+      0x08A4C,  // Protected Tx Octets — LSECTXOCTP
+      0x08F40,  // LinkSec Untagged Rx Packet — LSECRXUT
+      0x08F44,  // LinkSec Rx Octets Decrypted — LSECRXOCTE
+      0x08F48,  // LinkSec Rx Octets Validated — LSECRXOCTP
+      0x08F4C,  // LinkSec Rx Packet with Bad Tag — LSECRXBAD
+      0x08F50,  // LinkSec Rx Packet No SCI — LSECRXNOSCI
+      0x08F54,  // LinkSec Rx Packet Unknown SCI — LSECRXUNSCI
+      0x08F58,  // LinkSec Rx Unchecked Packets — LSECRXUC
+      0x08F5C,  // LinkSec Rx Delayed Packets — LSECRXDELAY
+      0x08F60,  // LinkSec Rx Late Packets — LSECRXLATE
   };
   for (int n = 0; n < sizeof(stat_regs_ro) / sizeof(stat_regs_ro[0]); n++) {
     REG(stat_regs_ro[n], 0b00000000000000000000000000000000,
@@ -2295,37 +2251,36 @@ static void stub_registers_init(void) {
   // Section 8.2.3.3.3 Flow Control Receive Threshold Low
   // Bits 5-18: Receive Threshold Low n, default 0
   for (int n = 0; n < 8; n++) {
-    REG(0x03220u + 4u*(n), 0, 0b1111111111111100000);
+    REG(0x03220u + 4u * (n), 0, 0b1111111111111100000);
   }
 
   // Section 8.2.3.3.2 Flow Control Transmit Timer Value
   // Bits 0-15: Transmit timer value 2n
   // Bits 16-31: Transmit timer value 2n +1
   for (int n = 0; n < 4; n++) {
-    REG(0x03200u + 4u*(n), 0, 0b11111111111111111111111111111111);
+    REG(0x03200u + 4u * (n), 0, 0b11111111111111111111111111111111);
   }
 
   // Section 8.2.3.3.5 Flow Control Refresh Threshold Value
   // Bits 0-15: Flow Control Refresh Threshold.
-    REG(0x032a0, 0, 0b1111111111111111);
+  REG(0x032a0, 0, 0b1111111111111111);
 
   // --- Below are registers used by TinyNF but not DPDK ---
 
   // Section 8.2.3.9.1 DMA Tx TCP Max Allow Size Requests (DTXMXSZRQ)
   // Bits 0-11: max allowed number of requests, init val 0x10
-  REG(0x08100u,0b10000,
-      0b111111111111);
+  REG(0x08100u, 0b10000, 0b111111111111);
 
   // Section 8.2.3.3.4 Flow Control Receive Threshold High
   // Bits 5-18: Receive Threshold High n, default 0
   for (int n = 0; n < 8; n++) {
-    REG(0x03260u + 4u*(n), 0, 0b1111111111111100000);
+    REG(0x03260u + 4u * (n), 0, 0b1111111111111100000);
   }
 
   // Section 8.2.3.7.19 Five tuple Queue Filter
   // Bit 31, Enable, default X, must be set to 0
   for (int n = 0; n < 128; n++) {
-    REG(0x0E600u + 4u*(n), 0, 0);
+    REG(0x0E600u + 4u * (n), 0, 0);
   }
 
   // Section 8.2.3.4.12 PCIe Control Extended Register
@@ -2336,42 +2291,45 @@ static void stub_registers_init(void) {
   // Section 8.2.3.22.34 MAC Flow Control Register
   // 0: Pass MAC Control Frames (0 - filter unrecognized)
   // 1: Discard Pause Frame (0 - pause frames sent to host)
-  // 2: Receive Priority Flow Control Enable. This bit should not be set if bit 3 is set.
+  // 2: Receive Priority Flow Control Enable. This bit should not be set if bit
+  // 3 is set.
   // Bit 3, default 0, Receive Flow Control Enable
-  // Indicates that the 82599 responds to the reception of link flow control packets. If autonegotiation
-  // is enabled, this bit should be set by software to the negotiated flow control
+  // Indicates that the 82599 responds to the reception of link flow control
+  // packets. If autonegotiation
+  // is enabled, this bit should be set by software to the negotiated flow
+  // control
   // value.
   REG(0x04294u, 0, 0b1011);
 
   // Section 8.2.3.8.9 Receive Packet Buffer Size
   // Bits 10-19 can be set, default 0x200, rest are read-only
   for (int n = 0; n < 8; n++) {
-    REG(0x03C00u + 4u*(n), 0b10000000000000000000,
-        0b11111111110000000000);
+    REG(0x03C00u + 4u * (n), 0b10000000000000000000, 0b11111111110000000000);
   }
 
   for (int n = 0; n < 128; n++) {
     // Section 8.2.3.9.11 Tx Descriptor Completion Write Back Address High
-    REG(0x0603Cu + 0x40u*(n), 0, 0b11111111111111111111111111111111);
+    REG(0x0603Cu + 0x40u * (n), 0, 0b11111111111111111111111111111111);
 
     // Section 8.2.3.9.11 Tx Descriptor Completion Write Back Address Low
-    REG(0x06038u + 0x40u*(n), 0, 0b11111111111111111111111111111111);
+    REG(0x06038u + 0x40u * (n), 0, 0b11111111111111111111111111111111);
   }
 
   // Section 8.2.3.9.13 Transmit Packet Buffer Size
   // Bits 10-19 can be set, default 0xA0, rest are read-only
   for (int n = 0; n < 8; n++) {
-    REG(0x0CC00u + 4u*(n), 0b101000000000000000, 0b11111111110000000000);
+    REG(0x0CC00u + 4u * (n), 0b101000000000000000, 0b11111111110000000000);
   }
 
   // Section 8.2.3.9.16 Tx Packet Buffer Threshold
   // Bits 0-9 can be set, default 0x96 for 0 and 0 for others
   for (int n = 0; n < 8; n++) {
-    REG(0x04950u + 4u*(n), (n == 0 ? 0b10010110 : 0), 0b1111111111);
+    REG(0x04950u + 4u * (n), (n == 0 ? 0b10010110 : 0), 0b1111111111);
   }
 
   // Section 8.2.3.3.7 Flow Control Configuration
-  // Bits 3-4 can be set for the flow control stuff, but bit 4 should only be set in DCB mode
+  // Bits 3-4 can be set for the flow control stuff, but bit 4 should only be
+  // set in DCB mode
   REG(0x03D00, 0, 0b01000);
 
   // Section 8.2.3.10.14 DCB Transmit Descriptor Plane T1 Config
@@ -2490,9 +2448,8 @@ void stub_free(struct rte_mbuf *mbuf) {
   free_called = true;
 }
 
-__attribute__((constructor(101))) // Low prio, must execute before other stuff
-static void
-stub_hardware_init(void) {
+__attribute__((constructor(101)))  // Low prio, must execute before other stuff
+    static void stub_hardware_init(void) {
   // Helper method declarations
   char *stub_pci_name(int index);
 
@@ -2510,20 +2467,20 @@ stub_hardware_init(void) {
   // Device initialization
   for (int n = 0; n < sizeof(DEVICES) / sizeof(DEVICES[0]); n++) {
     struct stub_device stub_dev = {
-      .name = stub_pci_name(n),
-      .mem = NULL,
-      .mem_len =
-          sizeof(REGISTERS) / sizeof(struct stub_register) * sizeof(uint32_t),
-      .mem_shadow = NULL,
-      .current_mdi_address = -1,
-      .i2c_state = -1,
-      .i2c_counter = 0,
-      .i2c_address = 0,
-      .i2c_start_time = 0,
-      .i2c_clock_time = 0,
-      .i2c_stop_time = 0,
-      .sfp_address = 0,
-      .interrupts_fd = 0 // set by stdio_files stub
+        .name = stub_pci_name(n),
+        .mem = NULL,
+        .mem_len =
+            sizeof(REGISTERS) / sizeof(struct stub_register) * sizeof(uint32_t),
+        .mem_shadow = NULL,
+        .current_mdi_address = -1,
+        .i2c_state = -1,
+        .i2c_counter = 0,
+        .i2c_address = 0,
+        .i2c_start_time = 0,
+        .i2c_clock_time = 0,
+        .i2c_stop_time = 0,
+        .sfp_address = 0,
+        .interrupts_fd = 0  // set by stdio_files stub
     };
     stub_device_init(&stub_dev);
     DEVICES[n] = stub_dev;
@@ -2572,8 +2529,8 @@ void stub_hardware_reset_receive(uint16_t device) {
   DEV_REG(dev, 0x01018) = dev->initial_rdt;
 
   // Reset descriptor
-  uint64_t rdba = ((uint64_t)DEV_REG(dev, 0x01000))            // RDBAL
-                  | (((uint64_t)DEV_REG(dev, 0x01004)) << 32); // RDBAH
+  uint64_t rdba = ((uint64_t)DEV_REG(dev, 0x01000))             // RDBAL
+                  | (((uint64_t)DEV_REG(dev, 0x01004)) << 32);  // RDBAH
   uint64_t *descr = (uint64_t *)rdba;
   descr[0] = dev->old_mbuf_addr;
   descr[1] = 0;
@@ -2585,4 +2542,4 @@ void stub_hardware_reset_receive(uint16_t device) {
   free_called = false;
 }
 
-#endif // VIGOR_MODEL_HARDWARE
+#endif  // VIGOR_MODEL_HARDWARE

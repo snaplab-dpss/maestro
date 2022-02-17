@@ -44,7 +44,8 @@
     }
 
     lemma void sub_permutation_take(list<int> xs, int max_val, int i)
-        requires    true == is_sub_permutation(xs, max_val) &*& 0 <= i &*& i < length(xs);
+        requires    true == is_sub_permutation(xs, max_val) &*& 0 <= i &*& i <
+length(xs);
         ensures     true == is_sub_permutation(take(i, xs), max_val);
     {
         switch(xs) {
@@ -58,8 +59,10 @@
                     take_plus_one(i - 1, xs0);
 
                     cons_take_take_cons(x0, xs0, i - 1);
-                    forall_append(take(i - 1, xs0), cons(x0, nil), (lt)(max_val));
-                    forall_append(take(i - 1, xs0), cons(x0, nil), (ge)(max_val));
+                    forall_append(take(i - 1, xs0), cons(x0, nil),
+(lt)(max_val));
+                    forall_append(take(i - 1, xs0), cons(x0, nil),
+(ge)(max_val));
                     take_preserves_distinct(xs, i);
                 }
 
@@ -115,7 +118,8 @@
         }
     }
 
-    lemma void permutation_exists_helper(list<int> xs, list<int> integers, int max_val, int x)
+    lemma void permutation_exists_helper(list<int> xs, list<int> integers, int
+max_val, int x)
         requires
             true == is_sub_permutation(xs, max_val) &*& 0 < max_val &*&
             0 <= x &*& x < max_val &*& length(xs) == length(integers) &*&
@@ -134,7 +138,8 @@
                 } else {
                     remove_both_subset(x0, xs, integers);
                     neq_mem_remove(x, x0, integers);
-                    permutation_exists_helper(xs0, remove(x0, integers), max_val, x);
+                    permutation_exists_helper(xs0, remove(x0, integers),
+max_val, x);
                 }
         }
     }
@@ -152,7 +157,8 @@
     }
 
     lemma void permutation_to_count(list<int> xs, nat val)
-        requires    true == is_permutation(xs) &*& 0 < length(xs) &*& int_of_nat(val) <= length(xs) - 1;
+        requires    true == is_permutation(xs) &*& 0 < length(xs) &*&
+int_of_nat(val) <= length(xs) - 1;
         ensures     true == integer_copies(val, 1, xs);
     {
         switch(val) {
@@ -177,7 +183,8 @@
                 if (nb_split_pred != zero) {
                     // Recursive call
                     length_drop(n, xs);
-                    mul_subst(int_of_nat(nb_split_pred) + 1, int_of_nat(nb_split), n);
+                    mul_subst(int_of_nat(nb_split_pred) + 1,
+int_of_nat(nb_split), n);
                     mul_equal(n, int_of_nat(nb_split_pred), length(xs) - n);
                     permutation_split_to_count(drop(n, xs), nb_split_pred, n);
                 }
@@ -187,8 +194,10 @@
                 assert (xs == append(first_chunk, ret_xs));
 
                 split_chunk_equiv(xs, nb_split, n, 0);
-                permutation_to_count(first_chunk, nat_of_int(length(first_chunk) - 1));
-                integer_copies_append(first_chunk, ret_xs, nat_of_int(n - 1), 1, int_of_nat(nb_split_pred));
+                permutation_to_count(first_chunk, nat_of_int(length(first_chunk)
+- 1));
+                integer_copies_append(first_chunk, ret_xs, nat_of_int(n - 1), 1,
+int_of_nat(nb_split_pred));
         }
     }
 

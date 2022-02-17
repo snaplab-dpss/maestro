@@ -2,7 +2,7 @@
 #include <pthread.h>
 
 #ifdef KLEE_VERIFICATION
-#  include <klee/klee.h>
+#include <klee/klee.h>
 #endif
 
 pthread_t pthread_self(void) {
@@ -43,7 +43,6 @@ int pthread_getaffinity_np(pthread_t thread, size_t cpusetsize,
     CPU_SET(0, cpuset);
   }
 
-
   return ret;
 }
 
@@ -51,9 +50,10 @@ int pthread_setaffinity_np(pthread_t thread, size_t cpusetsize,
                            const cpu_set_t *cpuset) {
   // Same remark as getaffinity
   int ret;
-  if (thread == thread_set && cpusetsize == css_set && CPU_EQUAL(cpuset, &cpuset_set)) {
-     ret = ret_set;
-   } else {
+  if (thread == thread_set && cpusetsize == css_set &&
+      CPU_EQUAL(cpuset, &cpuset_set)) {
+    ret = ret_set;
+  } else {
 #ifdef KLEE_VERIFICATION
     ret = klee_int("pthread_setaffinity_np_return");
     klee_assume(ret >= 0);
@@ -85,17 +85,20 @@ int pthread_setname_np(pthread_t thread, const char *name) {
   return 0;
 }
 
-int  pthread_barrier_init(pthread_barrier_t *barrier,
-       const pthread_barrierattr_t *attr, unsigned count) {
-  // "Upon successful completion, these functions shall return zero; otherwise, an error
+int pthread_barrier_init(pthread_barrier_t *barrier,
+                         const pthread_barrierattr_t *attr, unsigned count) {
+  // "Upon successful completion, these functions shall return zero; otherwise,
+  // an error
   // number shall be returned to indicate the error."
   // -- https://linux.die.net/man/3/pthread_barrier_init
   return 0;
 }
 
 int pthread_barrier_wait(pthread_barrier_t *barrier) {
-  // "Upon successful completion, the pthread_barrier_wait() function shall return
-  // PTHREAD_BARRIER_SERIAL_THREAD for a single (arbitrary) thread synchronized at the
+  // "Upon successful completion, the pthread_barrier_wait() function shall
+  // return
+  // PTHREAD_BARRIER_SERIAL_THREAD for a single (arbitrary) thread synchronized
+  // at the
   // barrier and zero for each of the other threads."
   // -- https://linux.die.net/man/3/pthread_barrier_wait
   return 0;
@@ -115,35 +118,20 @@ int pthread_join(pthread_t thread, void **retval) {
 
 #ifndef KLEE_VERIFICATION
 // NFOS only
-int pthread_mutex_lock(pthread_mutex_t *mutex)
-{
-  return 0;
-}
-int pthread_mutex_unlock(pthread_mutex_t *mutex)
-{
-  return 0;
-}
+int pthread_mutex_lock(pthread_mutex_t *mutex) { return 0; }
+int pthread_mutex_unlock(pthread_mutex_t *mutex) { return 0; }
 
-int pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr)
-{
+int pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr) {
   return 0;
 }
-int pthread_cond_timedwait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex, const struct timespec *restrict abstime)
-{
+int pthread_cond_timedwait(pthread_cond_t *restrict cond,
+                           pthread_mutex_t *restrict mutex,
+                           const struct timespec *restrict abstime) {
   return 0;
 }
-int pthread_cond_signal(pthread_cond_t *cond)
-{
-  return 0;
-}
+int pthread_cond_signal(pthread_cond_t *cond) { return 0; }
 
-int pthread_getname_np(pthread_t thread, char *name, size_t len)
-{
-  return 0;
-}
+int pthread_getname_np(pthread_t thread, char *name, size_t len) { return 0; }
 
-int pthread_detach(pthread_t thread)
-{
-  return 0;
-}
+int pthread_detach(pthread_t thread) { return 0; }
 #endif

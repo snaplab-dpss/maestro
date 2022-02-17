@@ -16,9 +16,8 @@ void touched_port_allocate(void *obj) {
 
 #ifdef KLEE_VERIFICATION
 struct str_field_descr touched_port_descrs[] = {
-  { offsetof(struct TouchedPort, src), sizeof(uint32_t), 0, "src" },
-  { offsetof(struct TouchedPort, port), sizeof(uint16_t), 0, "port" },
-};
+    {offsetof(struct TouchedPort, src), sizeof(uint32_t), 0, "src"},
+    {offsetof(struct TouchedPort, port), sizeof(uint16_t), 0, "port"}, };
 struct nested_field_descr touched_port_nests[] = {};
 unsigned touched_port_hash(void *obj) {
   klee_trace_ret();
@@ -40,7 +39,7 @@ unsigned touched_port_hash(void *obj) {
   return klee_int("port_hash");
 }
 
-#else // KLEE_VERIFICATION
+#else  // KLEE_VERIFICATION
 
 unsigned touched_port_hash(void *obj) {
   struct TouchedPort *tp = (struct TouchedPort *)obj;
@@ -51,4 +50,4 @@ unsigned touched_port_hash(void *obj) {
   return hash;
 }
 
-#endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION

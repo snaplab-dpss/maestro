@@ -204,25 +204,24 @@ struct rule {
   uint16_t route;
 };
 
-
 struct lpm {
-  uint16_t* lpm_24;
-  uint16_t* lpm_long;
-  uint16_t  lpm_long_index;
+  uint16_t *lpm_24;
+  uint16_t *lpm_long;
+  uint16_t lpm_long_index;
 };
 
 void fill_invalid(uint16_t *t, uint32_t size)
-//@ requires t[0..size] |-> _ &*& size > 0;
-/*@ ensures t[0.. size] |-> ?inv_list &*&
-            inv_list == repeat_n(nat_of_int(size), INVALID) &*&
-            true == forall(inv_list, check_INVALID); @*/
+    //@ requires t[0..size] |-> _ &*& size > 0;
+    /*@ ensures t[0.. size] |-> ?inv_list &*&
+                inv_list == repeat_n(nat_of_int(size), INVALID) &*&
+                true == forall(inv_list, check_INVALID); @*/
 {
-  for (uint32_t i = 0; ; i++)
-  /*@ invariant 0 <= i &*& i <= size &*&
-                t[0..i] |-> ?updated &*&
-                updated == repeat_n(nat_of_int(i), INVALID) &*&
-                true == forall(updated, check_INVALID) &*&
-                t[i..size] |-> _; @*/
+  for (uint32_t i = 0;; i++)
+      /*@ invariant 0 <= i &*& i <= size &*&
+                    t[0..i] |-> ?updated &*&
+                    updated == repeat_n(nat_of_int(i), INVALID) &*&
+                    true == forall(updated, check_INVALID) &*&
+                    t[i..size] |-> _; @*/
   {
     if (i == size) {
       break;
@@ -241,27 +240,25 @@ void fill_invalid(uint16_t *t, uint32_t size)
 }
 
 uint32_t build_mask_from_prefixlen(uint8_t prefixlen)
-//@ requires prefixlen <= 32;
-//@ ensures result == int_of_Z(mask32_from_prefixlen(prefixlen));
+    //@ requires prefixlen <= 32;
+    //@ ensures result == int_of_Z(mask32_from_prefixlen(prefixlen));
 {
-  uint32_t ip_masks[33] = { 0x00000000, 0x80000000, 0xC0000000, 0xE0000000,
-                            0xF0000000, 0xF8000000, 0xFC000000, 0xFE000000,
-                            0xFF000000, 0xFF800000, 0xFFC00000, 0xFFE00000,
-                            0xFFF00000, 0xFFF80000, 0xFFFC0000, 0xFFFE0000,
-                            0xFFFF0000, 0xFFFF8000, 0xFFFFC000, 0xFFFFE000,
-                            0xFFFFF000, 0xFFFFF800, 0xFFFFFC00, 0xFFFFFE00,
-                            0xFFFFFF00, 0xFFFFFF80, 0xFFFFFFC0, 0xFFFFFFE0,
-                            0xFFFFFFF0, 0xFFFFFFF8, 0xFFFFFFFC, 0xFFFFFFFE,
-                            0xFFFFFFFF};
+  uint32_t ip_masks[33] = {
+      0x00000000, 0x80000000, 0xC0000000, 0xE0000000, 0xF0000000, 0xF8000000,
+      0xFC000000, 0xFE000000, 0xFF000000, 0xFF800000, 0xFFC00000, 0xFFE00000,
+      0xFFF00000, 0xFFF80000, 0xFFFC0000, 0xFFFE0000, 0xFFFF0000, 0xFFFF8000,
+      0xFFFFC000, 0xFFFFE000, 0xFFFFF000, 0xFFFFF800, 0xFFFFFC00, 0xFFFFFE00,
+      0xFFFFFF00, 0xFFFFFF80, 0xFFFFFFC0, 0xFFFFFFE0, 0xFFFFFFF0, 0xFFFFFFF8,
+      0xFFFFFFFC, 0xFFFFFFFE, 0xFFFFFFFF};
 
   return ip_masks[prefixlen];
 }
 
 // Extract the 24 MSB of an uint8_t array and returns them
 uint32_t lpm_24_extract_first_index(uint32_t data)
-//@ requires true;
-/*@ ensures 0 <= result &*& result < pow_nat(2, nat_of_int(24)) &*&
-            result == index24_from_ipv4(Z_of_int(data, N32)); @*/
+    //@ requires true;
+    /*@ ensures 0 <= result &*& result < pow_nat(2, nat_of_int(24)) &*&
+                result == index24_from_ipv4(Z_of_int(data, N32)); @*/
 {
   //@ Z d = Z_of_uintN(data, N32);
   //@ shiftright_def(data, d, N8);
@@ -271,49 +268,46 @@ uint32_t lpm_24_extract_first_index(uint32_t data)
   return res;
 }
 
-
 // Computes how many entries the rule will take
 uint32_t compute_rule_size(uint8_t prefixlen)
-//@ requires prefixlen <= 32;
-/*@ ensures result == compute_rule_size(prefixlen) &*&
-            prefixlen < 25 ?
-              result == pow_nat(2, nat_of_int(24-prefixlen))
-            :
-              result == pow_nat(2, nat_of_int(32-prefixlen)); @*/
+    //@ requires prefixlen <= 32;
+    /*@ ensures result == compute_rule_size(prefixlen) &*&
+                prefixlen < 25 ?
+                  result == pow_nat(2, nat_of_int(24-prefixlen))
+                :
+                  result == pow_nat(2, nat_of_int(32-prefixlen)); @*/
 {
   if (prefixlen < 25) {
-    uint32_t res[25] = { 0x1000000, 0x800000, 0x400000, 0x200000, 0x100000,
-                         0x80000,   0x40000,  0x20000,  0x10000,  0x8000,
-                         0x4000,    0x2000,   0x1000,   0x800,    0x400,
-                         0x200,     0x100 ,   0x80,     0x40,     0x20,
-                         0x10,      0x8,      0x4,      0x2,      0x1};
+    uint32_t res[25] = {0x1000000, 0x800000, 0x400000, 0x200000, 0x100000,
+                        0x80000,   0x40000,  0x20000,  0x10000,  0x8000,
+                        0x4000,    0x2000,   0x1000,   0x800,    0x400,
+                        0x200,     0x100,    0x80,     0x40,     0x20,
+                        0x10,      0x8,      0x4,      0x2,      0x1};
     uint32_t v = res[prefixlen];
     return v;
   } else {
     uint32_t res[8] = {0x80, 0x40, 0x20, 0x10, 0x8, 0x4, 0x2, 0x1};
-    uint32_t v = res[prefixlen-25];
+    uint32_t v = res[prefixlen - 25];
     return v;
   }
 }
 
 bool lpm_24_entry_flag(uint16_t entry)
-/*@ requires entry != INVALID &*& true == valid_entry24(entry) &*&
-             entry_24_mapping(entry) == some(?p) &*& p == pair(?b, _); @*/
-//@ ensures result == extract_flag(entry) &*& result == b;
+    /*@ requires entry != INVALID &*& true == valid_entry24(entry) &*&
+                 entry_24_mapping(entry) == some(?p) &*& p == pair(?b, _); @*/
+    //@ ensures result == extract_flag(entry) &*& result == b;
 {
   return (entry >> 15) == 1;
 }
 
-
-
 uint16_t lpm_24_entry_set_flag(uint16_t entry)
-//@ requires 0 <= entry &*& entry < 256;
-/*@ ensures result == set_flag(entry) &*&
-            true == extract_flag(result) &*&
-            true == valid_entry24(result) &*&
-            fst(get_someOption24(entry_24_mapping(result))) == true &*&
-            snd(get_someOption24(entry_24_mapping(result))) ==
-            Z_of_int(entry, N16); @*/
+    //@ requires 0 <= entry &*& entry < 256;
+    /*@ ensures result == set_flag(entry) &*&
+                true == extract_flag(result) &*&
+                true == valid_entry24(result) &*&
+                fst(get_someOption24(entry_24_mapping(result))) == true &*&
+                snd(get_someOption24(entry_24_mapping(result))) ==
+                Z_of_int(entry, N16); @*/
 {
   //@ bitor_limits(entry, lpm_24_FLAG_MASK, N16);
   uint16_t res = (uint16_t)(entry | lpm_24_FLAG_MASK);
@@ -321,10 +315,10 @@ uint16_t lpm_24_entry_set_flag(uint16_t entry)
   //@ Z val = Z_of_uintN(entry, N16);
   //@ bitor_def(entry, val, lpm_24_FLAG_MASK, mask);
 
-  //Prove that masking with 0x8000 begins with a one
+  // Prove that masking with 0x8000 begins with a one
   //@ flag_mask_or_x_begins_with_one(entry);
 
-  //Prove that masking with 0x8000 does not affect the 15 LSB
+  // Prove that masking with 0x8000 does not affect the 15 LSB
   //@ flag_mask_or_x_not_affect_15LSB(entry);
 
   return res;
@@ -332,13 +326,13 @@ uint16_t lpm_24_entry_set_flag(uint16_t entry)
 
 uint16_t lpm_long_extract_first_index(uint32_t data, uint8_t prefixlen,
                                       uint8_t base_index)
-/*@ requires 0 <= base_index &*& base_index < lpm_LONG_OFFSET_MAX &*&
-             0 <= prefixlen &*& prefixlen <= 32; @*/
-/*@ ensures result ==
+    /*@ requires 0 <= base_index &*& base_index < lpm_LONG_OFFSET_MAX &*&
+                 0 <= prefixlen &*& prefixlen <= 32; @*/
+    /*@ ensures result ==
             compute_starting_index_long(init_rule(data, prefixlen, 0),
                                         base_index) &*&
             0 <= result &*&
-            result <= 0xFFFF; @*/ //dummy route, unused
+            result <= 0xFFFF; @*/  // dummy route, unused
 {
   //@ lpm_rule rule = init_rule(data, prefixlen, 0); //any route is OK
 
@@ -355,40 +349,39 @@ uint16_t lpm_long_extract_first_index(uint32_t data, uint8_t prefixlen,
   uint8_t last_byte = (uint8_t)(masked_data & 0xFF);
   //@ assert (masked_data & 0xFF) == last_byte;
 
-  uint16_t res = (uint16_t)(base_index*(uint16_t)lpm_LONG_FACTOR + last_byte);
+  uint16_t res = (uint16_t)(base_index * (uint16_t)lpm_LONG_FACTOR + last_byte);
 
   return res;
 }
 
 int lpm_allocate(struct lpm **lpm_out)
-//@ requires *lpm_out |-> ?old_lo;
-/*@ ensures result == 0 ?
-              *lpm_out |-> old_lo :
-              *lpm_out |-> ?new_lo &*&
-              table(new_lo, dir_init()) &*&
-              result == 1; @*/
+    //@ requires *lpm_out |-> ?old_lo;
+    /*@ ensures result == 0 ?
+                  *lpm_out |-> old_lo :
+                  *lpm_out |-> ?new_lo &*&
+                  table(new_lo, dir_init()) &*&
+                  result == 1; @*/
 {
-  struct lpm* _lpm = (struct lpm*) malloc(sizeof(struct lpm));
+  struct lpm *_lpm = (struct lpm *)malloc(sizeof(struct lpm));
   if (_lpm == 0) {
     return 0;
   }
 
-  uint16_t* lpm_24 = (uint16_t*) malloc(lpm_24_MAX_ENTRIES *
-                                        sizeof(uint16_t));
+  uint16_t *lpm_24 = (uint16_t *)malloc(lpm_24_MAX_ENTRIES * sizeof(uint16_t));
   if (lpm_24 == 0) {
     free(_lpm);
     return 0;
   }
 
-  uint16_t* lpm_long = (uint16_t*) malloc(lpm_LONG_MAX_ENTRIES *
-                                          sizeof(uint16_t));
+  uint16_t *lpm_long =
+      (uint16_t *)malloc(lpm_LONG_MAX_ENTRIES * sizeof(uint16_t));
   if (lpm_long == 0) {
     free(lpm_24);
     free(_lpm);
     return 0;
   }
 
-  //Set every element of the array to INVALID
+  // Set every element of the array to INVALID
   fill_invalid(lpm_24, lpm_24_MAX_ENTRIES);
   fill_invalid(lpm_long, lpm_LONG_MAX_ENTRIES);
 
@@ -430,7 +423,7 @@ int lpm_allocate(struct lpm **lpm_out)
   //@ assert map_24 == map(entry_24_mapping, t_24);
   //@ assert map_l == map(entry_long_mapping, t_l);
 
-  //Prove that a list of INVALID is valid
+  // Prove that a list of INVALID is valid
   /*@ enforce_map_invalid_is_valid(t_24, nat_of_int(lpm_24_MAX_ENTRIES),
                                    valid_entry24);
   @*/
@@ -447,8 +440,8 @@ int lpm_allocate(struct lpm **lpm_out)
 }
 
 void lpm_free(struct lpm *_lpm)
-//@ requires table(_lpm, _);
-//@ ensures true;
+    //@ requires table(_lpm, _);
+    //@ ensures true;
 {
   //@ open table(_lpm, _);
   free(_lpm->lpm_24);
@@ -457,9 +450,9 @@ void lpm_free(struct lpm *_lpm)
 }
 
 int lpm_lookup_elem(struct lpm *_lpm, uint32_t prefix)
-//@ requires table(_lpm, ?dir);
-/*@ ensures table(_lpm, dir) &*&
-            result == lpm_dir_24_8_lookup(Z_of_int(prefix, N32),dir); @*/
+    //@ requires table(_lpm, ?dir);
+    /*@ ensures table(_lpm, dir) &*&
+                result == lpm_dir_24_8_lookup(Z_of_int(prefix, N32),dir); @*/
 {
 
   //@ open table(_lpm, dir);
@@ -469,24 +462,24 @@ int lpm_lookup_elem(struct lpm *_lpm, uint32_t prefix)
   //@ assert ushorts(lpm_24, lpm_24_MAX_ENTRIES, ?t_24);
   //@ assert ushorts(lpm_long, lpm_LONG_MAX_ENTRIES, ?t_l);
 
-  //get index corresponding to key for lpm_24
+  // get index corresponding to key for lpm_24
   uint32_t index = lpm_24_extract_first_index(prefix);
 
   uint16_t value = lpm_24[index];
-  //Prove that the value retrieved by lookup_lpm_24 is the mapped value
-  //retrieved by lpm_24[index]
+  // Prove that the value retrieved by lookup_lpm_24 is the mapped value
+  // retrieved by lpm_24[index]
 
   //@ nth_map(index, entry_24_mapping, t_24);
 
   //@ option<pair<bool, Z> > value24 = lookup_lpm_24(index, dir);
 
-  //Prove that the retrieved elem is valid
+  // Prove that the retrieved elem is valid
   //@ forall_nth(t_24, valid_entry24, index);
 
   if (value != INVALID && lpm_24_entry_flag(value)) {
-  //the value found in lpm_24 is a base index for an entry in lpm_long,
-  //go look at the index corresponding to the key and this base index
-    //Prove that the value retrieved by lookup_lpm_24
+    // the value found in lpm_24 is a base index for an entry in lpm_long,
+    // go look at the index corresponding to the key and this base index
+    // Prove that the value retrieved by lookup_lpm_24
     //(without the first bit) is 0 <= value <= 0xFF
     //@ valid_next_bucket_long(value, value24);
 
@@ -494,20 +487,21 @@ int lpm_lookup_elem(struct lpm *_lpm, uint32_t prefix)
     uint8_t extracted_index = (uint8_t)(value & 0xFF);
     //@ long_index_extraction_equivalence(value, value24);
     //@ assert extracted_index == extract24_value(value24);
-    uint16_t index_long = lpm_long_extract_first_index(prefix, 32,
-                                                       extracted_index);
-    //Show that indexlong_from_ipv4 == compute_starting_index_long when
-    //the rule has prefixlen == 32
-    //@ long_index_computing_equivalence_on_prefixlen32(prefix, extracted_index);
+    uint16_t index_long =
+        lpm_long_extract_first_index(prefix, 32, extracted_index);
+    // Show that indexlong_from_ipv4 == compute_starting_index_long when
+    // the rule has prefixlen == 32
+    //@ long_index_computing_equivalence_on_prefixlen32(prefix,
+    //extracted_index);
     uint16_t value_long = lpm_long[index_long];
 
-    //Prove that the value retrieved by lookup_lpm_long is the mapped value
-    //retrieved by lpm_24[index]
+    // Prove that the value retrieved by lookup_lpm_long is the mapped value
+    // retrieved by lpm_24[index]
     //@ nth_map(index_long, entry_long_mapping, t_l);
     //@ assert entry_long_mapping(value_long)==lookup_lpm_long(index_long, dir);
     //@ option<Z> value_l = lookup_lpm_long(index_long, dir);
 
-    //Prove that the retrieved elem is valid
+    // Prove that the retrieved elem is valid
     //@ forall_nth(t_l, valid_entry_long, index_long);
 
     //@ close table(_lpm, dir);
@@ -519,32 +513,33 @@ int lpm_lookup_elem(struct lpm *_lpm, uint32_t prefix)
       return value_long;
     }
   } else {
-  //the value found in lpm_24 is the next hop, just return it
+    // the value found in lpm_24 is the next hop, just return it
     //@ close table(_lpm, dir);
 
     if (value == INVALID) {
       return INVALID;
     } else {
-    //@ valid_next_hop24(value, value24);
+      //@ valid_next_hop24(value, value24);
       return value;
     }
   }
 }
 
-int lpm_update_elem(struct lpm *_lpm, uint32_t prefix,
-                    uint8_t prefixlen, uint16_t value)
-/*@ requires table(_lpm, ?dir) &*&
-             prefixlen >= 0 &*& prefixlen <= 32 &*&
-             value != INVALID &*&
-             0 <= value &*& value <= MAX_NEXT_HOP_VALUE &*&
-             false == extract_flag(value) &*&
-             true == valid_entry24(value) &*&
-             true == valid_entry_long(value); @*/
-/*@ ensures can_insert(dir, prefix, prefixlen) == (result != 0) &*&
-            result != 0 ?
-              table(_lpm, add_rule(dir, init_rule(prefix, prefixlen, value)))
-            :
-              table(_lpm, dir); @*/
+int lpm_update_elem(struct lpm *_lpm, uint32_t prefix, uint8_t prefixlen,
+                    uint16_t value)
+    /*@ requires table(_lpm, ?dir) &*&
+                 prefixlen >= 0 &*& prefixlen <= 32 &*&
+                 value != INVALID &*&
+                 0 <= value &*& value <= MAX_NEXT_HOP_VALUE &*&
+                 false == extract_flag(value) &*&
+                 true == valid_entry24(value) &*&
+                 true == valid_entry_long(value); @*/
+    /*@ ensures can_insert(dir, prefix, prefixlen) == (result != 0) &*&
+                result != 0 ?
+                  table(_lpm, add_rule(dir, init_rule(prefix, prefixlen,
+       value)))
+                :
+                  table(_lpm, dir); @*/
 {
   //@ open table(_lpm, dir);
 
@@ -567,7 +562,7 @@ int lpm_update_elem(struct lpm *_lpm, uint32_t prefix,
   //@ bitand_def(prefix, d, mask, maskZ);
   //@ bitand_limits(prefix, mask, N32);
   //@ Z masked_ipZ = Z_and(d, maskZ);
-  //Show that if two uint32_t are equal, then their respective Z values
+  // Show that if two uint32_t are equal, then their respective Z values
   // are also equal
   //@ Z_and_length(d, maskZ);
   //@ assert (Z_length(Z_and(d, maskZ)) == N32);
@@ -575,7 +570,7 @@ int lpm_update_elem(struct lpm *_lpm, uint32_t prefix,
   //@ assert int_of_Z(masked_ipZ) == masked_ip;
   //@ assert (masked_ipZ == Z_of_int(masked_ip, N32));
 
-  //If prefixlen is smaller than 24, simply store the value in lpm_24
+  // If prefixlen is smaller than 24, simply store the value in lpm_24
   if (prefixlen < 25) {
 
     uint32_t first_index = lpm_24_extract_first_index(masked_ip);
@@ -602,14 +597,14 @@ int lpm_update_elem(struct lpm *_lpm, uint32_t prefix,
        update_n(t_24, first_index, nat_of_int(rule_size), value);
     @*/
 
-    //fill all entries between [first index and last index[ with value
-    for (uint32_t i = first_index; ; i++)
-    /*@ invariant first_index <= i &*& i <= last_index &*&
-                  lpm_24[0..lpm_24_MAX_ENTRIES] |-> ?updated &*&
-                  true == forall(updated, valid_entry24) &*&
-                  updated == update_n(t_24, first_index,
-                                      nat_of_int(i-first_index),
-                                      value); @*/
+    // fill all entries between [first index and last index[ with value
+    for (uint32_t i = first_index;; i++)
+        /*@ invariant first_index <= i &*& i <= last_index &*&
+                      lpm_24[0..lpm_24_MAX_ENTRIES] |-> ?updated &*&
+                      true == forall(updated, valid_entry24) &*&
+                      updated == update_n(t_24, first_index,
+                                          nat_of_int(i-first_index),
+                                          value); @*/
     {
       if (i == last_index) {
         break;
@@ -619,15 +614,14 @@ int lpm_update_elem(struct lpm *_lpm, uint32_t prefix,
 
       //@ forall_update(updated, valid_entry24, i, value);
 
-      //Prove that the loop is like update_n
+      // Prove that the loop is like update_n
       //@ succ_int(i-first_index);
       //@ loop_update_n(first_index, nat_of_int(i-first_index), value, t_24);
     }
 
-
     //@ assert lpm_24[0..lpm_24_MAX_ENTRIES] |-> ?new_t_24;
 
-    //Prove that mapping holds
+    // Prove that mapping holds
     /*@ map_update_n(first_index, nat_of_int(rule_size), value,
                      t_24, entry_24_mapping);
     @*/
@@ -636,26 +630,26 @@ int lpm_update_elem(struct lpm *_lpm, uint32_t prefix,
 
     //@ close table(_lpm, build_tables(new_t_24, t_l, long_index));
   } else {
-  //If the prefixlen is not smaller than 24, we have to store the value
-  //in lpm_long.
+    // If the prefixlen is not smaller than 24, we have to store the value
+    // in lpm_long.
 
-    //Check the lpm_24 entry corresponding to the key. If it already has a
-    //flag set to 1, use the stored value as base index, otherwise get a new
-    //index and store it in the lpm_24
+    // Check the lpm_24 entry corresponding to the key. If it already has a
+    // flag set to 1, use the stored value as base index, otherwise get a new
+    // index and store it in the lpm_24
     uint8_t base_index;
     uint32_t lpm_24_index = lpm_24_extract_first_index(prefix);
     // @ assert lpm_24_index == index24_from_ipv4(d);
     // @ assert lpm_24_index == compute_starting_index_24(new_rule);
 
     uint16_t lpm_24_value = lpm_24[lpm_24_index];
-    //Prove that the value retrieved by lookup_lpm_24 is the mapped value
-    //retrieved by lpm_24[index]
+    // Prove that the value retrieved by lookup_lpm_24 is the mapped value
+    // retrieved by lpm_24[index]
 
     //@ nth_map(lpm_24_index, entry_24_mapping, t_24);
 
     //@ option<pair<bool, Z> > value24 = lookup_lpm_24(lpm_24_index, dir);
 
-    //Prove that the retrieved elem is valid
+    // Prove that the retrieved elem is valid
     //@ forall_nth(t_24, valid_entry24, lpm_24_index);
 
     bool need_new_index;
@@ -683,7 +677,7 @@ int lpm_update_elem(struct lpm *_lpm, uint32_t prefix,
         return 0;
 
       } else {
-      //generate next index and store it in lpm_24
+        // generate next index and store it in lpm_24
         base_index = (uint8_t)(_lpm->lpm_long_index);
         // @ assert 0 <= base_index &*& base_index < 256;
         //@ option<pair<bool, Z> > index_for_long=entry_24_mapping(base_index);
@@ -727,17 +721,17 @@ int lpm_update_elem(struct lpm *_lpm, uint32_t prefix,
                  lookup_lpm_24(lpm_24_index, dir);
       @*/
 
-      //Show extraction equivalence
+      // Show extraction equivalence
       //@ value24_extraction_equivalence(lpm_24_value, value24);
       // @ assert base_index == extract24_value(entry_24_mapping(lpm_24_value));
     }
 
     //@ assert lpm_24[0..lpm_24_MAX_ENTRIES] |-> ?new_t_24;
 
-    //The last byte in data is used as the starting offset for lpm_long
-    //indexes
-    uint32_t first_index = lpm_long_extract_first_index(prefix, prefixlen,
-                                                        base_index);
+    // The last byte in data is used as the starting offset for lpm_long
+    // indexes
+    uint32_t first_index =
+        lpm_long_extract_first_index(prefix, prefixlen, base_index);
 
     uint32_t rule_size = compute_rule_size(prefixlen);
     // @ assert rule_size == compute_rule_size(prefixlen);
@@ -758,14 +752,14 @@ int lpm_update_elem(struct lpm *_lpm, uint32_t prefix,
 
     // @ assert length(updated_map) == length(map_l);
 
-    //Store value in lpm_long entries
-    for (uint32_t i = first_index; ; i++)
-    /*@ invariant first_index <= i &*& i <= last_index &*&
-                  lpm_long[0..lpm_LONG_MAX_ENTRIES] |-> ?updated &*&
-                  true == forall(updated, valid_entry_long) &*&
-                  updated == update_n(t_l, first_index,
-                                      nat_of_int(i-first_index),
-                                      value); @*/
+    // Store value in lpm_long entries
+    for (uint32_t i = first_index;; i++)
+        /*@ invariant first_index <= i &*& i <= last_index &*&
+                      lpm_long[0..lpm_LONG_MAX_ENTRIES] |-> ?updated &*&
+                      true == forall(updated, valid_entry_long) &*&
+                      updated == update_n(t_l, first_index,
+                                          nat_of_int(i-first_index),
+                                          value); @*/
     {
       if (i == last_index) {
         break;
@@ -774,14 +768,14 @@ int lpm_update_elem(struct lpm *_lpm, uint32_t prefix,
 
       lpm_long[i] = value;
 
-      //Prove that the loop is like update_n
+      // Prove that the loop is like update_n
       //@ succ_int(i-first_index);
       //@ loop_update_n(first_index, nat_of_int(i-first_index), value, t_l);
     }
 
     //@ assert lpm_long[0..lpm_LONG_MAX_ENTRIES] |-> ?new_t_l;
 
-    //Prove that mapping holds
+    // Prove that mapping holds
     /*@ map_update_n(first_index, nat_of_int(rule_size),
                      value, t_l, entry_long_mapping);
     @*/

@@ -6,8 +6,8 @@ bool DynamicValue_eq(void *a, void *b) {
   struct DynamicValue *id1 = (struct DynamicValue *)a;
   struct DynamicValue *id2 = (struct DynamicValue *)b;
 
-  return (id1->bucket_size == id2->bucket_size)
-      AND(id1->bucket_time == id2->bucket_time);
+  return (id1->bucket_size == id2->bucket_size)AND(id1->bucket_time ==
+                                                   id2->bucket_time);
 }
 
 void DynamicValue_allocate(void *obj) {
@@ -18,14 +18,11 @@ void DynamicValue_allocate(void *obj) {
 
 #ifdef KLEE_VERIFICATION
 struct str_field_descr DynamicValue_descrs[] = {
-  { offsetof(struct DynamicValue, bucket_size), sizeof(uint64_t), 0,
-    "bucket_size" },
-  { offsetof(struct DynamicValue, bucket_time), sizeof(int64_t), 0,
-    "bucket_time" },
-};
-struct nested_field_descr DynamicValue_nests[] = {
-
-};
+    {offsetof(struct DynamicValue, bucket_size), sizeof(uint64_t),
+     0,                                          "bucket_size"},
+    {offsetof(struct DynamicValue, bucket_time), sizeof(int64_t),
+     0,                                          "bucket_time"}, };
+struct nested_field_descr DynamicValue_nests[] = {};
 unsigned DynamicValue_hash(void *obj) {
   klee_trace_ret();
   klee_trace_param_tagged_ptr(obj, sizeof(struct DynamicValue), "obj",
@@ -46,7 +43,7 @@ unsigned DynamicValue_hash(void *obj) {
   return klee_int("DynamicValue_hash");
 }
 
-#else // KLEE_VERIFICATION
+#else  // KLEE_VERIFICATION
 
 unsigned DynamicValue_hash(void *obj) {
   struct DynamicValue *id = (struct DynamicValue *)obj;
@@ -63,4 +60,4 @@ unsigned DynamicValue_hash(void *obj) {
   return hash;
 }
 
-#endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION

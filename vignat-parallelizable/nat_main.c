@@ -68,12 +68,12 @@ int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
       return device;
     }
   } else {
-    struct FlowId id = { .src_port = tcpudp_header->src_port,
-                         .dst_port = tcpudp_header->dst_port,
-                         .src_ip = rte_ipv4_header->src_addr,
-                         .dst_ip = rte_ipv4_header->dst_addr,
-                         .protocol = rte_ipv4_header->next_proto_id,
-                         .internal_device = device };
+    struct FlowId id = {.src_port = tcpudp_header->src_port,
+                        .dst_port = tcpudp_header->dst_port,
+                        .src_ip = rte_ipv4_header->src_addr,
+                        .dst_ip = rte_ipv4_header->dst_addr,
+                        .protocol = rte_ipv4_header->next_proto_id,
+                        .internal_device = device};
 
     NF_DEBUG("For id:");
     LOG_FLOWID(&id, NF_DEBUG);

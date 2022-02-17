@@ -1,6 +1,6 @@
 #ifdef KLEE_VERIFICATION
-#  include "libvig/models/verified/map-control.h" //for map_reset
-#endif                                                  // KLEE_VERIFICATION
+#include "libvig/models/verified/map-control.h"  //for map_reset
+#endif                                           // KLEE_VERIFICATION
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
@@ -48,9 +48,9 @@ static void read_static_ft_from_array(struct Map *stat_map,
                                       struct Vector *stat_keys,
                                       uint32_t stat_capacity) {}
 
-#else // KLEE_VERIFICATION
+#else  // KLEE_VERIFICATION
 
-#  ifndef NFOS
+#ifndef NFOS
 static void read_static_ft_from_file(struct Map *stat_map,
                                      struct Vector *stat_keys,
                                      uint32_t stat_capacity) {
@@ -69,8 +69,7 @@ static void read_static_ft_from_file(struct Map *stat_map,
   char ch;
   do {
     ch = fgetc(cfg_file);
-    if (ch == '\n')
-      number_of_lines++;
+    if (ch == '\n') number_of_lines++;
   } while (ch != EOF);
 
   // Make sure the hash table is occupied only by 50%
@@ -157,15 +156,13 @@ static void read_static_ft_from_file(struct Map *stat_map,
 finally:
   fclose(cfg_file);
 }
-#  endif // NFOS
+#endif  // NFOS
 
 struct {
   const char mac_addr[18];
   const int device_from;
   const int device_to;
-} static_rules[] = {
-  { "00:00:00:00:00:00", 0, 0 },
-};
+} static_rules[] = {{"00:00:00:00:00:00", 0, 0}, };
 
 static void read_static_ft_from_array(struct Map *stat_map,
                                       struct Vector *stat_keys,
@@ -199,10 +196,10 @@ static void read_static_ft_from_array(struct Map *stat_map,
   }
 }
 
-#endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION
 
 bool nf_init(void) {
-  unsigned stat_capacity = 8192; // Has to be power of 2
+  unsigned stat_capacity = 8192;  // Has to be power of 2
   unsigned capacity = config.dyn_capacity;
   assert(stat_capacity < CAPACITY_UPPER_LIMIT - 1);
 

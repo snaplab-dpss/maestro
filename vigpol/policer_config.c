@@ -14,9 +14,9 @@ const uint64_t DEFAULT_RATE = 1000000; // 1MB/s
 const uint64_t DEFAULT_BURST = 100000; // 100kB
 const uint32_t DEFAULT_CAPACITY = 128; // IPs
 
-#define PARSE_ERROR(format, ...)          \
-  nf_config_usage();                      \
-  fprintf(stderr, format, ##__VA_ARGS__); \
+#define PARSE_ERROR(format, ...)                                               \
+  nf_config_usage();                                                           \
+  fprintf(stderr, format, ##__VA_ARGS__);                                      \
   exit(EXIT_FAILURE);
 
 void nf_config_init(int argc, char **argv) {

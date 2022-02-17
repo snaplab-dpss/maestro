@@ -84,17 +84,17 @@ uint32_t packet_get_unread_length(void *p) {
  *
  **********************************************/
 
-#define NF_INFO(text, ...)                                                     \
-  printf(text "\n", ##__VA_ARGS__);                                            \
+#define NF_INFO(text, ...)          \
+  printf(text "\n", ##__VA_ARGS__); \
   fflush(stdout);
 
 #ifdef ENABLE_LOG
-#  define NF_DEBUG(text, ...)                                                  \
-    fprintf(stderr, "DEBUG: " text "\n", ##__VA_ARGS__);                       \
-    fflush(stderr);
-#else // ENABLE_LOG
-#  define NF_DEBUG(...)
-#endif // ENABLE_LOG
+#define NF_DEBUG(text, ...)                            \
+  fprintf(stderr, "DEBUG: " text "\n", ##__VA_ARGS__); \
+  fflush(stderr);
+#else  // ENABLE_LOG
+#define NF_DEBUG(...)
+#endif  // ENABLE_LOG
 
 /**********************************************
  *
@@ -124,16 +124,16 @@ static inline void *nf_borrow_next_chunk(void *p, size_t length) {
   return chunk;
 }
 
-#define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests, tag)     \
-  /*nothing*/
+#define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests, tag) \
+/*nothing*/
 
-#define CHUNK_LAYOUT_N(pkt, str_name, fields, nests)                           \
-  CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields,                      \
-                    sizeof(fields) / sizeof(fields[0]), nests,                 \
+#define CHUNK_LAYOUT_N(pkt, str_name, fields, nests)           \
+  CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields,      \
+                    sizeof(fields) / sizeof(fields[0]), nests, \
                     sizeof(nests) / sizeof(nests[0]), #str_name);
 
-#define CHUNK_LAYOUT(pkt, str_name, fields)                                    \
-  CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields,                      \
+#define CHUNK_LAYOUT(pkt, str_name, fields)               \
+  CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields, \
                     sizeof(fields) / sizeof(fields[0]), NULL, 0, #str_name);
 
 static inline void nf_return_all_chunks(void *p) {
@@ -161,9 +161,8 @@ bool nf_has_tcpudp_header(struct rte_ipv4_hdr *header) {
          header->next_proto_id == IPPROTO_UDP;
 }
 
-static inline struct rte_ipv4_hdr *
-nf_then_get_rte_ipv4_header(void *rte_ether_header_, void *p,
-                            uint8_t **ip_options) {
+static inline struct rte_ipv4_hdr *nf_then_get_rte_ipv4_header(
+    void *rte_ether_header_, void *p, uint8_t **ip_options) {
   struct rte_ether_hdr *rte_ether_header =
       (struct rte_ether_hdr *)rte_ether_header_;
   *ip_options = NULL;
@@ -194,8 +193,8 @@ nf_then_get_rte_ipv4_header(void *rte_ether_header_, void *p,
   return hdr;
 }
 
-static inline struct tcpudp_hdr *
-nf_then_get_tcpudp_header(struct rte_ipv4_hdr *ip_header, void *p) {
+static inline struct tcpudp_hdr *nf_then_get_tcpudp_header(
+    struct rte_ipv4_hdr *ip_header, void *p) {
   if ((!nf_has_tcpudp_header(ip_header)) |
       (packet_get_unread_length(p) < sizeof(struct tcpudp_hdr))) {
     return NULL;
@@ -214,14 +213,14 @@ void nf_set_rte_ipv4_udptcp_checksum(struct rte_ipv4_hdr *ip_header,
   // rte_be_to_cpu_16(ip_header->total_length) - sizeof(struct tcpudp_hdr));
   // assert((char*)payload == ((char*)l4_header + sizeof(struct tcpudp_hdr)));
 
-  ip_header->hdr_checksum = 0; // Assumed by cksum calculation
+  ip_header->hdr_checksum = 0;  // Assumed by cksum calculation
   if (ip_header->next_proto_id == IPPROTO_TCP) {
     struct rte_tcp_hdr *tcp_header = (struct rte_tcp_hdr *)l4_header;
-    tcp_header->cksum = 0; // Assumed by cksum calculation
+    tcp_header->cksum = 0;  // Assumed by cksum calculation
     tcp_header->cksum = rte_ipv4_udptcp_cksum(ip_header, tcp_header);
   } else if (ip_header->next_proto_id == IPPROTO_UDP) {
     struct rte_udp_hdr *udp_header = (struct rte_udp_hdr *)l4_header;
-    udp_header->dgram_cksum = 0; // Assumed by cksum calculation
+    udp_header->dgram_cksum = 0;  // Assumed by cksum calculation
     udp_header->dgram_cksum = rte_ipv4_udptcp_cksum(ip_header, udp_header);
   }
   ip_header->hdr_checksum = rte_ipv4_cksum(ip_header);
@@ -242,7 +241,7 @@ uintmax_t nf_util_parse_int(const char *str, const char *name, int base,
 
 char *nf_mac_to_str(struct rte_ether_addr *addr) {
   // format is xx:xx:xx:xx:xx:xx\0
-  uint16_t buffer_size = 6 * 2 + 5 + 1; // FIXME: why dynamic alloc here?
+  uint16_t buffer_size = 6 * 2 + 5 + 1;  // FIXME: why dynamic alloc here?
   char *buffer = (char *)calloc(buffer_size, sizeof(char));
   if (buffer == NULL) {
     rte_exit(EXIT_FAILURE, "Out of memory in nf_mac_to_str!");
@@ -258,8 +257,8 @@ char *nf_mac_to_str(struct rte_ether_addr *addr) {
 char *nf_rte_ipv4_to_str(uint32_t addr) {
   // format is xxx.xxx.xxx.xxx\0
   uint16_t buffer_size = 4 * 3 + 3 + 1;
-  char *buffer = (char *)calloc(buffer_size,
-                                sizeof(char)); // FIXME: why dynamic alloc here?
+  char *buffer = (char *)calloc(
+      buffer_size, sizeof(char));  // FIXME: why dynamic alloc here?
   if (buffer == NULL) {
     rte_exit(EXIT_FAILURE, "Out of memory in nf_rte_ipv4_to_str!");
   }
@@ -303,23 +302,23 @@ bool nf_init(void);
 int nf_process(uint16_t device, uint8_t *buffer, uint16_t packet_length,
                vigor_time_t now);
 
-#define FLOOD_FRAME ((uint16_t)-1)
+#define FLOOD_FRAME ((uint16_t) - 1)
 
 // NFOS declares its own main method
 #ifdef NFOS
-#  define MAIN nf_main
-#else // NFOS
-#  define MAIN main
-#endif // NFOS
+#define MAIN nf_main
+#else  // NFOS
+#define MAIN main
+#endif  // NFOS
 
 // Unverified support for batching, useful for performance comparisons
 #define VIGOR_BATCH_SIZE 32
 
-#define VIGOR_LOOP_BEGIN                                                       \
-  while (1) {                                                                  \
-    vigor_time_t VIGOR_NOW = current_time();                                   \
-    unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();                  \
-    for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT;        \
+#define VIGOR_LOOP_BEGIN                                                \
+  while (1) {                                                           \
+    vigor_time_t VIGOR_NOW = current_time();                            \
+    unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();           \
+    for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT; \
          VIGOR_DEVICE++) {
 #define VIGOR_LOOP_END
 
@@ -353,7 +352,7 @@ static int nf_init_device(uint16_t device, struct rte_mempool *mbuf_pool) {
   int retval;
 
   // device_conf passed to rte_eth_dev_configure cannot be NULL
-  struct rte_eth_conf device_conf = { 0 };
+  struct rte_eth_conf device_conf = {0};
   // device_conf.rxmode.hw_strip_crc = 1;
 
   // Configure the device (1, 1 == number of RX/TX queues)

@@ -6,9 +6,8 @@
 
 #ifdef KLEE_VERIFICATION
 struct str_field_descr client_descrs[] = {
-  { offsetof(struct client, src_ip), sizeof(uint32_t), 0, "src_ip" },
-  { offsetof(struct client, dst_ip), sizeof(uint32_t), 0, "dst_ip" },
-};
+    {offsetof(struct client, src_ip), sizeof(uint32_t), 0, "src_ip"},
+    {offsetof(struct client, dst_ip), sizeof(uint32_t), 0, "dst_ip"}, };
 struct nested_field_descr client_nests[] = {};
 
 unsigned client_hash(void *obj) {
@@ -28,7 +27,7 @@ unsigned client_hash(void *obj) {
   }
   return klee_int("ip_addr_hash");
 }
-#else // KLEE_VERIFICATION
+#else  // KLEE_VERIFICATION
 
 unsigned client_hash(void *obj) {
   struct client *id = (struct client *)obj;
@@ -38,4 +37,4 @@ unsigned client_hash(void *obj) {
   return hash;
 }
 
-#endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION

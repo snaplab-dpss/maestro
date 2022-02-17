@@ -35,9 +35,9 @@ int vfprintf(FILE *stream, const char *format, va_list __arg) {
               (stream != NULL && stream == fopencookie_ret));
 #if (defined NFOS) && (!defined KLEE_VERIFICATION)
   vprintf1(format, __arg);
-#endif //(defined NFOS) && (!defined KLEE_VERIFICATION)
+#endif  //(defined NFOS) && (!defined KLEE_VERIFICATION)
 
-  return 0; // OK, whatever
+  return 0;  // OK, whatever
 }
 
 FILE *fopencookie(void *cookie, const char *mode,

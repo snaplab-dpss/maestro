@@ -1,12 +1,14 @@
 // Methods that DPDK depends on but are not actually used in symbolic execution.
-// This is necessary for building the NFOS, since we can't just have missing linker symbols.
-// Signatures are wrong because the linker doesn't care, we just keep the "has return value or not" info.
+// This is necessary for building the NFOS, since we can't just have missing
+// linker symbols.
+// Signatures are wrong because the linker doesn't care, we just keep the "has
+// return value or not" info.
 
 #ifndef KLEE_VERIFICATION
 
 #include <stdlib.h>
 
-uint64_t TIME; // from hardware models, not DPDK
+uint64_t TIME;  // from hardware models, not DPDK
 
 int __fxstat() { abort(); }
 
@@ -96,4 +98,4 @@ void timerfd_settime() { abort(); }
 
 void unlinkat() { abort(); }
 
-#endif // !KLEE_VERIFICATION
+#endif  // !KLEE_VERIFICATION

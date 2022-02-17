@@ -12,14 +12,11 @@ bool operator==(const PacketDependency &lhs, const PacketDependency &rhs) {
 }
 
 bool operator<(const PacketDependency &lhs, const PacketDependency &rhs) {
-  if (lhs.get_layer() < rhs.get_layer())
-    return true;
+  if (lhs.get_layer() < rhs.get_layer()) return true;
 
-  if (lhs.get_layer() > rhs.get_layer())
-    return false;
+  if (lhs.get_layer() > rhs.get_layer()) return false;
 
-  if (lhs.get_offset() < rhs.get_offset())
-    return true;
+  if (lhs.get_offset() < rhs.get_offset()) return true;
 
   return false;
 }
@@ -58,21 +55,16 @@ void DependencyManager::add_dependency(const Dependency *dependency) {
         dynamic_cast<const PacketDependency *>(dependency);
     assert(packet_dependency);
     process_packet_dependency(packet_dependency);
-  }
-
-  else if (!dependency->is_processed() && !dependency->is_packet_related()) {
+  } else if (!dependency->is_processed() && !dependency->is_packet_related()) {
     // TODO:
     assert(false && "not implemented");
-  }
-
-  else {
+  } else {
     dependencies.emplace_back(dependency->clone());
     are_dependencies_sorted = false;
   }
 }
 
-bool operator==(const DependencyManager &lhs,
-                const DependencyManager &rhs) {
+bool operator==(const DependencyManager &lhs, const DependencyManager &rhs) {
   return lhs.get() == rhs.get();
 }
 
@@ -97,13 +89,11 @@ void DependencyManager::process_packet_dependency(
 
   const auto dependency = *dependency_ptr;
 
-  auto it = std::find_if(
-      dependencies.begin(), dependencies.end(),
-      [&](const std::shared_ptr<Dependency> & _dependency)->bool {
-        if (!_dependency->is_processed())
-          return false;
-        if (!_dependency->is_packet_related())
-          return false;
+  auto it =
+      std::find_if(dependencies.begin(), dependencies.end(),
+                   [&](const std::shared_ptr<Dependency> & _dependency)->bool {
+        if (!_dependency->is_processed()) return false;
+        if (!_dependency->is_packet_related()) return false;
 
         const auto _packet_dependency =
             dynamic_cast<const PacketDependency *>(_dependency.get());
@@ -112,8 +102,7 @@ void DependencyManager::process_packet_dependency(
         return (*_packet_dependency) == dependency;
       });
 
-  if (it != dependencies.end())
-    return;
+  if (it != dependencies.end()) return;
 
   auto offset = dependency.get_offset();
   auto layer = dependency.get_layer();
@@ -217,5 +206,4 @@ void DependencyManager::process_packet_dependency(
   }
 }
 
-
-} // namespace ParallelSynthesizer
+}  // namespace ParallelSynthesizer

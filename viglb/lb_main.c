@@ -38,11 +38,11 @@ int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
     return device;
   }
 
-  struct LoadBalancedFlow flow = { .src_ip = rte_ipv4_header->src_addr,
-                                   .dst_ip = rte_ipv4_header->dst_addr,
-                                   .src_port = tcpudp_header->src_port,
-                                   .dst_port = tcpudp_header->dst_port,
-                                   .protocol = rte_ipv4_header->next_proto_id };
+  struct LoadBalancedFlow flow = {.src_ip = rte_ipv4_header->src_addr,
+                                  .dst_ip = rte_ipv4_header->dst_addr,
+                                  .src_port = tcpudp_header->src_port,
+                                  .dst_port = tcpudp_header->dst_port,
+                                  .protocol = rte_ipv4_header->next_proto_id};
 
   if (device != config.wan_device) {
     NF_DEBUG("Processing heartbeat, device is %" PRIu16, device);
@@ -50,10 +50,11 @@ int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
     return device;
   }
 
-  struct LoadBalancedBackend backend = lb_get_backend(balancer, &flow, now,
-                                                      config.wan_device);
+  struct LoadBalancedBackend backend =
+      lb_get_backend(balancer, &flow, now, config.wan_device);
 
-  NF_DEBUG("Processing packet from %" PRIu16 " to %" PRIu16, device, backend.nic);
+  NF_DEBUG("Processing packet from %" PRIu16 " to %" PRIu16, device,
+           backend.nic);
   concretize_devices(&backend.nic, rte_eth_dev_count_avail());
 
   if (backend.nic != config.wan_device) {

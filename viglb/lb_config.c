@@ -17,14 +17,13 @@ void nf_config_init(int argc, char **argv) {
   uint16_t nb_devices = rte_eth_dev_count_avail();
 
   struct option long_options[] = {
-    { "flow-expiration", required_argument, NULL, 'x' },
-    { "flow-capacity", required_argument, NULL, 'f' },
-    { "backend-capacity", required_argument, NULL, 's' },
-    { "cht-height", required_argument, NULL, 'h' },
-    { "backend-expiration", required_argument, NULL, 't' },
-    { "wan", required_argument, NULL, 'w' },
-    { NULL, 0, NULL, 0 }
-  };
+      {"flow-expiration", required_argument, NULL, 'x'},
+      {"flow-capacity", required_argument, NULL, 'f'},
+      {"backend-capacity", required_argument, NULL, 's'},
+      {"cht-height", required_argument, NULL, 'h'},
+      {"backend-expiration", required_argument, NULL, 't'},
+      {"wan", required_argument, NULL, 'w'},
+      {NULL, 0, NULL, 0}};
 
   int opt;
   while ((opt = getopt_long(argc, argv, "b:x:f:", long_options, NULL)) != EOF) {
@@ -84,22 +83,24 @@ void nf_config_init(int argc, char **argv) {
   optind = 1;
 
   // Fill in the mac addresses
-  config.device_macs = malloc(sizeof(struct rte_ether_addr) * rte_eth_dev_count_avail());
+  config.device_macs =
+      malloc(sizeof(struct rte_ether_addr) * rte_eth_dev_count_avail());
   for (int i = 0; i < rte_eth_dev_count_avail(); ++i) {
     rte_eth_macaddr_get(i, &config.device_macs[i]);
   }
 }
 
 void nf_config_usage(void) {
-  NF_INFO("Usage:\n"
-          "[DPDK EAL options] --\n"
-          "\t--flow-expiration <time>: flow expiration time (us).\n"
-          "\t--flow-capacity <n>: flow table capacity.\n"
-          "\t--backend-capacity <n>: backend table capacity.\n"
-          "\t--cht-height <n>: consistent hashing table height: bigger <n> "
-          "generates more smooth distribution.\n"
-          "\t--backend-expiration <time>: backend expiration time (us).\n"
-          "\t--wan <device>: set device to be the external one.\n");
+  NF_INFO(
+      "Usage:\n"
+      "[DPDK EAL options] --\n"
+      "\t--flow-expiration <time>: flow expiration time (us).\n"
+      "\t--flow-capacity <n>: flow table capacity.\n"
+      "\t--backend-capacity <n>: backend table capacity.\n"
+      "\t--cht-height <n>: consistent hashing table height: bigger <n> "
+      "generates more smooth distribution.\n"
+      "\t--backend-expiration <time>: backend expiration time (us).\n"
+      "\t--wan <device>: set device to be the external one.\n");
 }
 
 void nf_config_print(void) {

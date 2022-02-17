@@ -28,13 +28,13 @@ bool nf_init(void) {
 }
 
 void expire_entries(vigor_time_t time) {
-  assert(time >= 0); // we don't support the past
+  assert(time >= 0);  // we don't support the past
   assert(sizeof(vigor_time_t) <= sizeof(uint64_t));
-  uint64_t time_u = (uint64_t)time; // OK because of the two asserts
+  uint64_t time_u = (uint64_t)time;  // OK because of the two asserts
   uint64_t flow_expiration_time_ns =
-      ((uint64_t)config.flow_expiration_time) * 1000; // us to ns
+      ((uint64_t)config.flow_expiration_time) * 1000;  // us to ns
   uint64_t client_expiration_time_ns =
-      ((uint64_t)config.client_expiration_time) * 1000; // us to ns
+      ((uint64_t)config.client_expiration_time) * 1000;  // us to ns
   vigor_time_t flow_last_time = time_u - flow_expiration_time_ns;
   vigor_time_t client_last_time = time_u - client_expiration_time_ns;
   expire_items_single_map(state->flow_allocator, state->flows_keys,
@@ -75,7 +75,7 @@ int limit_clients(struct flow *flow, vigor_time_t now) {
   int flow_index = -1;
   int present = map_get(state->flows, flow, &flow_index);
 
-  struct client client = { .src_ip = flow->src_ip, .dst_ip = flow->dst_ip };
+  struct client client = {.src_ip = flow->src_ip, .dst_ip = flow->dst_ip};
 
   sketch_compute_hashes(state->sketch, &client);
 
@@ -128,11 +128,11 @@ int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
     NF_DEBUG("Outgoing packet. Not limiting clients.");
     return config.wan_device;
   } else if (device == config.wan_device) {
-    struct flow flow = { .src_port = tcpudp_header->src_port,
-                         .dst_port = tcpudp_header->dst_port,
-                         .src_ip = rte_ipv4_header->src_addr,
-                         .dst_ip = rte_ipv4_header->dst_addr,
-                         .protocol = rte_ipv4_header->next_proto_id, };
+    struct flow flow = {.src_port = tcpudp_header->src_port,
+                        .dst_port = tcpudp_header->dst_port,
+                        .src_ip = rte_ipv4_header->src_addr,
+                        .dst_ip = rte_ipv4_header->dst_addr,
+                        .protocol = rte_ipv4_header->next_proto_id, };
 
     int fwd = limit_clients(&flow, now);
 

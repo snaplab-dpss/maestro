@@ -12,16 +12,15 @@ const uint16_t DEFAULT_LAN = 1;
 const uint16_t DEFAULT_WAN = 0;
 const uint32_t DEFAULT_CAPACITY = 65536;
 const uint32_t DEFAULT_MAX_PORTS = 60;
-const uint32_t DEFAULT_EXPIRATION_TIME = 1000000; // 1s
+const uint32_t DEFAULT_EXPIRATION_TIME = 1000000;  // 1s
 
-#define PARSE_ERROR(format, ...)                                               \
-  nf_config_usage();                                                           \
-  fprintf(stderr, format, ##__VA_ARGS__);                                      \
+#define PARSE_ERROR(format, ...)          \
+  nf_config_usage();                      \
+  fprintf(stderr, format, ##__VA_ARGS__); \
   exit(EXIT_FAILURE);
 
 int is_power_of_2(uint32_t d) {
-  if (d == 0)
-    return false;
+  if (d == 0) return false;
 
   while (d != 1) {
     if (d % 2 != 0) {
@@ -44,14 +43,12 @@ void nf_config_init(int argc, char **argv) {
 
   unsigned nb_devices = rte_eth_dev_count_avail();
 
-  struct option long_options[] = {
-    { "lan", required_argument, NULL, 'l' },
-    { "wan", required_argument, NULL, 'w' },
-    { "capacity", required_argument, NULL, 'c' },
-    { "max-ports", required_argument, NULL, 'p' },
-    { "expire", required_argument, NULL, 't' },
-    { NULL, 0, NULL, 0 }
-  };
+  struct option long_options[] = {{"lan", required_argument, NULL, 'l'},
+                                  {"wan", required_argument, NULL, 'w'},
+                                  {"capacity", required_argument, NULL, 'c'},
+                                  {"max-ports", required_argument, NULL, 'p'},
+                                  {"expire", required_argument, NULL, 't'},
+                                  {NULL, 0, NULL, 0}};
 
   int opt;
   while ((opt = getopt_long(argc, argv, "l:w:r:t:m:M:c:", long_options,
@@ -108,20 +105,25 @@ void nf_config_init(int argc, char **argv) {
 }
 
 void nf_config_usage(void) {
-  NF_INFO("Usage:\n"
-          "[DPDK EAL options] --\n"
-          "\t--lan <device>: LAN device,"
-          " default: %" PRIu16 ".\n"
-          "\t--wan <device>: WAN device,"
-          " default: %" PRIu16 ".\n"
-          "\t--capacity <capacity>: maximum number of concurrent sources,"
-          " default: %" PRIu32 ".\n"
-          "\t--max-ports <max-ports>: maximum allowed number of touched ports,"
-          " default: %" PRIu32 ".\n"
-          "\t--expire <time>: source expiration time (us).\n"
-          " default: %" PRIu32 ".\n",
-          DEFAULT_LAN, DEFAULT_WAN, DEFAULT_CAPACITY, DEFAULT_MAX_PORTS,
-          DEFAULT_EXPIRATION_TIME);
+  NF_INFO(
+      "Usage:\n"
+      "[DPDK EAL options] --\n"
+      "\t--lan <device>: LAN device,"
+      " default: %" PRIu16
+      ".\n"
+      "\t--wan <device>: WAN device,"
+      " default: %" PRIu16
+      ".\n"
+      "\t--capacity <capacity>: maximum number of concurrent sources,"
+      " default: %" PRIu32
+      ".\n"
+      "\t--max-ports <max-ports>: maximum allowed number of touched ports,"
+      " default: %" PRIu32
+      ".\n"
+      "\t--expire <time>: source expiration time (us).\n"
+      " default: %" PRIu32 ".\n",
+      DEFAULT_LAN, DEFAULT_WAN, DEFAULT_CAPACITY, DEFAULT_MAX_PORTS,
+      DEFAULT_EXPIRATION_TIME);
 }
 
 void nf_config_print(void) {

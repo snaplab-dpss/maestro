@@ -39,10 +39,10 @@ size_t global_read_length = 0;
   @*/
 
 void packet_state_total_length(void *p, uint32_t *len)
-/*@ requires packetp(p, ?unread, nil) &*&
-             *len |-> length(unread); @*/
-/*@ ensures packetp(p, unread, nil) &*&
-            *len |-> length(unread); @*/
+    /*@ requires packetp(p, ?unread, nil) &*&
+                 *len |-> length(unread); @*/
+    /*@ ensures packetp(p, unread, nil) &*&
+                *len |-> length(unread); @*/
 {
   //@ open packetp(p, unread, nil);
   // IGNORE(p);
@@ -68,15 +68,16 @@ void packet_state_total_length(void *p, uint32_t *len)
 
 // The main IO primitive.
 void packet_borrow_next_chunk(void *p, size_t length, void **chunk)
-/*@ requires packetp(p, ?unread, ?mc) &*&
-             length <= length(unread) &*&
-             0 < length &*& length < INT_MAX &*&
-             length + borrowed_len(mc) < INT_MAX &*&
-             *chunk |-> _; @*/
-/*@ ensures *chunk |-> ?ptr &*&
-            ptr != 0 &*&
-            packetp(p, drop(length, unread), cons(pair(ptr, length), mc)) &*&
-            chars(ptr, length, take(length, unread)); @*/
+    /*@ requires packetp(p, ?unread, ?mc) &*&
+                 length <= length(unread) &*&
+                 0 < length &*& length < INT_MAX &*&
+                 length + borrowed_len(mc) < INT_MAX &*&
+                 *chunk |-> _; @*/
+    /*@ ensures *chunk |-> ?ptr &*&
+                ptr != 0 &*&
+                packetp(p, drop(length, unread), cons(pair(ptr, length), mc))
+       &*&
+                chars(ptr, length, take(length, unread)); @*/
 {
   //@ open packetp(p, unread, mc);
   //@ borrowed_len_nonneg(mc, p, p + borrowed_len(mc));
@@ -92,21 +93,22 @@ void packet_borrow_next_chunk(void *p, size_t length, void **chunk)
 }
 
 void packet_return_chunk(void *p, void *chunk)
-/*@ requires packetp(p, ?unread, cons(pair(chunk, ?len), ?mc)) &*&
-             chars(chunk, len, ?chnk); @*/
-/*@ ensures packetp(p, append(chnk, unread), mc); @*/
+    /*@ requires packetp(p, ?unread, cons(pair(chunk, ?len), ?mc)) &*&
+                 chars(chunk, len, ?chnk); @*/
+    /*@ ensures packetp(p, append(chnk, unread), mc); @*/
 {
   //@ open packetp(p, unread, cons(pair(chunk, len), mc));
   global_read_length = (uint32_t)((int8_t *)chunk - (int8_t *)p);
   //@ close packetp(p, append(chnk, unread), mc);
 }
 
-void packet_shrink_chunk(void** p, size_t length, void** chunks, size_t num_chunks, struct rte_mbuf *mbuf) {
-  uint8_t* data = (uint8_t*) (*p);
+void packet_shrink_chunk(void **p, size_t length, void **chunks,
+                         size_t num_chunks, struct rte_mbuf *mbuf) {
+  uint8_t *data = (uint8_t *)(*p);
 
-  void* last_chunk = chunks[num_chunks - 1];
+  void *last_chunk = chunks[num_chunks - 1];
   size_t last_chunk_length = packet_get_chunk_length(data, last_chunk);
-  uint8_t* last_chunk_limit = last_chunk + last_chunk_length;
+  uint8_t *last_chunk_limit = last_chunk + last_chunk_length;
 
   assert(length <= last_chunk_length);
   size_t offset = last_chunk_length - length;
@@ -115,14 +117,14 @@ void packet_shrink_chunk(void** p, size_t length, void** chunks, size_t num_chun
     return;
   }
 
-  uint8_t* current = last_chunk_limit - 1;
+  uint8_t *current = last_chunk_limit - 1;
 
   while (current >= data + offset) {
     rte_memcpy(current, current - offset, 1);
     current--;
   }
 
-  data = (uint8_t*) rte_pktmbuf_adj(mbuf, offset);
+  data = (uint8_t *)rte_pktmbuf_adj(mbuf, offset);
   assert(data);
 
   global_read_length -= offset;
@@ -135,14 +137,15 @@ void packet_shrink_chunk(void** p, size_t length, void** chunks, size_t num_chun
   (*p) = data;
 }
 
-void packet_insert_new_chunk(void** p, size_t length, void** chunks, size_t* num_chunks, struct rte_mbuf *mbuf) {
-  uint8_t* data = (uint8_t*) (*p);
-  uint8_t* last_chunk_limit = data + global_read_length;
-  
-  data = (uint8_t*) rte_pktmbuf_prepend(mbuf, length);
+void packet_insert_new_chunk(void **p, size_t length, void **chunks,
+                             size_t *num_chunks, struct rte_mbuf *mbuf) {
+  uint8_t *data = (uint8_t *)(*p);
+  uint8_t *last_chunk_limit = data + global_read_length;
+
+  data = (uint8_t *)rte_pktmbuf_prepend(mbuf, length);
   assert(data);
 
-  uint8_t* current = data;
+  uint8_t *current = data;
 
   while (current + length < last_chunk_limit) {
     rte_memcpy(current, current + length, 1);
@@ -165,15 +168,15 @@ void packet_insert_new_chunk(void** p, size_t length, void** chunks, size_t* num
 }
 
 uint32_t packet_get_unread_length(void *p)
-/*@ requires packetp(p, ?unread, ?mc); @*/
-/*@ ensures packetp(p, unread, mc) &*&
-            result == length(unread); @*/
+    /*@ requires packetp(p, ?unread, ?mc); @*/
+    /*@ ensures packetp(p, unread, mc) &*&
+                result == length(unread); @*/
 {
   //@ open packetp(p, unread, mc);
   return global_total_length - global_read_length;
   //@ close packetp(p, unread, mc);
 }
 
-size_t packet_get_chunk_length(void *p, void* chunk) {
-  return (uint32_t) (((char *) p + global_read_length) - (char *) chunk);
+size_t packet_get_chunk_length(void *p, void *chunk) {
+  return (uint32_t)(((char *)p + global_read_length) - (char *)chunk);
 }

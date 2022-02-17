@@ -18,7 +18,8 @@ int main(int argc, char *argv[]) {
 
   if (argc < 2) {
     Logger::error() << "[ERROR] Missing arguments.";
-    Logger::error() << "Please provide an LVA file location, or \"--rand [devices]\".\n";
+    Logger::error()
+        << "Please provide an LVA file location, or \"--rand [devices]\".\n";
     return 1;
   }
 
@@ -27,16 +28,17 @@ int main(int argc, char *argv[]) {
   if (arg == "--rand") {
     if (argc < 3) {
       Logger::error() << "[ERROR] Missing arguments.";
-      Logger::error() << "Please provide an number of devices to go with the --rand flag.\n";
+      Logger::error() << "Please provide an number of devices to go with the "
+                         "--rand flag.\n";
       return 1;
     }
 
     std::string::size_type sz;
     int devices = std::stoi(argv[2], &sz);
-    
+
     RSSConfig config;
     config.randomize(devices);
-    
+
     auto keys = config.get_keys();
 
     for (auto i = 0; i < config.get_n_keys(); i++) {
@@ -52,8 +54,7 @@ int main(int argc, char *argv[]) {
     Parser parser(arg);
 
     RSSConfigBuilder rss_cfg_builder(parser.get_accesses(),
-                                    parser.get_call_paths_constraints());
-
+                                     parser.get_call_paths_constraints());
 
     rss_cfg_builder.build_rss_config();
     auto config = rss_cfg_builder.get_generated_rss_cfg();

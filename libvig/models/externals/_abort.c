@@ -1,13 +1,13 @@
 #ifndef KLEE_VERIFICATION
 
-#  include <stdlib.h>
+#include <stdlib.h>
 
-#  include <nfos_halt.h>
-#  include <stdio.h>
+#include <nfos_halt.h>
+#include <stdio.h>
 
 void abort(void) {
   printf("\n\nabort() called");
   nfos_halt();
 }
 
-#endif //! KLEE_VERIFICATION
+#endif  //! KLEE_VERIFICATION

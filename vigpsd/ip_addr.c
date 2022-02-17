@@ -13,11 +13,8 @@ void ip_addr_allocate(void *obj) { (uintptr_t) obj; }
 
 #ifdef KLEE_VERIFICATION
 struct str_field_descr ip_addr_descrs[] = {
-  { offsetof(struct ip_addr, addr), sizeof(uint32_t), 0, "addr" },
-};
-struct nested_field_descr ip_addr_nests[] = {
-
-};
+    {offsetof(struct ip_addr, addr), sizeof(uint32_t), 0, "addr"}, };
+struct nested_field_descr ip_addr_nests[] = {};
 unsigned ip_addr_hash(void *obj) {
   klee_trace_ret();
   klee_trace_param_tagged_ptr(obj, sizeof(struct ip_addr), "obj", "ip_addr",
@@ -36,7 +33,7 @@ unsigned ip_addr_hash(void *obj) {
   return klee_int("ip_addr_hash");
 }
 
-#else // KLEE_VERIFICATION
+#else  // KLEE_VERIFICATION
 
 unsigned ip_addr_hash(void *obj) {
   struct ip_addr *id = (struct ip_addr *)obj;
@@ -46,4 +43,4 @@ unsigned ip_addr_hash(void *obj) {
   return hash;
 }
 
-#endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION

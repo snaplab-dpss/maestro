@@ -87,12 +87,10 @@ void Parser::parse_access() {
   iss >> std::ws >> src_device;
 
   dst_device.first = consume_token(Tokens::Access::DST_DEVICE, iss, true);
-  if (dst_device.first)
-    iss >> std::ws >> dst_device.second;
+  if (dst_device.first) iss >> std::ws >> dst_device.second;
 
   success.first = consume_token(Tokens::Access::SUCCESS, iss, true);
-  if (success.first)
-    iss >> std::ws >> success.second;
+  if (success.first) iss >> std::ws >> success.second;
 
   {
     std::string operation_str;
@@ -174,8 +172,7 @@ void Parser::parse_expression() {
   while (states.top().content.size()) {
     assert(last_loaded_content_type() == LoadedContentType::UNPARSED);
 
-    if (consume_token(Tokens::Expression::END, iss, true))
-      break;
+    if (consume_token(Tokens::Expression::END, iss, true)) break;
 
     fragments.push_back(last_loaded_content().unparsed.value);
     consume_content();
@@ -194,8 +191,7 @@ void Parser::parse_packet_dependencies() {
   assert(states.top().content.size());
 
   while (states.top().content.size()) {
-    if (last_loaded_content_type() != LoadedContentType::CHUNK)
-      break;
+    if (last_loaded_content_type() != LoadedContentType::CHUNK) break;
 
     auto chunk = last_loaded_content().chunk.value;
     dependencies.push_back(chunk);
@@ -222,14 +218,12 @@ void Parser::parse_chunk() {
   iss >> std::ws >> layer;
 
   protocol.first = consume_token(Tokens::Chunk::PROTOCOL, iss, true);
-  if (protocol.first)
-    iss >> std::ws >> protocol.second;
+  if (protocol.first) iss >> std::ws >> protocol.second;
 
   while (states.top().content.size()) {
     unsigned int offset;
 
-    if (!consume_token(Tokens::Chunk::DEPENDENCY, iss, true))
-      break;
+    if (!consume_token(Tokens::Chunk::DEPENDENCY, iss, true)) break;
 
     iss >> std::ws >> offset;
 
@@ -288,7 +282,8 @@ void Parser::parse_call_paths_constraint() {
   auto second_call_path_info = last_loaded_content().call_path_info.value;
   consume_content();
 
-  call_paths_constraints.emplace_back(expression, first_call_path_info, second_call_path_info);
+  call_paths_constraints.emplace_back(expression, first_call_path_info,
+                                      second_call_path_info);
 
   consume_token(Tokens::CallPathConstraint::END, iss);
 
@@ -352,19 +347,19 @@ void Parser::parse(const std::string &filepath) {
 
   while (getline(file, line)) {
 
-    if (line == Tokens::Access::START ||
-        line == Tokens::Argument::START ||
+    if (line == Tokens::Access::START || line == Tokens::Argument::START ||
         line == Tokens::Expression::START ||
         line == Tokens::PacketDependencies::START ||
-        line == Tokens::Chunk::START ||
-        line == Tokens::Metadata::START ||
+        line == Tokens::Chunk::START || line == Tokens::Metadata::START ||
         line == Tokens::CallPathConstraint::START ||
         line == Tokens::CallPathInfo::START) {
       states.emplace();
     }
 
     if (states.size() == 0) {
-      Logger::error() << "Error while parsing \"" << line << "\" (no loaded state)" << "\n";
+      Logger::error() << "Error while parsing \"" << line
+                      << "\" (no loaded state)"
+                      << "\n";
       exit(1);
     }
 

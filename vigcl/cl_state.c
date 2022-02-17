@@ -11,20 +11,18 @@
 #include "libvig/models/verified/vector-control.h"
 #include "libvig/models/unverified/sketch-control.h"
 #include "libvig/models/verified/lpm-dir-24-8-control.h"
-#endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION
 
 struct State *allocated_nf_state = NULL;
 
 struct State *alloc_state(uint32_t max_flows, uint32_t sketch_capacity,
                           uint16_t max_clients, uint32_t dev_count) {
 
-  if (allocated_nf_state != NULL)
-    return allocated_nf_state;
+  if (allocated_nf_state != NULL) return allocated_nf_state;
 
   struct State *ret = malloc(sizeof(struct State));
 
-  if (ret == NULL)
-    return NULL;
+  if (ret == NULL) return NULL;
 
   ret->max_flows = max_flows;
   ret->dev_count = dev_count;
@@ -62,7 +60,7 @@ struct State *alloc_state(uint32_t max_flows, uint32_t sketch_capacity,
                     sizeof(client_descrs) / sizeof(client_descrs[0]),
                     client_nests,
                     sizeof(client_nests) / sizeof(client_nests[0]), "client");
-#endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION
 
   allocated_nf_state = ret;
   return ret;
@@ -77,4 +75,4 @@ void nf_loop_iteration_border(unsigned lcore_id, vigor_time_t time) {
       time);
 }
 
-#endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION

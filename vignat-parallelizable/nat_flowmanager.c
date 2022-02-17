@@ -2,7 +2,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
-#include <string.h> //for memcpy
+#include <string.h>  //for memcpy
 #include <rte_ethdev.h>
 
 #include "libvig/verified/double-chain.h"
@@ -55,11 +55,11 @@ bool flow_manager_allocate_flow(struct FlowManager *manager, struct FlowId *id,
 }
 
 void flow_manager_expire(struct FlowManager *manager, vigor_time_t time) {
-  assert(time >= 0); // we don't support the past
+  assert(time >= 0);  // we don't support the past
   assert(sizeof(vigor_time_t) <= sizeof(uint64_t));
-  uint64_t time_u = (uint64_t)time; // OK because of the two asserts
+  uint64_t time_u = (uint64_t)time;  // OK because of the two asserts
   vigor_time_t vigor_time_expiration = (vigor_time_t)manager->expiration_time;
-  vigor_time_t last_time = time_u - vigor_time_expiration * 1000; // us to ns
+  vigor_time_t last_time = time_u - vigor_time_expiration * 1000;  // us to ns
   expire_items_single_map(manager->state->heap, manager->state->fv,
                           manager->state->fm, last_time);
 }

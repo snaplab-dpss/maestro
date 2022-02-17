@@ -95,9 +95,7 @@ std::ostream &operator<<(std::ostream &os, Constraint *arg) {
     LibvigAccessConstraint *constraint =
         dynamic_cast<LibvigAccessConstraint *>(arg);
     os << *constraint;
-  }
-
-  else if (type == Constraint::Type::CallPathType) {
+  } else if (type == Constraint::Type::CallPathType) {
     CallPathsConstraint *constraint = dynamic_cast<CallPathsConstraint *>(arg);
     os << *constraint;
   }
@@ -211,8 +209,7 @@ bool is_select_from_chunk(R3S::Z3_context &ctx, R3S::Z3_app &app,
   R3S::Z3_symbol symbol_app_name = R3S::Z3_get_decl_name(ctx, app_decl);
   std::string app_name = R3S::Z3_get_symbol_string(ctx, symbol_app_name);
 
-  if (app_name != "select")
-    return false;
+  if (app_name != "select") return false;
 
   R3S::Z3_ast array_ast = Z3_get_app_arg(ctx, app, 0);
 
@@ -259,8 +256,7 @@ bool is_not_chunk_symbol(R3S::Z3_context &ctx, R3S::Z3_ast &expr,
 }
 
 void Constraint::fill_dependencies(R3S::Z3_ast &expr) {
-  if (R3S::Z3_get_ast_kind(ctx, expr) != R3S::Z3_APP_AST)
-    return;
+  if (R3S::Z3_get_ast_kind(ctx, expr) != R3S::Z3_APP_AST) return;
 
   R3S::Z3_app app = R3S::Z3_to_app(ctx, expr);
 
@@ -281,9 +277,7 @@ void Constraint::fill_dependencies(R3S::Z3_ast &expr) {
 
     PacketDependenciesExpression pde(ctx, expr, index, packet_chunks_id);
     store_unique_dependencies_expression(pde);
-  }
-
-  else if (is_not_chunk_symbol(ctx, expr, symbol_name)) {
+  } else if (is_not_chunk_symbol(ctx, expr, symbol_name)) {
     NonPacketDependencyExpression npde(ctx, expr, symbol_name);
     store_unique_dependencies_expression(npde);
   }
@@ -355,8 +349,7 @@ void Constraint::zip_packet_fields_expression_and_values(
       const PacketDependency *curr_packet_dependency = nullptr;
 
       if (pde.get_packet_chunks_id() == packet_chunks_ids.first) {
-        if (first_counter >= first_deps.size())
-          break;
+        if (first_counter >= first_deps.size()) break;
 
         assert(first_deps[first_counter]->is_packet_related());
 
@@ -371,11 +364,8 @@ void Constraint::zip_packet_fields_expression_and_values(
           break;
 
         first_counter++;
-      }
-
-      else if (pde.get_packet_chunks_id() == packet_chunks_ids.second) {
-        if (second_counter >= second_deps.size())
-          break;
+      } else if (pde.get_packet_chunks_id() == packet_chunks_ids.second) {
+        if (second_counter >= second_deps.size()) break;
 
         assert(second_deps[second_counter]->is_packet_related());
 
@@ -410,10 +400,9 @@ void LibvigAccessConstraint::check_incompatible_dependencies() {
   const auto &first_dependencies = first_read_arg.get_dependencies().get();
   const auto &second_dependencies = second_read_arg.get_dependencies().get();
 
-  auto incompatible_dependency_filter =
-      [](const std::shared_ptr<const Dependency> &dependency) -> bool {
-    if (dependency->should_ignore())
-      return false;
+  auto incompatible_dependency_filter = [](
+      const std::shared_ptr<const Dependency> & dependency)->bool {
+    if (dependency->should_ignore()) return false;
     return !dependency->is_rss_compatible();
   };
 
@@ -468,4 +457,4 @@ std::ostream &operator<<(std::ostream &os, const CallPathsConstraint &arg) {
   return os;
 }
 
-} // namespace ParallelSynthesizer
+}  // namespace ParallelSynthesizer

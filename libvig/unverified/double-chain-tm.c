@@ -10,7 +10,7 @@
 
 #ifndef NULL
 #define NULL 0
-#endif // NULL
+#endif  // NULL
 
 typedef struct {
   vigor_time_t timestamp;
@@ -28,8 +28,7 @@ int dchain_tm_allocate(int index_range, DoubleChainTM **chain_out) {
   DoubleChainTM *old_chain_out = *chain_out;
   DoubleChainTM *chain_alloc =
       (DoubleChainTM *)rte_malloc(NULL, sizeof(DoubleChainTM), 64);
-  if (chain_alloc == NULL)
-    return 0;
+  if (chain_alloc == NULL) return 0;
   *chain_out = (DoubleChainTM *)chain_alloc;
 
   unsigned lcore_id;

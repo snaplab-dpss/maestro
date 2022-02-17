@@ -75,7 +75,7 @@ void nfos_serial_write_int(int x) {
     x = -x;
   }
 
-  static char buf[32] = { 0 };
+  static char buf[32] = {0};
 
   int i = 30;
 

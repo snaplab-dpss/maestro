@@ -23,8 +23,8 @@ struct MapLocks {
   map_key_hash *khash;
 };
 
-int map_locks_allocate(map_keys_equality *keq, map_key_hash *khash, unsigned capacity,
-                 struct MapLocks **map_locks_out) {
+int map_locks_allocate(map_keys_equality *keq, map_key_hash *khash,
+                       unsigned capacity, struct MapLocks **map_locks_out) {
 #ifdef CAPACITY_POW2
   if (capacity == 0 || (capacity & (capacity - 1)) != 0) {
     return 0;
@@ -32,9 +32,9 @@ int map_locks_allocate(map_keys_equality *keq, map_key_hash *khash, unsigned cap
 #else
 #endif
   struct MapLocks *old_map_locks_val = *map_locks_out;
-  struct MapLocks *map_locks_alloc = (struct MapLocks *)rte_malloc(NULL, sizeof(struct MapLocks), 64);
-  if (map_locks_alloc == NULL)
-    return 0;
+  struct MapLocks *map_locks_alloc =
+      (struct MapLocks *)rte_malloc(NULL, sizeof(struct MapLocks), 64);
+  if (map_locks_alloc == NULL) return 0;
   *map_locks_out = (struct MapLocks *)map_locks_alloc;
   int *bbs_alloc = (int *)rte_malloc(NULL, sizeof(int) * (int)capacity, 64);
   if (bbs_alloc == NULL) {
@@ -43,7 +43,8 @@ int map_locks_allocate(map_keys_equality *keq, map_key_hash *khash, unsigned cap
     return 0;
   }
   (*map_locks_out)->busybits = bbs_alloc;
-  void **keyps_alloc = (void **)rte_malloc(NULL, sizeof(void *) * (int)capacity, 64);
+  void **keyps_alloc =
+      (void **)rte_malloc(NULL, sizeof(void *) * (int)capacity, 64);
   if (keyps_alloc == NULL) {
     rte_free(bbs_alloc);
     rte_free(map_locks_alloc);
@@ -51,7 +52,8 @@ int map_locks_allocate(map_keys_equality *keq, map_key_hash *khash, unsigned cap
     return 0;
   }
   (*map_locks_out)->keyps = keyps_alloc;
-  unsigned *khs_alloc = (unsigned *)rte_malloc(NULL, sizeof(unsigned) * (int)capacity, 64);
+  unsigned *khs_alloc =
+      (unsigned *)rte_malloc(NULL, sizeof(unsigned) * (int)capacity, 64);
   if (khs_alloc == NULL) {
     rte_free(keyps_alloc);
     rte_free(bbs_alloc);
@@ -85,8 +87,9 @@ int map_locks_allocate(map_keys_equality *keq, map_key_hash *khash, unsigned cap
   (*map_locks_out)->size = 0;
   (*map_locks_out)->keys_eq = keq;
   (*map_locks_out)->khash = khash;
-  map_impl_init((*map_locks_out)->busybits, keq, (*map_locks_out)->keyps, (*map_locks_out)->khs,
-                (*map_locks_out)->chns, (*map_locks_out)->vals, capacity);
+  map_impl_init((*map_locks_out)->busybits, keq, (*map_locks_out)->keyps,
+                (*map_locks_out)->khs, (*map_locks_out)->chns,
+                (*map_locks_out)->vals, capacity);
   return 1;
 }
 int map_locks_get(struct MapLocks *map, void *key, int *value_out) {

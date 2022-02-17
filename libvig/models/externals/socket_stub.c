@@ -6,15 +6,15 @@
 #include <stdio.h>
 
 #ifdef KLEE_VERIFICATION
-#  include <klee/klee.h>
+#include <klee/klee.h>
 #endif
 
 int stub_socket(int family, int type, int protocol) {
   // "On success, a file descriptor for the new socket is returned.  On error,
   // -1 is returned, and errno is set appropriately."
   // -- http://man7.org/linux/man-pages/man2/socket.2.html
-  errno = EAFNOSUPPORT; // "The implementation does not support the specified
-                        // address family."
+  errno = EAFNOSUPPORT;  // "The implementation does not support the specified
+                         // address family."
   return -1;
 }
 

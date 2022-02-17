@@ -27,11 +27,11 @@ bool nf_init(void) {
 }
 
 void expire_entries(vigor_time_t time) {
-  assert(time >= 0); // we don't support the past
+  assert(time >= 0);  // we don't support the past
   assert(sizeof(vigor_time_t) <= sizeof(uint64_t));
-  uint64_t time_u = (uint64_t)time; // OK because of the two asserts
+  uint64_t time_u = (uint64_t)time;  // OK because of the two asserts
   uint64_t expiration_time_ns =
-      ((uint64_t)config.expiration_time) * 1000; // us to ns
+      ((uint64_t)config.expiration_time) * 1000;  // us to ns
   vigor_time_t last_time = time_u - expiration_time_ns;
   expire_items_single_map(state->allocator, state->srcs_key, state->srcs,
                           last_time);
@@ -111,7 +111,7 @@ int detect_port_scanning(uint32_t src, uint16_t target_port,
   uint32_t *counter = NULL;
   vector_borrow(state->touched_ports_counter, index, (void **)&counter);
 
-  struct TouchedPort touched_port = { .src = src, .port = target_port };
+  struct TouchedPort touched_port = {.src = src, .port = target_port};
   present = map_get(state->ports, &touched_port, &port_index);
 
   if (!present && *counter >= state->max_ports) {

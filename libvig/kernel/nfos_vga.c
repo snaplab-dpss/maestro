@@ -17,10 +17,8 @@ static int VGA_COLUMN_POS = 0;
 #define VGA_COLOR_CODE 14
 
 static void nfos_vga_clear_row(int row) {
-  static const struct vga_char blank = {
-    .ascii_char = (uint8_t)' ',
-    .color_code = VGA_COLOR_CODE,
-  };
+  static const struct vga_char blank = {.ascii_char = (uint8_t)' ',
+                                        .color_code = VGA_COLOR_CODE, };
 
   for (int i = 0; i < VGA_WIDTH; i++) {
     VGA_BUFFER[row][i] = blank;
@@ -50,10 +48,7 @@ static void nfos_vga_write_byte(uint8_t c) {
     int row = VGA_HEIGHT - 1;
     int col = VGA_COLUMN_POS;
 
-    struct vga_char vga_c = {
-      .ascii_char = c,
-      .color_code = VGA_COLOR_CODE,
-    };
+    struct vga_char vga_c = {.ascii_char = c, .color_code = VGA_COLOR_CODE, };
 
     VGA_BUFFER[row][col] = vga_c;
 
@@ -63,7 +58,7 @@ static void nfos_vga_write_byte(uint8_t c) {
 
 #ifdef NFOS_DEBUG
 
-#  ifndef KLEE_VERIFICATION
+#ifndef KLEE_VERIFICATION
 
 void nfos_vga_write_char(char c) { nfos_vga_write_byte((uint8_t)c); }
 
@@ -79,10 +74,10 @@ void nfos_vga_write_str(const char *s) {
   }
 }
 
-#  else // KLEE_VERIFICATION defined
+#else  // KLEE_VERIFICATION defined
 
-#    include <stdlib.h>
-#    include <klee/klee.h>
+#include <stdlib.h>
+#include <klee/klee.h>
 
 void nfos_vga_write_char(char c) {
   static char *out_buf = NULL;
@@ -108,7 +103,7 @@ void nfos_vga_write_char(char c) {
 
 void nfos_vga_write_str(const char *s) { klee_print_expr(s, NULL); }
 
-#  endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION
 
 /* https://groups.google.com/forum/#!topic/comp.lang.c++.moderated/ihafayWmWU8
  */
@@ -118,7 +113,7 @@ void nfos_vga_write_int(int x) {
     x = -x;
   }
 
-  static char buf[32] = { 0 };
+  static char buf[32] = {0};
 
   int i = 30;
 
@@ -129,10 +124,10 @@ void nfos_vga_write_int(int x) {
   nfos_vga_write_str(&buf[i + 1]);
 }
 
-#else // NFOS_DEBUG not defined, don't print anything
+#else  // NFOS_DEBUG not defined, don't print anything
 
 void nfos_vga_write_char(char c) {}
 void nfos_vga_write_str(const char *s) {}
 void nfos_vga_write_int(int x) {}
 
-#endif // NFOS_DEBUG
+#endif  // NFOS_DEBUG

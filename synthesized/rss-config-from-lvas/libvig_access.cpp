@@ -7,8 +7,8 @@
 
 namespace ParallelSynthesizer {
 
-const LibvigAccessArgument&
-LibvigAccess::get_argument(const LibvigAccessArgument::Type &type) const {
+const LibvigAccessArgument &LibvigAccess::get_argument(
+    const LibvigAccessArgument::Type &type) const {
   auto is_right_arg_type = [&](const LibvigAccessArgument & arg)->bool {
     return arg.get_type() == type;
   };
@@ -16,8 +16,7 @@ LibvigAccess::get_argument(const LibvigAccessArgument::Type &type) const {
   auto found_it =
       std::find_if(arguments.begin(), arguments.end(), is_right_arg_type);
 
-  if (found_it != arguments.end())
-    return *found_it;
+  if (found_it != arguments.end()) return *found_it;
 
   assert(false && "Argument type not in this LibvigAccess");
 }
@@ -157,26 +156,21 @@ bool operator==(const LibvigAccessArgument &lhs,
 
 bool LibvigAccess::content_equal(const LibvigAccess &access1,
                                  const LibvigAccess &access2) {
-  if (access1.get_src_device() != access2.get_src_device())
-    return false;
+  if (access1.get_src_device() != access2.get_src_device()) return false;
 
-  if (access1.is_dst_device_set() != access2.is_dst_device_set())
-    return false;
+  if (access1.is_dst_device_set() != access2.is_dst_device_set()) return false;
 
   if (access1.is_dst_device_set() &&
       (access1.get_dst_device() != access2.get_dst_device()))
     return false;
 
-  if (access1.get_object() != access2.get_object())
-    return false;
+  if (access1.get_object() != access2.get_object()) return false;
 
-  if (access1.get_operation() != access2.get_operation())
-    return false;
+  if (access1.get_operation() != access2.get_operation()) return false;
 
-  if (access1.get_arguments() != access2.get_arguments())
-    return false;
+  if (access1.get_arguments() != access2.get_arguments()) return false;
 
   return true;
 }
 
-} // namespace ParallelSynthesizer
+}  // namespace ParallelSynthesizer

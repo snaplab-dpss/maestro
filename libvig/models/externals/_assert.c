@@ -1,8 +1,8 @@
 /* KLEE provides its own implementation of assert() */
 #ifndef KLEE_VERIFICATION
 
-#  include "nfos_halt.h"
-#  include <stdio.h>
+#include "nfos_halt.h"
+#include <stdio.h>
 
 extern void __assert_fail(const char *msg, const char *file, int line,
                           const char *func) {

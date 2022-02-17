@@ -4,16 +4,16 @@
 #include <stdio.h>
 #include <inttypes.h>
 
-#define SYNAPSE_LOOP_START_META(sz)                                            \
-  printf("Metadata (%lu):\n", sz);                                             \
+#define SYNAPSE_LOOP_START_META(sz) \
+  printf("Metadata (%lu):\n", sz);  \
   for (size_t i = 0; i < sz; i++) {
 
-#define SYNAPSE_LOOP_START_TAGS(sz)                                            \
-  printf("Tags (%lu):\n", sz);                                                 \
+#define SYNAPSE_LOOP_START_TAGS(sz) \
+  printf("Tags (%lu):\n", sz);      \
   for (size_t i = 0; i < sz; i++) {
 
-#define LOOP_END                                                               \
-  }                                                                            \
+#define LOOP_END \
+  }              \
   puts("")
 
 // Debuggers
@@ -79,7 +79,7 @@ bool synapse_runtime_config_get_libvig_objs_by_table_name(string_t table_name,
 
 bool synapse_runtime_config_get_tag_by_table_name(
     string_t table_name, uint32_t **tag, string_ptr_t *field_match_name) {
-  size_t alias_sz = table_name.sz - 16; // Remove prefix `SyNAPSE_Ingress.`
+  size_t alias_sz = table_name.sz - 16;  // Remove prefix `SyNAPSE_Ingress.`
   size_t field_sz = alias_sz + 5 /* meta. */ + 4 /* _tag */;
 
   char buffer[field_sz];
@@ -155,7 +155,7 @@ bool synapse_runtime_pkt_in_get_meta_by_name(string_t meta_name,
 
   for (size_t i = 0;
        i < synapse_pkt_in.meta_sz && NULL != (entry = synapse_pkt_in.meta[i]) &&
-       NULL != (name = entry->left);
+           NULL != (name = entry->left);
        i++) {
     if (0 == strcmp(name->str, meta_name.str)) {
       return NULL != (*result = entry->right);
@@ -253,7 +253,7 @@ bool synapse_runtime_pkt_out_set_tag(string_t table_name, uint32_t value) {
     return false;
   }
 
-  size_t alias_sz = table_name.sz - 16; // Remove prefix `SyNAPSE_Ingress.`
+  size_t alias_sz = table_name.sz - 16;  // Remove prefix `SyNAPSE_Ingress.`
   size_t tag_sz = alias_sz + 4 /* _tag */;
 
   char buffer[tag_sz];
@@ -505,10 +505,9 @@ bool synapse_environment_queue_delete_table_entry(p4_table_entry_ptr_t entry) {
   }
 
   return synapse_runtime_update_queue_queue(
-      queue,
-      synapse_runtime_p4_update_new(
-          helper, Update_Delete,
-          synapse_runtime_p4_entity_new(helper, Entity_TableEntry, entry)));
+      queue, synapse_runtime_p4_update_new(
+                 helper, Update_Delete, synapse_runtime_p4_entity_new(
+                                            helper, Entity_TableEntry, entry)));
 }
 
 // Encoders

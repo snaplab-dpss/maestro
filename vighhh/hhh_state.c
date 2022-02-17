@@ -4,19 +4,19 @@
 
 #include "libvig/verified/boilerplate-util.h"
 #ifdef KLEE_VERIFICATION
-#  include "libvig/models/verified/double-chain-control.h"
-#  include "libvig/models/verified/ether.h"
-#  include "libvig/models/verified/map-control.h"
-#  include "libvig/models/verified/vector-control.h"
-#  include "libvig/models/verified/lpm-dir-24-8-control.h"
+#include "libvig/models/verified/double-chain-control.h"
+#include "libvig/models/verified/ether.h"
+#include "libvig/models/verified/map-control.h"
+#include "libvig/models/verified/vector-control.h"
+#include "libvig/models/verified/lpm-dir-24-8-control.h"
 
 bool dyn_val_condition(void *value, int index, void *state) {
   struct DynamicValue *v = value;
-  return (0 <= v->bucket_time) AND(v->bucket_time <= recent_time())
+  return (0 <= v->bucket_time)AND(v->bucket_time <= recent_time())
       AND(v->bucket_size <= 3750000000);
 }
 
-#endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION
 
 struct State *allocated_nf_state = NULL;
 
@@ -36,13 +36,11 @@ uint32_t calculate_n_subnets(uint32_t subnets_mask) {
 struct State *alloc_state(uint64_t link_capacity, uint8_t threshold,
                           uint32_t subnets_mask, uint32_t capacity,
                           uint32_t dev_count) {
-  if (allocated_nf_state != NULL)
-    return allocated_nf_state;
+  if (allocated_nf_state != NULL) return allocated_nf_state;
 
   struct State *ret = malloc(sizeof(struct State));
 
-  if (ret == NULL)
-    return NULL;
+  if (ret == NULL) return NULL;
 
   uint8_t n_subnets = calculate_n_subnets(subnets_mask);
   ret->n_subnets = n_subnets;
@@ -99,7 +97,7 @@ struct State *alloc_state(uint64_t link_capacity, uint8_t threshold,
         ret->subnets[i], ip_addr_descrs,
         sizeof(ip_addr_descrs) / sizeof(ip_addr_descrs[0]), ip_addr_nests,
         sizeof(ip_addr_nests) / sizeof(ip_addr_nests[0]), "ip_addr");
-#endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION
   }
 
   ret->capacity = capacity;
@@ -118,4 +116,4 @@ void nf_loop_iteration_border(unsigned lcore_id, vigor_time_t time) {
       allocated_nf_state->dev_count, lcore_id, time);
 }
 
-#endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION

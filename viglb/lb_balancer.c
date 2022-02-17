@@ -62,9 +62,9 @@ struct LoadBalancedBackend lb_get_backend(struct LoadBalancer *balancer,
                       (void *)vec_flow_id_to_backend_id);
         map_put(balancer->state->flow_to_flow_id, vec_flow, flow_index);
         vector_return(balancer->state->flow_heap, flow_index,
-                      vec_flow); // another half is in the map
+                      vec_flow);  // another half is in the map
 
-      } // Doesn't matter if we can't insert
+      }  // Doesn't matter if we can't insert
       struct LoadBalancedBackend *vec_backend;
       vector_borrow(balancer->state->backends, backend_index,
                     (void **)&vec_backend);
@@ -73,7 +73,7 @@ struct LoadBalancedBackend lb_get_backend(struct LoadBalancer *balancer,
                     (void *)vec_backend);
     } else {
       // Drop
-      backend.nic = wan_device; // The wan interface.
+      backend.nic = wan_device;  // The wan interface.
     }
 
   } else {
@@ -147,24 +147,24 @@ void lb_process_heartbit(struct LoadBalancer *balancer,
 }
 
 void lb_expire_flows(struct LoadBalancer *balancer, vigor_time_t time) {
-  assert(time >= 0); // we don't support the past
+  assert(time >= 0);  // we don't support the past
   assert(sizeof(vigor_time_t) <= sizeof(uint64_t));
-  uint64_t time_u = (uint64_t)time; // OK because of the two asserts
+  uint64_t time_u = (uint64_t)time;  // OK because of the two asserts
   vigor_time_t vigor_time_expiration =
       (vigor_time_t)balancer->flow_expiration_time;
-  vigor_time_t last_time = time_u - vigor_time_expiration * 1000; // us to ns
+  vigor_time_t last_time = time_u - vigor_time_expiration * 1000;  // us to ns
   expire_items_single_map(balancer->state->flow_chain,
                           balancer->state->flow_heap,
                           balancer->state->flow_to_flow_id, last_time);
 }
 
 void lb_expire_backends(struct LoadBalancer *balancer, vigor_time_t time) {
-  assert(time >= 0); // we don't support the past
+  assert(time >= 0);  // we don't support the past
   assert(sizeof(vigor_time_t) <= sizeof(uint64_t));
-  uint64_t time_u = (uint64_t)time; // OK because of the two asserts
+  uint64_t time_u = (uint64_t)time;  // OK because of the two asserts
   vigor_time_t vigor_time_expiration =
       (vigor_time_t)balancer->backend_expiration_time;
-  vigor_time_t last_time = time_u - vigor_time_expiration * 1000; // us to ns
+  vigor_time_t last_time = time_u - vigor_time_expiration * 1000;  // us to ns
   expire_items_single_map(balancer->state->active_backends,
                           balancer->state->backend_ips,
                           balancer->state->ip_to_backend_id, last_time);

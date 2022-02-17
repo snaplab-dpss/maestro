@@ -18,20 +18,19 @@ void nf_config_init(int argc, char **argv) {
   uint16_t nb_devices = rte_eth_dev_count_avail();
 
   struct option long_options[] = {
-    { "eth-dest", required_argument, NULL, 'm' },
-    { "expire", required_argument, NULL, 't' },
-    { "extip", required_argument, NULL, 'i' },
-    { "lan-dev", required_argument, NULL, 'l' },
-    { "max-flows", required_argument, NULL, 'f' },
-    { "starting-port", required_argument, NULL, 's' },
-    { "wan", required_argument, NULL, 'w' },
-    { NULL, 0, NULL, 0 }
-  };
+      {"eth-dest", required_argument, NULL, 'm'},
+      {"expire", required_argument, NULL, 't'},
+      {"extip", required_argument, NULL, 'i'},
+      {"lan-dev", required_argument, NULL, 'l'},
+      {"max-flows", required_argument, NULL, 'f'},
+      {"starting-port", required_argument, NULL, 's'},
+      {"wan", required_argument, NULL, 'w'},
+      {NULL, 0, NULL, 0}};
 
-  config.device_macs =
-      (struct rte_ether_addr *)calloc(nb_devices, sizeof(struct rte_ether_addr));
-  config.endpoint_macs =
-      (struct rte_ether_addr *)calloc(nb_devices, sizeof(struct rte_ether_addr));
+  config.device_macs = (struct rte_ether_addr *)calloc(
+      nb_devices, sizeof(struct rte_ether_addr));
+  config.endpoint_macs = (struct rte_ether_addr *)calloc(
+      nb_devices, sizeof(struct rte_ether_addr));
 
   // Set the devices' own MACs
   for (uint16_t device = 0; device < nb_devices; device++) {
@@ -106,17 +105,18 @@ void nf_config_init(int argc, char **argv) {
 }
 
 void nf_config_usage(void) {
-  NF_INFO("Usage:\n"
-          "[DPDK EAL options] --\n"
-          "\t--eth-dest <device>,<mac>: MAC address of the endpoint linked to "
-          "a device.\n"
-          "\t--expire <time>: flow expiration time (us).\n"
-          "\t--extip <ip>: external IP address.\n"
-          "\t--lan-dev <device>: set device to be the main LAN device (for "
-          "non-NAT).\n"
-          "\t--max-flows <n>: flow table capacity.\n"
-          "\t--starting-port <n>: start of the port range for external ports.\n"
-          "\t--wan <device>: set device to be the external one.\n");
+  NF_INFO(
+      "Usage:\n"
+      "[DPDK EAL options] --\n"
+      "\t--eth-dest <device>,<mac>: MAC address of the endpoint linked to "
+      "a device.\n"
+      "\t--expire <time>: flow expiration time (us).\n"
+      "\t--extip <ip>: external IP address.\n"
+      "\t--lan-dev <device>: set device to be the main LAN device (for "
+      "non-NAT).\n"
+      "\t--max-flows <n>: flow table capacity.\n"
+      "\t--starting-port <n>: start of the port range for external ports.\n"
+      "\t--wan <device>: set device to be the external one.\n");
 }
 
 void nf_config_print(void) {

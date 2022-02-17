@@ -13,7 +13,7 @@
   {
     assert z == Zsign(_);
     switch(z) {
-      case Zsign(b0): 
+      case Zsign(b0):
       case Zdigit(z0, b1):
     }
   }
@@ -27,11 +27,13 @@
           Z_length(Z_and(z1, z2)) == Z_length(z2);
   {
     switch(z1) {
-      case Zsign(b1): assert int_of_nat(Z_length(z1)) <= int_of_nat(Z_length(z2));
+      case Zsign(b1): assert int_of_nat(Z_length(z1)) <=
+  int_of_nat(Z_length(z2));
                       assert Z_length(z1) == zero;
-                      
+
       case Zdigit(z10, b10): switch(z2) {
-          case Zsign(b2): assert int_of_nat(Z_length(z1)) > int_of_nat(Z_length(z2));
+          case Zsign(b2): assert int_of_nat(Z_length(z1)) >
+  int_of_nat(Z_length(z2));
           case Zdigit(z20, b20): Z_and_length(z10, z20);
         };
     }
@@ -59,7 +61,8 @@
             assert false;
           case Zdigit(z0, b0):
             equal_int_equal_Z(z0, m);
-            assert Z_of_bits(Zsign(false), snd(bits_of_int(int_of_Z(z0), m))) == z0;
+            assert Z_of_bits(Zsign(false), snd(bits_of_int(int_of_Z(z0), m))) ==
+  z0;
             int x = 2 * int_of_Z(z0) + (b0 ? 1 : 0);
             assert int_of_Z(yZ) == x;
 
@@ -67,10 +70,13 @@
 
             assert (x % 2 == 1) == b0;
 
-            assert snd(bits_of_int(int_of_Z(yZ), n)) == cons(b0, snd(bits_of_int(int_of_Z(z0), m)));
+            assert snd(bits_of_int(int_of_Z(yZ), n)) == cons(b0,
+  snd(bits_of_int(int_of_Z(z0), m)));
             assert Z_of_bits(Zsign(false), snd(bits_of_int(int_of_Z(yZ), n))) ==
-                   Zdigit(Z_of_bits(Zsign(false), snd(bits_of_int(int_of_Z(z0), m))), b0);
-            assert Z_of_bits(Zsign(false), snd(bits_of_int(int_of_Z(yZ), n))) == yZ;
+                   Zdigit(Z_of_bits(Zsign(false), snd(bits_of_int(int_of_Z(z0),
+  m))), b0);
+            assert Z_of_bits(Zsign(false), snd(bits_of_int(int_of_Z(yZ), n))) ==
+  yZ;
         }
     }
   }
@@ -98,11 +104,11 @@
     Z maskZ = Z_of_uintN(0x8000, N16);
     flag_mask_MSB_one();
     assert true == extract_flag(0x8000);
-  
+
     Z res = Z_or(xZ, maskZ);
     bitor_def(x, xZ, 0x8000, maskZ);
     assert int_of_Z(res) == (x | 0x8000);
-  
+
     shiftright_def(int_of_Z(res), res, nat_of_int(15));
     Z shifted = Z_shiftright(res, nat_of_int(15));
     assert 1 == int_of_Z(shifted);
@@ -117,10 +123,10 @@
     Z xZ = Z_of_uintN(x, N16);
     Z flagMask = Z_of_uintN(0x8000, N16);
     Z valueMask = Z_of_uintN(0x7FFF, N16);
-  
+
     bitor_def(x, xZ, 0x8000, flagMask);
     Z orRes = Z_or(xZ, flagMask);
-  
+
     bitand_def((x | 0x8000), orRes, 0x7FFF, valueMask);
   }
   @*/
@@ -132,12 +138,12 @@
   {
     Z entryZ = Z_of_uintN(entry, N16);
     Z valuemask = Z_of_uintN(0x7FFF, N16);
-    
+
     bitand_def(entry, entryZ, 0x7FFF, valuemask);
   }
   @*/
 
-/*@  
+/*@
   lemma void valid_next_hop24(int entry, option<pair<bool, Z> > mapped)
     requires entry != 0xFFFF &*& 0 <= entry &*& entry <= 0x7FFF &*&
              false == extract_flag(entry) &*&
@@ -168,8 +174,8 @@
     assert mapped == some(pair(true, entryZ));
   }
   @*/
-  
-/*@  
+
+/*@
   lemma void valid_next_hop_long(int entry, option<Z> mapped)
     requires entry != 0xFFFF &*& 0 <= entry &*& entry <= 0x7FFF &*&
              entry_long_mapping(entry) == mapped &*& mapped == some(?v);
@@ -190,25 +196,25 @@
     ensures (entry & 0xFF) == extract24_value(mapped);
   {
     //assert z == Z_of_int(extract_value(entry), N16);
-    
+
     //assert snd(get_some(mapped)) == z;
     Z_of_uintN(extract_value(entry), N16);
     //assert z == extractedZ;
     //assert mapped == some(pair(true, extractedZ));
     //assert snd(get_some(mapped)) == extractedZ;
     //assert int_of_Z(extractedZ) == extract_value(entry);
-    
+
     //Show ((entry & 0xFF) == (entry & 0x7FFF))
     Z entryZ = Z_of_uintN(entry, N16);
     Z maskFF = Z_of_uintN(0xFF, N8);
     Z mask7FFF = Z_of_uintN(0x7FFF, N16);
-    
+
     bitand_def(entry, entryZ, 0xFF, maskFF);
     bitand_def(entry, entryZ, 0x7FFF, mask7FFF);
   }
   @*/
 
-/*@ 
+/*@
   lemma void long_index_computing_equivalence_on_prefixlen32(int ipv4,
                                                              int base_index)
     requires 0 <= ipv4 &*& ipv4 <= 0xffffffff;
@@ -218,7 +224,7 @@
     Z ipv4Z = Z_of_uintN(ipv4, N32);
     Z mask32 = Z_of_uintN(0xFFFFFFFF, N32);
     assert mask32 == mask32_from_prefixlen(32);
-    
+
     bitand_def(ipv4, ipv4Z, 0xFFFFFFFF, mask32);
   }
   @*/
@@ -237,13 +243,13 @@
   {
     assert 0 <= extract_value(entry);
     assert extract_value(entry) < 256;
-    
+
     Z entry_valZ = Z_of_uintN(extract_value(entry), N16);
-    
+
     option<pair<bool, Z> > mapped_entry =
                            some(pair(extract_flag(entry),
                                      entry_valZ));
-    
+
     assert mapped == mapped_entry;
   }
   @*/
@@ -262,13 +268,13 @@
                mask32_from_prefixlen(prefixlen));
     bitand_limits(int_of_Z(ipv4),
                   int_of_Z(mask32_from_prefixlen(prefixlen)), N32);
-    
+
     Z andRes = Z_and(ipv4, mask32_from_prefixlen(prefixlen));
-    
+
     Z maskZ = Z_of_uintN(0xFF, N8);
-    
+
     bitand_def(int_of_Z(andRes), andRes, 0xFF, maskZ);
     bitand_limits(int_of_Z(andRes), 0xFF, N8);
-    
+
   }
   @*/

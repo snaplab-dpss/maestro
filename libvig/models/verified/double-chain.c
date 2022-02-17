@@ -8,8 +8,8 @@
 // TODO: double check that this model is enough for the NAT scenario
 
 #define ALLOW(chain) klee_allow_access((chain), sizeof(struct DoubleChain))
-#define DENY(chain)                                                            \
-  klee_forbid_access((chain), sizeof(struct DoubleChain),                      \
+#define DENY(chain)                                       \
+  klee_forbid_access((chain), sizeof(struct DoubleChain), \
                      "allocated_chain_do_not_dereference")
 
 struct DoubleChain {
@@ -43,9 +43,8 @@ __attribute__((noinline)) int dchain_allocate(int index_range,
   }
 }
 
-__attribute__((noinline)) int
-dchain_allocate_new_index(struct DoubleChain *chain, int *index_out,
-                          vigor_time_t time) {
+__attribute__((noinline)) int dchain_allocate_new_index(
+    struct DoubleChain *chain, int *index_out, vigor_time_t time) {
   klee_trace_ret();
   // Deliberately trace this pointer as an integer to avoid
   // dereference.
@@ -96,8 +95,8 @@ __attribute__((noinline)) int dchain_expire_one_index(struct DoubleChain *chain,
   return 0;
 }
 
-__attribute__((noinline)) int
-dchain_is_index_allocated(struct DoubleChain *chain, int index) {
+__attribute__((noinline)) int dchain_is_index_allocated(
+    struct DoubleChain *chain, int index) {
   klee_trace_ret();
   // Deliberately trace this pointer as an integer to avoid dereference
   klee_trace_param_u64((uint64_t)chain, "chain");

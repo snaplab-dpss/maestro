@@ -43,11 +43,5 @@ SpacesInCStyleCastParentheses: false
 SpaceAfterControlStatementKeyword: true
 SpaceBeforeAssignmentOperators: true
 ContinuationIndentWidth: 4
-
-IndentPPDirectives: AfterHash
-MacroBlockBegin: VIGOR_LOOP_BEGIN
-MacroBlockEnd: VIGOR_LOOP_END
-SortIncludes: false
-AlignAfterOpenBracket: Align
 ...
 

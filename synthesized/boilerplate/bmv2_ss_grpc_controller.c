@@ -47,10 +47,10 @@ size_t global_total_length;
 size_t global_read_length = 0;
 
 void packet_state_total_length(void *p, uint32_t *len)
-/*@ requires packetp(p, ?unread, nil) &*&
- *len |-> length(unread); @*/
-/*@ ensures packetp(p, unread, nil) &*&
- *len |-> length(unread); @*/
+    /*@ requires packetp(p, ?unread, nil) &*&
+     *len |-> length(unread); @*/
+    /*@ ensures packetp(p, unread, nil) &*&
+     *len |-> length(unread); @*/
 {
   //@ open packetp(p, unread, nil);
   // IGNORE(p);
@@ -76,15 +76,16 @@ void packet_state_total_length(void *p, uint32_t *len)
 
 // The main IO primitive.
 void packet_borrow_next_chunk(void *p, size_t length, void **chunk)
-/*@ requires packetp(p, ?unread, ?mc) &*&
-             length <= length(unread) &*&
-             0 < length &*& length < INT_MAX &*&
-             length + borrowed_len(mc) < INT_MAX &*&
-             *chunk |-> _; @*/
-/*@ ensures *chunk |-> ?ptr &*&
-            ptr != 0 &*&
-            packetp(p, drop(length, unread), cons(pair(ptr, length), mc)) &*&
-            chars(ptr, length, take(length, unread)); @*/
+    /*@ requires packetp(p, ?unread, ?mc) &*&
+                 length <= length(unread) &*&
+                 0 < length &*& length < INT_MAX &*&
+                 length + borrowed_len(mc) < INT_MAX &*&
+                 *chunk |-> _; @*/
+    /*@ ensures *chunk |-> ?ptr &*&
+                ptr != 0 &*&
+                packetp(p, drop(length, unread), cons(pair(ptr, length), mc))
+       &*&
+                chars(ptr, length, take(length, unread)); @*/
 {
   //@ open packetp(p, unread, mc);
   //@ borrowed_len_nonneg(mc, p, p + borrowed_len(mc));
@@ -100,9 +101,9 @@ void packet_borrow_next_chunk(void *p, size_t length, void **chunk)
 }
 
 void packet_return_chunk(void *p, void *chunk)
-/*@ requires packetp(p, ?unread, cons(pair(chunk, ?len), ?mc)) &*&
-             chars(chunk, len, ?chnk); @*/
-/*@ ensures packetp(p, append(chnk, unread), mc); @*/
+    /*@ requires packetp(p, ?unread, cons(pair(chunk, ?len), ?mc)) &*&
+                 chars(chunk, len, ?chnk); @*/
+    /*@ ensures packetp(p, append(chnk, unread), mc); @*/
 {
   //@ open packetp(p, unread, cons(pair(chunk, len), mc));
   global_read_length = (uint32_t)((int8_t *)chunk - (int8_t *)p);
@@ -207,13 +208,13 @@ struct rte_ether_hdr;
 
 #define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests, tag)
 
-#define CHUNK_LAYOUT_N(pkt, str_name, fields, nests)                           \
-  CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields,                      \
-                    sizeof(fields) / sizeof(fields[0]), nests,                 \
+#define CHUNK_LAYOUT_N(pkt, str_name, fields, nests)           \
+  CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields,      \
+                    sizeof(fields) / sizeof(fields[0]), nests, \
                     sizeof(nests) / sizeof(nests[0]), #str_name);
 
-#define CHUNK_LAYOUT(pkt, str_name, fields)                                    \
-  CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields,                      \
+#define CHUNK_LAYOUT(pkt, str_name, fields)               \
+  CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields, \
                     sizeof(fields) / sizeof(fields[0]), NULL, 0, #str_name);
 
 void *chunks_borrowed[MAX_N_CHUNKS];
@@ -240,14 +241,14 @@ void nf_set_rte_ipv4_udptcp_checksum(struct rte_ipv4_hdr *ip_header,
   // rte_be_to_cpu_16(ip_header->total_length) - sizeof(struct tcpudp_hdr));
   // assert((char*)payload == ((char*)l4_header + sizeof(struct tcpudp_hdr)));
 
-  ip_header->hdr_checksum = 0; // Assumed by cksum calculation
+  ip_header->hdr_checksum = 0;  // Assumed by cksum calculation
   if (ip_header->next_proto_id == IPPROTO_TCP) {
     struct rte_tcp_hdr *tcp_header = (struct rte_tcp_hdr *)l4_header;
-    tcp_header->cksum = 0; // Assumed by cksum calculation
+    tcp_header->cksum = 0;  // Assumed by cksum calculation
     tcp_header->cksum = rte_ipv4_udptcp_cksum(ip_header, tcp_header);
   } else if (ip_header->next_proto_id == IPPROTO_UDP) {
     struct rte_udp_hdr *udp_header = (struct rte_udp_hdr *)l4_header;
-    udp_header->dgram_cksum = 0; // Assumed by cksum calculation
+    udp_header->dgram_cksum = 0;  // Assumed by cksum calculation
     udp_header->dgram_cksum = rte_ipv4_udptcp_cksum(ip_header, udp_header);
   }
   ip_header->hdr_checksum = rte_ipv4_cksum(ip_header);
@@ -268,7 +269,7 @@ uintmax_t nf_util_parse_int(const char *str, const char *name, int base,
 
 char *nf_mac_to_str(struct rte_ether_addr *addr) {
   // format is xx:xx:xx:xx:xx:xx\0
-  uint16_t buffer_size = 6 * 2 + 5 + 1; // FIXME: why dynamic alloc here?
+  uint16_t buffer_size = 6 * 2 + 5 + 1;  // FIXME: why dynamic alloc here?
   char *buffer = (char *)calloc(buffer_size, sizeof(char));
   if (buffer == NULL) {
     rte_exit(EXIT_FAILURE, "Out of memory in nf_mac_to_str!");
@@ -284,8 +285,8 @@ char *nf_mac_to_str(struct rte_ether_addr *addr) {
 char *nf_rte_ipv4_to_str(uint32_t addr) {
   // format is xxx.xxx.xxx.xxx\0
   uint16_t buffer_size = 4 * 3 + 3 + 1;
-  char *buffer = (char *)calloc(buffer_size,
-                                sizeof(char)); // FIXME: why dynamic alloc here?
+  char *buffer = (char *)calloc(
+      buffer_size, sizeof(char));  // FIXME: why dynamic alloc here?
   if (buffer == NULL) {
     rte_exit(EXIT_FAILURE, "Out of memory in nf_rte_ipv4_to_str!");
   }
@@ -353,9 +354,8 @@ static inline struct rte_ether_hdr *nf_then_get_rte_ether_header(uint8_t **p) {
   return (struct rte_ether_hdr *)hdr;
 }
 
-static inline struct rte_ipv4_hdr *
-nf_then_get_rte_ipv4_header(void *rte_ether_header_, uint8_t **p,
-                            uint8_t **ip_options) {
+static inline struct rte_ipv4_hdr *nf_then_get_rte_ipv4_header(
+    void *rte_ether_header_, uint8_t **p, uint8_t **ip_options) {
   struct rte_ether_hdr *rte_ether_header =
       (struct rte_ether_hdr *)rte_ether_header_;
   *ip_options = NULL;
@@ -386,8 +386,8 @@ nf_then_get_rte_ipv4_header(void *rte_ether_header_, uint8_t **p,
   return hdr;
 }
 
-static inline struct tcpudp_hdr *
-nf_then_get_tcpudp_header(struct rte_ipv4_hdr *ip_header, uint8_t **p) {
+static inline struct tcpudp_hdr *nf_then_get_tcpudp_header(
+    struct rte_ipv4_hdr *ip_header, uint8_t **p) {
   if ((!nf_has_tcpudp_header(ip_header)) |
       (packet_get_unread_length(p) < sizeof(struct tcpudp_hdr))) {
     return NULL;
@@ -426,7 +426,7 @@ bool nf_parse_ipv4addr(const char *str, uint32_t *addr) {
  *
  **********************************************/
 
-#define FLOOD_FRAME ((uint16_t)-1)
+#define FLOOD_FRAME ((uint16_t) - 1)
 
 struct nf_config;
 struct rte_mbuf;
@@ -441,53 +441,53 @@ void nf_config_usage(void);
 void nf_config_print(void);
 
 #ifdef KLEE_VERIFICATION
-#  include "libvig/models/hardware.h"
-#  include "libvig/models/verified/vigor-time-control.h"
-#  include <klee/klee.h>
-#endif // KLEE_VERIFICATION
+#include "libvig/models/hardware.h"
+#include "libvig/models/verified/vigor-time-control.h"
+#include <klee/klee.h>
+#endif  // KLEE_VERIFICATION
 
 // NFOS declares its own main method
 #ifdef NFOS
-#  define MAIN nf_main
-#else // NFOS
-#  define MAIN main
-#endif // NFOS
+#define MAIN nf_main
+#else  // NFOS
+#define MAIN main
+#endif  // NFOS
 
 // Unverified support for batching, useful for performance comparisons
 #ifndef VIGOR_BATCH_SIZE
-#  define VIGOR_BATCH_SIZE 1
+#define VIGOR_BATCH_SIZE 1
 #endif
 
 // More elaborate loop shape with annotations for verification
 #ifdef KLEE_VERIFICATION
-#  define VIGOR_LOOP_BEGIN                                                     \
-    unsigned _vigor_lcore_id = 0; /* no multicore support for now */           \
-    vigor_time_t _vigor_start_time = start_time();                             \
-    int _vigor_loop_termination = klee_int("loop_termination");                \
-    unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();                  \
-    while (klee_induce_invariants() & _vigor_loop_termination) {               \
-      nf_loop_iteration_border(_vigor_lcore_id, _vigor_start_time);            \
-      vigor_time_t VIGOR_NOW = current_time();                                 \
-      /* concretize the device to avoid leaking symbols into DPDK */           \
-      uint16_t VIGOR_DEVICE =                                                  \
-          klee_range(0, VIGOR_DEVICES_COUNT, "VIGOR_DEVICE");                  \
-      concretize_devices(&VIGOR_DEVICE, VIGOR_DEVICES_COUNT);                  \
-      stub_hardware_receive_packet(VIGOR_DEVICE);
-#  define VIGOR_LOOP_END                                                       \
-    stub_hardware_reset_receive(VIGOR_DEVICE);                                 \
-    nf_loop_iteration_border(_vigor_lcore_id, VIGOR_NOW);                      \
-    }
-#else // KLEE_VERIFICATION
-#  define VIGOR_LOOP_BEGIN                                                     \
-    while (1) {                                                                \
-      vigor_time_t VIGOR_NOW = current_time();                                 \
-      unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();                \
-      for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT;      \
-           VIGOR_DEVICE++) {
-#  define VIGOR_LOOP_END                                                       \
-    }                                                                          \
-    }
-#endif // KLEE_VERIFICATION
+#define VIGOR_LOOP_BEGIN                                           \
+  unsigned _vigor_lcore_id = 0; /* no multicore support for now */ \
+  vigor_time_t _vigor_start_time = start_time();                   \
+  int _vigor_loop_termination = klee_int("loop_termination");      \
+  unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();        \
+  while (klee_induce_invariants() & _vigor_loop_termination) {     \
+    nf_loop_iteration_border(_vigor_lcore_id, _vigor_start_time);  \
+    vigor_time_t VIGOR_NOW = current_time();                       \
+    /* concretize the device to avoid leaking symbols into DPDK */ \
+    uint16_t VIGOR_DEVICE =                                        \
+        klee_range(0, VIGOR_DEVICES_COUNT, "VIGOR_DEVICE");        \
+    concretize_devices(&VIGOR_DEVICE, VIGOR_DEVICES_COUNT);        \
+    stub_hardware_receive_packet(VIGOR_DEVICE);
+#define VIGOR_LOOP_END                                  \
+  stub_hardware_reset_receive(VIGOR_DEVICE);            \
+  nf_loop_iteration_border(_vigor_lcore_id, VIGOR_NOW); \
+  }
+#else  // KLEE_VERIFICATION
+#define VIGOR_LOOP_BEGIN                                                \
+  while (1) {                                                           \
+    vigor_time_t VIGOR_NOW = current_time();                            \
+    unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();           \
+    for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT; \
+         VIGOR_DEVICE++) {
+#define VIGOR_LOOP_END \
+  }                    \
+  }
+#endif  // KLEE_VERIFICATION
 
 #if VIGOR_BATCH_SIZE == 1
 // Queue sizes for receiving/transmitting packets
@@ -528,7 +528,7 @@ static int nf_init_device(uint16_t device, struct rte_mempool *mbuf_pool) {
   int retval;
 
   // device_conf passed to rte_eth_dev_configure cannot be NULL
-  struct rte_eth_conf device_conf = { 0 };
+  struct rte_eth_conf device_conf = {0};
   // device_conf.rxmode.hw_strip_crc = 1;
 
   // Configure the device (1, 1 == number of RX/TX queues)
@@ -605,7 +605,7 @@ bool synapse_runtime_handle_packet_received() {
   }
 
   // Get the source device from the metadata
-  static string_t src_device_str = { .str = "src_device", .sz = 10 };
+  static string_t src_device_str = {.str = "src_device", .sz = 10};
   string_ptr_t src_device_encoded = NULL;
   if (!synapse_runtime_pkt_in_get_meta_by_name(src_device_str,
                                                &src_device_encoded)) {
@@ -634,7 +634,7 @@ bool synapse_runtime_handle_packet_received() {
     dst_device_encoded = synapse_encode_port(dst_device);
   }
 
-  static string_t dst_device_str = { .str = "dst_device", .sz = 10 };
+  static string_t dst_device_str = {.str = "dst_device", .sz = 10};
   if (!synapse_runtime_pkt_out_set_meta(dst_device_str, *dst_device_encoded)) {
     SYNAPSE_ERROR("Could not set metadata `dst_device`");
     return false;

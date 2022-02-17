@@ -1,6 +1,6 @@
 #ifdef KLEE_VERIFICATION
-#include "libvig/models/verified/map-control.h" //for map_reset
-#endif                                          // KLEE_VERIFICATION
+#include "libvig/models/verified/map-control.h"  //for map_reset
+#endif                                           // KLEE_VERIFICATION
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
@@ -28,11 +28,11 @@ struct nf_config config;
 struct State *mac_tables;
 
 int bridge_expire_entries(vigor_time_t time) {
-  assert(time >= 0); // we don't support the past
+  assert(time >= 0);  // we don't support the past
   assert(sizeof(vigor_time_t) <= sizeof(uint64_t));
-  uint64_t time_u = (uint64_t)time; // OK because of the two asserts
+  uint64_t time_u = (uint64_t)time;  // OK because of the two asserts
   vigor_time_t vigor_time_expiration = (vigor_time_t)config.expiration_time;
-  vigor_time_t last_time = time_u - vigor_time_expiration * 1000; // us to ns
+  vigor_time_t last_time = time_u - vigor_time_expiration * 1000;  // us to ns
   return expire_items_single_map(mac_tables->dyn_heap, mac_tables->dyn_keys,
                                  mac_tables->dyn_map, last_time);
 }
@@ -47,8 +47,8 @@ int bridge_get_device(struct rte_ether_addr *dst, uint16_t src_device) {
     return device;
   }
 #ifdef KLEE_VERIFICATION
-  map_reset(mac_tables->dyn_map); // simplify the traces for easy validation
-#endif                            // KLEE_VERIFICATION
+  map_reset(mac_tables->dyn_map);  // simplify the traces for easy validation
+#endif                             // KLEE_VERIFICATION
 
   int index = -1;
   present = map_get(mac_tables->dyn_map, dst, &index);
@@ -98,7 +98,7 @@ static void read_static_ft_from_array(struct Map *stat_map,
                                       struct Vector *stat_keys,
                                       uint32_t stat_capacity) {}
 
-#else // KLEE_VERIFICATION
+#else  // KLEE_VERIFICATION
 
 #ifndef NFOS
 static void read_static_ft_from_file(struct Map *stat_map,
@@ -119,8 +119,7 @@ static void read_static_ft_from_file(struct Map *stat_map,
   char ch;
   do {
     ch = fgetc(cfg_file);
-    if (ch == '\n')
-      number_of_lines++;
+    if (ch == '\n') number_of_lines++;
   } while (ch != EOF);
 
   // Make sure the hash table is occupied only by 50%
@@ -207,13 +206,13 @@ static void read_static_ft_from_file(struct Map *stat_map,
 finally:
   fclose(cfg_file);
 }
-#endif // NFOS
+#endif  // NFOS
 
 struct {
   const char mac_addr[18];
   const int device_from;
   const int device_to;
-} static_rules[] = { { "00:00:00:00:00:00", 0, 0 }, };
+} static_rules[] = {{"00:00:00:00:00:00", 0, 0}, };
 
 static void read_static_ft_from_array(struct Map *stat_map,
                                       struct Vector *stat_keys,
@@ -247,10 +246,10 @@ static void read_static_ft_from_array(struct Map *stat_map,
   }
 }
 
-#endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION
 
 bool nf_init(void) {
-  unsigned stat_capacity = 8192; // Has to be power of 2
+  unsigned stat_capacity = 8192;  // Has to be power of 2
   unsigned capacity = config.dyn_capacity;
   assert(stat_capacity < CAPACITY_UPPER_LIMIT - 1);
 

@@ -21,8 +21,8 @@
 void nf_config_init(int argc, char **argv) {
   uint16_t nb_devices = rte_eth_dev_count();
 
-  struct option long_options[] = { { "eth-dest", required_argument, NULL, 'm' },
-                                   { NULL, 0, NULL, 0 } };
+  struct option long_options[] = {{"eth-dest", required_argument, NULL, 'm'},
+                                  {NULL, 0, NULL, 0}};
 
   config.device_macs = calloc(nb_devices, sizeof(struct rte_ether_addr));
   config.endpoint_macs = calloc(nb_devices, sizeof(struct rte_ether_addr));
@@ -56,10 +56,11 @@ void nf_config_init(int argc, char **argv) {
 }
 
 void nf_config_usage(void) {
-  NF_INFO("Usage:\n"
-          "[DPDK EAL options] --\n"
-          "\t--eth-dest <device>,<mac>: MAC address of the endpoint linked to "
-          "a device.\n");
+  NF_INFO(
+      "Usage:\n"
+      "[DPDK EAL options] --\n"
+      "\t--eth-dest <device>,<mac>: MAC address of the endpoint linked to "
+      "a device.\n");
 }
 
 void nf_config_print(void) {

@@ -210,7 +210,8 @@ static void worker_main(void) {
 
         if (dst_device == VIGOR_DEVICE) {
           rte_pktmbuf_free(mbufs[n]);
-        } else { // includes flood when 2 devices, which is equivalent to just a
+        } else { // includes flood when 2 devices, which is equivalent to just
+                 // a
                  // send
           mbufs_to_send[tx_count] = mbufs[n];
           tx_count++;
@@ -251,7 +252,7 @@ int MAIN(int argc, char **argv) {
       0, // application private area size
       RTE_MBUF_DEFAULT_BUF_SIZE, // data buffer size
       rte_socket_id()            // socket ID
-      );
+  );
   if (mbuf_pool == NULL) {
     rte_exit(EXIT_FAILURE, "Cannot create pool: %s\n", rte_strerror(rte_errno));
   }

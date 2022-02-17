@@ -9,7 +9,6 @@
 
 #include <klee/klee.h>
 
-
 unsigned int sleep(unsigned int seconds) {
   // Whatever, code shouldn't use sleep anyway
   // If this exposes bugs, great!
@@ -19,7 +18,7 @@ unsigned int sleep(unsigned int seconds) {
 uid_t getuid(void) {
   // No errors: "These functions are always successful."
   // -- http://man7.org/linux/man-pages/man2/getuid.2.html
-  return 0; // We are root! well, we pretend to be, at least
+  return 0;  // We are root! well, we pretend to be, at least
 }
 
 long syscall(long number, ...) {
@@ -49,7 +48,6 @@ int sigaction(int signum, const struct sigaction *act,
   // Same as above
   return 0;
 }
-
 
 static bool pipe_created = false;
 

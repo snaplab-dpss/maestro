@@ -12,13 +12,15 @@ struct VectorLocks {
 };
 
 int vector_locks_allocate(int elem_size, unsigned capacity,
-                    vector_init_elem *init_elem, struct VectorLocks **vector_out) {
+                          vector_init_elem *init_elem,
+                          struct VectorLocks **vector_out) {
   struct VectorLocks *old_vector_val = *vector_out;
-  struct VectorLocks *vector_alloc = (struct VectorLocks *)rte_malloc(NULL, sizeof(struct VectorLocks), 64);
-  if (vector_alloc == 0)
-    return 0;
+  struct VectorLocks *vector_alloc =
+      (struct VectorLocks *)rte_malloc(NULL, sizeof(struct VectorLocks), 64);
+  if (vector_alloc == 0) return 0;
   *vector_out = (struct VectorLocks *)vector_alloc;
-  char *data_alloc = (char *)rte_malloc(NULL, (uint32_t)elem_size * capacity, 64);
+  char *data_alloc =
+      (char *)rte_malloc(NULL, (uint32_t)elem_size * capacity, 64);
   if (data_alloc == 0) {
     rte_free(vector_alloc);
     *vector_out = old_vector_val;
@@ -32,7 +34,8 @@ int vector_locks_allocate(int elem_size, unsigned capacity,
   }
   return 1;
 }
-void vector_locks_borrow(struct VectorLocks *vector, int index, void **val_out) {
+void vector_locks_borrow(struct VectorLocks *vector, int index,
+                         void **val_out) {
   *val_out = vector->data + index * vector->elem_size;
 }
 void vector_locks_return(struct VectorLocks *vector, int index, void *value) {}

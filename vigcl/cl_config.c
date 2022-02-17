@@ -13,17 +13,16 @@ const uint16_t DEFAULT_WAN = 0;
 const uint32_t DEFAULT_MAX_FLOWS = 65536;
 const uint32_t DEFAULT_SKETCH_CAPACITY = 65536;
 const uint16_t DEFAULT_MAX_CLIENTS = 60;
-const uint64_t DEFAULT_FLOW_EXPIRATION_TIME = 1000000;    // 1s
-const uint64_t DEFAULT_CLIENT_EXPIRATION_TIME = 10000000; // 10s
+const uint64_t DEFAULT_FLOW_EXPIRATION_TIME = 1000000;     // 1s
+const uint64_t DEFAULT_CLIENT_EXPIRATION_TIME = 10000000;  // 10s
 
-#define PARSE_ERROR(format, ...)                                               \
-  nf_config_usage();                                                           \
-  fprintf(stderr, format, ##__VA_ARGS__);                                      \
+#define PARSE_ERROR(format, ...)          \
+  nf_config_usage();                      \
+  fprintf(stderr, format, ##__VA_ARGS__); \
   exit(EXIT_FAILURE);
 
 int is_power_of_2(uint32_t d) {
-  if (d == 0)
-    return false;
+  if (d == 0) return false;
 
   while (d != 1) {
     if (d % 2 != 0) {
@@ -49,15 +48,14 @@ void nf_config_init(int argc, char **argv) {
   unsigned nb_devices = rte_eth_dev_count_avail();
 
   struct option long_options[] = {
-    { "lan", required_argument, NULL, 'l' },
-    { "wan", required_argument, NULL, 'w' },
-    { "max-flows", required_argument, NULL, 'f' },
-    { "capacity", required_argument, NULL, 's' },
-    { "max-clients", required_argument, NULL, 'c' },
-    { "expire-flow", required_argument, NULL, 't' },
-    { "expire-client", required_argument, NULL, 'T' },
-    { NULL, 0, NULL, 0 }
-  };
+      {"lan", required_argument, NULL, 'l'},
+      {"wan", required_argument, NULL, 'w'},
+      {"max-flows", required_argument, NULL, 'f'},
+      {"capacity", required_argument, NULL, 's'},
+      {"max-clients", required_argument, NULL, 'c'},
+      {"expire-flow", required_argument, NULL, 't'},
+      {"expire-client", required_argument, NULL, 'T'},
+      {NULL, 0, NULL, 0}};
 
   int opt;
   while ((opt = getopt_long(argc, argv, "l:w:r:t:m:M:c:", long_options,
@@ -128,25 +126,32 @@ void nf_config_init(int argc, char **argv) {
 }
 
 void nf_config_usage(void) {
-  NF_INFO("Usage:\n"
-          "[DPDK EAL options] --\n"
-          "\t--lan <device>: LAN device,"
-          " default: %" PRIu16 ".\n"
-          "\t--wan <device>: WAN device,"
-          " default: %" PRIu16 ".\n"
-          "\t--max-flows <max-flows>: maximum number of flows,"
-          " default: %" PRIu32 ".\n"
-          "\t--capacity <capacity>: size of the clients\' sketch,"
-          " default: %" PRIu32 ".\n"
-          "\t--max-clients <max-clients>: maximum allowed number of clients,"
-          " default: %" PRIu16 ".\n"
-          "\t--expire-flow <time>: flow expiration time (us).\n"
-          " default: %" PRIu64 ".\n"
-          "\t--expire-client <time>: client expiration time (us).\n"
-          " default: %" PRIu64 ".\n",
-          DEFAULT_LAN, DEFAULT_WAN, DEFAULT_MAX_FLOWS, DEFAULT_SKETCH_CAPACITY,
-          DEFAULT_MAX_CLIENTS, DEFAULT_FLOW_EXPIRATION_TIME,
-          DEFAULT_CLIENT_EXPIRATION_TIME);
+  NF_INFO(
+      "Usage:\n"
+      "[DPDK EAL options] --\n"
+      "\t--lan <device>: LAN device,"
+      " default: %" PRIu16
+      ".\n"
+      "\t--wan <device>: WAN device,"
+      " default: %" PRIu16
+      ".\n"
+      "\t--max-flows <max-flows>: maximum number of flows,"
+      " default: %" PRIu32
+      ".\n"
+      "\t--capacity <capacity>: size of the clients\' sketch,"
+      " default: %" PRIu32
+      ".\n"
+      "\t--max-clients <max-clients>: maximum allowed number of clients,"
+      " default: %" PRIu16
+      ".\n"
+      "\t--expire-flow <time>: flow expiration time (us).\n"
+      " default: %" PRIu64
+      ".\n"
+      "\t--expire-client <time>: client expiration time (us).\n"
+      " default: %" PRIu64 ".\n",
+      DEFAULT_LAN, DEFAULT_WAN, DEFAULT_MAX_FLOWS, DEFAULT_SKETCH_CAPACITY,
+      DEFAULT_MAX_CLIENTS, DEFAULT_FLOW_EXPIRATION_TIME,
+      DEFAULT_CLIENT_EXPIRATION_TIME);
 }
 
 void nf_config_print(void) {

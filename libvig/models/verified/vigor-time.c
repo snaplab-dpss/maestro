@@ -2,7 +2,7 @@
 #include <time.h>
 
 #ifdef KLEE_VERIFICATION
-#  include <klee/klee.h>
+#include <klee/klee.h>
 #endif
 #include "vigor-time-control.h"
 
@@ -37,11 +37,11 @@ __attribute__((noinline)) vigor_time_t current_time(void) {
   return next_time;
 }
 
-#else // KLEE_VERIFICATION
+#else  // KLEE_VERIFICATION
 
 vigor_time_t restart_time(void) { assert(0); }
 
-#endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION
 
 vigor_time_t get_start_time_internal(void) { return starting_time; }
 

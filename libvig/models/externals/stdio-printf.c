@@ -194,7 +194,7 @@ static unsigned int _ntoa_format(out_fct_type out, char *buffer,
     if (negative) {
       buf[len++] = '-';
     } else if (flags & FLAGS_PLUS) {
-      buf[len++] = '+'; // ignore the space if the '+' exists
+      buf[len++] = '+';  // ignore the space if the '+' exists
     } else if (flags & FLAGS_SPACE) {
       buf[len++] = ' ';
     }
@@ -280,7 +280,7 @@ static unsigned int _ntoa_long_long(out_fct_type out, char *buffer,
   return _ntoa_format(out, buffer, idx, maxlen, buf, len, negative,
                       (unsigned int)base, prec, width, flags);
 }
-#endif // PRINTF_SUPPORT_LONG_LONG
+#endif  // PRINTF_SUPPORT_LONG_LONG
 
 #if defined(PRINTF_SUPPORT_FLOAT)
 static unsigned int _ftoa(out_fct_type out, char *buffer, unsigned int idx,
@@ -296,9 +296,9 @@ static unsigned int _ftoa(out_fct_type out, char *buffer, unsigned int idx,
   const double thres_max = (double)0x7FFFFFFF;
 
   // powers of 10
-  static const double pow10[] = { 1,         10,        100,     1000,
-                                  10000,     100000,    1000000, 10000000,
-                                  100000000, 1000000000 };
+  static const double pow10[] = {1,         10,        100,     1000,
+                                 10000,     100000,    1000000, 10000000,
+                                 100000000, 1000000000};
 
   // test for negative
   bool negative = false;
@@ -395,7 +395,7 @@ static unsigned int _ftoa(out_fct_type out, char *buffer, unsigned int idx,
     if (negative) {
       buf[len++] = '-';
     } else if (flags & FLAGS_PLUS) {
-      buf[len++] = '+'; // ignore the space if the '+' exists
+      buf[len++] = '+';  // ignore the space if the '+' exists
     } else if (flags & FLAGS_SPACE) {
       buf[len++] = ' ';
     }
@@ -422,7 +422,7 @@ static unsigned int _ftoa(out_fct_type out, char *buffer, unsigned int idx,
 
   return idx;
 }
-#endif // PRINTF_SUPPORT_FLOAT
+#endif  // PRINTF_SUPPORT_FLOAT
 
 // internal vsnprintf
 static int _vsnprintf(out_fct_type out, char *buffer, const unsigned int maxlen,
@@ -489,7 +489,7 @@ static int _vsnprintf(out_fct_type out, char *buffer, const unsigned int maxlen,
     } else if (*format == '*') {
       const int w = va_arg(va, int);
       if (w < 0) {
-        flags |= FLAGS_LEFT; // reverse padding
+        flags |= FLAGS_LEFT;  // reverse padding
         width = (unsigned int)-w;
       } else {
         width = (unsigned int)w;
@@ -568,7 +568,7 @@ static int _vsnprintf(out_fct_type out, char *buffer, const unsigned int maxlen,
           base = 2U;
         } else {
           base = 10U;
-          flags &= ~FLAGS_HASH; // no hash for dec format
+          flags &= ~FLAGS_HASH;  // no hash for dec format
         }
         // uppercase
         if (*format == 'X') {
@@ -644,7 +644,7 @@ static int _vsnprintf(out_fct_type out, char *buffer, const unsigned int maxlen,
                     width, flags);
         format++;
         break;
-#endif // PRINTF_SUPPORT_FLOAT
+#endif  // PRINTF_SUPPORT_FLOAT
       case 'c': {
         unsigned int l = 1U;
         // pre padding
@@ -757,15 +757,13 @@ int vsnprintf(char *buffer, unsigned long count, const char *format,
 }
 
 // Added later - DPDK now needs this
-int vasprintf(char **strp, const char *fmt, va_list ap)
-{
-  int size = 4096; // should be enough
+int vasprintf(char **strp, const char *fmt, va_list ap) {
+  int size = 4096;  // should be enough
   *strp = malloc(size);
   int ret = vsnprintf(*strp, size, fmt, ap);
   return ret;
 }
-int asprintf(char **strp, const char *fmt, ...)
-{
+int asprintf(char **strp, const char *fmt, ...) {
   va_list va;
   va_start(va, fmt);
   int ret = vasprintf(strp, fmt, va);

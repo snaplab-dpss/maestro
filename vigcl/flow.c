@@ -22,12 +22,11 @@ void flow_allocate(void *obj) {
 
 #ifdef KLEE_VERIFICATION
 struct str_field_descr flow_descrs[] = {
-  { offsetof(struct flow, src_port), sizeof(uint16_t), 0, "src_port" },
-  { offsetof(struct flow, dst_port), sizeof(uint16_t), 0, "dst_port" },
-  { offsetof(struct flow, src_ip), sizeof(uint32_t), 0, "src_ip" },
-  { offsetof(struct flow, dst_ip), sizeof(uint32_t), 0, "dst_ip" },
-  { offsetof(struct flow, protocol), sizeof(uint8_t), 0, "protocol" },
-};
+    {offsetof(struct flow, src_port), sizeof(uint16_t), 0, "src_port"},
+    {offsetof(struct flow, dst_port), sizeof(uint16_t), 0, "dst_port"},
+    {offsetof(struct flow, src_ip), sizeof(uint32_t), 0, "src_ip"},
+    {offsetof(struct flow, dst_ip), sizeof(uint32_t), 0, "dst_ip"},
+    {offsetof(struct flow, protocol), sizeof(uint8_t), 0, "protocol"}, };
 struct nested_field_descr flow_nests[] = {};
 unsigned flow_hash(void *obj) {
   klee_trace_ret();
@@ -45,7 +44,7 @@ unsigned flow_hash(void *obj) {
   return klee_int("flow_hash");
 }
 
-#else // KLEE_VERIFICATION
+#else  // KLEE_VERIFICATION
 
 unsigned flow_hash(void *obj) {
   struct flow *id = (struct flow *)obj;
@@ -59,4 +58,4 @@ unsigned flow_hash(void *obj) {
   return hash;
 }
 
-#endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION

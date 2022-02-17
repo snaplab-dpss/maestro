@@ -11,8 +11,8 @@
 #include "nf-util.h"
 #include "nf-log.h"
 
-const uint32_t DEFAULT_EXP_TIME = 300000000; // microseconds
-const uint32_t DEFAULT_CAPACITY = 128;       // MAC addresses
+const uint32_t DEFAULT_EXP_TIME = 300000000;  // microseconds
+const uint32_t DEFAULT_CAPACITY = 128;        // MAC addresses
 
 #define PARSE_ERROR(format, ...)          \
   nf_config_usage();                      \
@@ -21,16 +21,16 @@ const uint32_t DEFAULT_CAPACITY = 128;       // MAC addresses
 
 void nf_config_init(int argc, char **argv) {
   // Set the default values
-  config.expiration_time = DEFAULT_EXP_TIME; // seconds
-  config.dyn_capacity = DEFAULT_CAPACITY;    // MAC addresses
-  config.static_config_fname[0] = '\0'; // no static filtering configuration
+  config.expiration_time = DEFAULT_EXP_TIME;  // seconds
+  config.dyn_capacity = DEFAULT_CAPACITY;     // MAC addresses
+  config.static_config_fname[0] = '\0';  // no static filtering configuration
 
   unsigned nb_devices = rte_eth_dev_count_avail();
 
-  struct option long_options[] = { { "expire", required_argument, NULL, 't' },
-                                   { "capacity", required_argument, NULL, 'c' },
-                                   { "config", required_argument, NULL, 'f' },
-                                   { NULL, 0, NULL, 0 } };
+  struct option long_options[] = {{"expire", required_argument, NULL, 't'},
+                                  {"capacity", required_argument, NULL, 'c'},
+                                  {"config", required_argument, NULL, 'f'},
+                                  {NULL, 0, NULL, 0}};
 
   int opt;
   while ((opt = getopt_long(argc, argv, "t:c:f:", long_options, NULL)) != EOF) {
@@ -66,14 +66,16 @@ void nf_config_init(int argc, char **argv) {
 }
 
 void nf_config_usage(void) {
-  NF_INFO("Usage:\n"
-          "[DPDK EAL options] --\n"
-          "\t--expire <time>: flow expiration time (us), default: %" PRIu32
-          ".\n"
-          "\t--capacity <n>: dynamic mac learning table capacity,"
-          " default: %" PRIu32 ".\n"
-          "\t--config <fname>: static filtering table configuration file.\n",
-          DEFAULT_EXP_TIME, DEFAULT_CAPACITY);
+  NF_INFO(
+      "Usage:\n"
+      "[DPDK EAL options] --\n"
+      "\t--expire <time>: flow expiration time (us), default: %" PRIu32
+      ".\n"
+      "\t--capacity <n>: dynamic mac learning table capacity,"
+      " default: %" PRIu32
+      ".\n"
+      "\t--config <fname>: static filtering table configuration file.\n",
+      DEFAULT_EXP_TIME, DEFAULT_CAPACITY);
 }
 
 void nf_config_print(void) {

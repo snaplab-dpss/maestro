@@ -135,16 +135,20 @@
     {
     int i = n;
     for (i = n; i < 0; ++i)
-        invariant loop_fp(k + i*capacity, capacity) == loop_fp(k + n*capacity, capacity) &*&
+        invariant loop_fp(k + i*capacity, capacity) == loop_fp(k + n*capacity,
+capacity) &*&
                 0 <= k + i*capacity &*&
                 i <= 0;
         decreases -i;
     {
         mod_rotate(k + i*capacity, capacity);
-        assert loop_fp(k + i*capacity, capacity) == loop_fp(k + n*capacity, capacity);
+        assert loop_fp(k + i*capacity, capacity) == loop_fp(k + n*capacity,
+capacity);
     }
-    assume(loop_fp(k + i*capacity, capacity) == loop_fp(k + n*capacity, capacity));//workaround
-    assert loop_fp(k + i*capacity, capacity) == loop_fp(k + n*capacity, capacity);
+    assume(loop_fp(k + i*capacity, capacity) == loop_fp(k + n*capacity,
+capacity));//workaround
+    assert loop_fp(k + i*capacity, capacity) == loop_fp(k + n*capacity,
+capacity);
     }
 
 
@@ -252,7 +256,8 @@
             assert true == (x == (capacity + x)%capacity);
             mod_rotate((capacity + x)%capacity, capacity);
             mod_bijection((capacity + x)%capacity, capacity);
-            assert true == (x == (((capacity + x)%capacity + capacity)%capacity));
+            assert true == (x == (((capacity + x)%capacity +
+capacity)%capacity));
         } else {
             div_rem(y-x, capacity);
             int n = (y-x)/capacity;
@@ -265,7 +270,8 @@
             assert true == (x == (capacity + x)%capacity);
             mod_rotate((capacity + x)%capacity, capacity);
             mod_bijection((capacity + x)%capacity, capacity);
-            assert true == (x == (((capacity + x)%capacity + capacity)%capacity));
+            assert true == (x == (((capacity + x)%capacity +
+capacity)%capacity));
 
             if (0 <= capacity + y - r) {
             if (capacity + y - r < capacity) {

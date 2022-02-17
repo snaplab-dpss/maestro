@@ -3,7 +3,8 @@
 #include <stdarg.h>
 
 // Family of printf functions that include buffer overflow checks.
-// But in KLEE we don't need the checks here (KLEE does it), and in NFOS we run verified code,
+// But in KLEE we don't need the checks here (KLEE does it), and in NFOS we run
+// verified code,
 // so we don't need the checks.
 
 int __fprintf_chk(FILE *stream, int flag, const char *format, ...) {
