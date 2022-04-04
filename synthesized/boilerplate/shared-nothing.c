@@ -441,13 +441,6 @@ static int nf_init_device(uint16_t device, struct rte_mempool **mbuf_pools) {
     return retval;
   }
 
-  // Allocate and set up a TX queue (NULL == default config)
-  retval = rte_eth_tx_queue_setup(device, 0, TX_QUEUE_SIZE,
-                                  rte_eth_dev_socket_id(device), NULL);
-  if (retval != 0) {
-    return retval;
-  }
-
   // Allocate and set up TX queues
   for (int txq = 0; txq < num_queues; txq++) {
     retval = rte_eth_tx_queue_setup(device, txq, TX_QUEUE_SIZE,
