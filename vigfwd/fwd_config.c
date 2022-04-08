@@ -89,5 +89,18 @@ void nf_config_print(void) {
   NF_INFO("LAN device: %" PRIu16, config.lan_device);
   NF_INFO("WAN device: %" PRIu16, config.wan_device);
 
+
+  uint16_t nb_devices = rte_eth_dev_count_avail();
+  for (uint16_t dev = 0; dev < nb_devices; dev++) {
+    char *dev_mac_str = nf_mac_to_str(&(config.device_macs[dev]));
+    char *end_mac_str = nf_mac_to_str(&(config.endpoint_macs[dev]));
+
+    NF_INFO("Device %" PRIu16 " own-mac: %s, end-mac: %s", dev, dev_mac_str,
+            end_mac_str);
+
+    free(dev_mac_str);
+    free(end_mac_str);
+  }
+
   NF_INFO("\n--- --- ------ ---\n");
 }

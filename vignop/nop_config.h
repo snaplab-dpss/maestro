@@ -10,10 +10,4 @@ struct nf_config {
 
   // WAN device, i.e. external
   uint16_t wan_device;
-
-  // MAC addresses of devices
-  struct rte_ether_addr *device_macs;
-
-  // MAC addresses of the endpoints the devices are linked to
-  struct rte_ether_addr *endpoint_macs;
 };
