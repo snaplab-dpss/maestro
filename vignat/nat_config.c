@@ -1,4 +1,4 @@
-#include "fwd_config.h"
+#include "nat_config.h"
 
 #include <getopt.h>
 #include <stdlib.h>
@@ -19,7 +19,11 @@ void nf_config_init(int argc, char **argv) {
 
   struct option long_options[] = {
       {"eth-dest", required_argument, NULL, 'm'},
-      {"lan", required_argument, NULL, 'l'},
+      {"expire", required_argument, NULL, 't'},
+      {"extip", required_argument, NULL, 'i'},
+      {"lan-dev", required_argument, NULL, 'l'},
+      {"max-flows", required_argument, NULL, 'f'},
+      {"starting-port", required_argument, NULL, 's'},
       {"wan", required_argument, NULL, 'w'},
       {NULL, 0, NULL, 0}};
 
@@ -50,15 +54,41 @@ void nf_config_init(int argc, char **argv) {
           PARSE_ERROR("Invalid MAC address: %s\n", optarg);
         }
         break;
-      case 'l':
-        config.lan_device = nf_util_parse_int(optarg, "lan", 10, '\0');
-        if (config.lan_device >= nb_devices) {
-          PARSE_ERROR("LAN device does not exist.\n");
+
+      case 't':
+        config.expiration_time =
+            nf_util_parse_int(optarg, "exp-time", 10, '\0');
+        if (config.expiration_time == 0) {
+          PARSE_ERROR("Expiration time must be strictly positive.\n");
         }
         break;
 
+      case 'i':
+        if (!nf_parse_ipv4addr(optarg, &(config.external_addr))) {
+          PARSE_ERROR("Invalid external IP address: %s\n", optarg);
+        }
+        break;
+
+      case 'l':
+        config.lan_main_device = nf_util_parse_int(optarg, "lan-dev", 10, '\0');
+        if (config.lan_main_device >= nb_devices) {
+          PARSE_ERROR("Main LAN device does not exist.\n");
+        }
+        break;
+
+      case 'f':
+        config.max_flows = nf_util_parse_int(optarg, "max-flows", 10, '\0');
+        if (config.max_flows <= 0) {
+          PARSE_ERROR("Flow table size must be strictly positive.\n");
+        }
+        break;
+
+      case 's':
+        config.start_port = nf_util_parse_int(optarg, "start-port", 10, '\0');
+        break;
+
       case 'w':
-        config.wan_device = nf_util_parse_int(optarg, "wan", 10, '\0');
+        config.wan_device = nf_util_parse_int(optarg, "wan-dev", 10, '\0');
         if (config.wan_device >= nb_devices) {
           PARSE_ERROR("WAN device does not exist.\n");
         }
@@ -78,16 +108,43 @@ void nf_config_usage(void) {
   NF_INFO(
       "Usage:\n"
       "[DPDK EAL options] --\n"
-      "\t--lan <device>: set device to be the LAN device (for "
+      "\t--eth-dest <device>,<mac>: MAC address of the endpoint linked to "
+      "a device.\n"
+      "\t--expire <time>: flow expiration time (us).\n"
+      "\t--extip <ip>: external IP address.\n"
+      "\t--lan-dev <device>: set device to be the main LAN device (for "
       "non-NAT).\n"
+      "\t--max-flows <n>: flow table capacity.\n"
+      "\t--starting-port <n>: start of the port range for external ports.\n"
       "\t--wan <device>: set device to be the external one.\n");
 }
 
 void nf_config_print(void) {
   NF_INFO("\n--- NAT Config ---\n");
 
-  NF_INFO("LAN device: %" PRIu16, config.lan_device);
+  NF_INFO("Main LAN device (only relevant for NOP): %" PRIu16,
+          config.lan_main_device);
   NF_INFO("WAN device: %" PRIu16, config.wan_device);
+
+  char *ext_ip_str = nf_rte_ipv4_to_str(config.external_addr);
+  NF_INFO("External IP: %s", ext_ip_str);
+  free(ext_ip_str);
+
+  uint16_t nb_devices = rte_eth_dev_count_avail();
+  for (uint16_t dev = 0; dev < nb_devices; dev++) {
+    char *dev_mac_str = nf_mac_to_str(&(config.device_macs[dev]));
+    char *end_mac_str = nf_mac_to_str(&(config.endpoint_macs[dev]));
+
+    NF_INFO("Device %" PRIu16 " own-mac: %s, end-mac: %s", dev, dev_mac_str,
+            end_mac_str);
+
+    free(dev_mac_str);
+    free(end_mac_str);
+  }
+
+  NF_INFO("Starting port: %" PRIu16, config.start_port);
+  NF_INFO("Expiration time: %" PRIu32 "us", config.expiration_time);
+  NF_INFO("Max flows: %" PRIu32, config.max_flows);
 
   NF_INFO("\n--- --- ------ ---\n");
 }
