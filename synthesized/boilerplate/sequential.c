@@ -313,11 +313,11 @@ int nf_process(uint16_t device, uint8_t *buffer, uint16_t packet_length,
 #define VIGOR_LOOP_END
 
 // Do the opposite: we want batching!
-static const uint16_t RX_QUEUE_SIZE = 128;
-static const uint16_t TX_QUEUE_SIZE = 128;
+static const uint16_t RX_QUEUE_SIZE = 256;
+static const uint16_t TX_QUEUE_SIZE = 256;
 
 // Buffer count for mempools
-static const unsigned MEMPOOL_BUFFER_COUNT = 256;
+static const unsigned MEMPOOL_BUFFER_COUNT = 512;
 
 // Send the given packet to all devices except the packet's own
 void flood(struct rte_mbuf *packet, uint16_t nb_devices) {
