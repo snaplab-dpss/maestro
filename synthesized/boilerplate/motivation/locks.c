@@ -771,7 +771,7 @@ int nf_process(uint16_t device, uint8_t *buffer, uint16_t buffer_length,
   rte_spinlock_lock(&l);
 
   uint64_t core_specific_load = 1;
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < 200; i++) {
     core_specific_load = (core_specific_load * 13) % 17;
   }
 
