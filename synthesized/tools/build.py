@@ -6,10 +6,11 @@ import argparse
 import os
 import subprocess
 
-SYNTHESIZED_DIR = pathlib.Path(__file__).parent.absolute()
+SYNTHESIZED_DIR = pathlib.Path(__file__).parent.parent.absolute()
 
 BOILERPLATE_DIR = f"{SYNTHESIZED_DIR}/boilerplate"
 SYNTHESIZED_BUILD = f"{SYNTHESIZED_DIR}/build"
+MAKEFILES_DIR=f"{SYNTHESIZED_DIR}/makefiles"
 
 SYNTHESIZED_APP = f"{SYNTHESIZED_BUILD}/app"
 SYNTHESIZED_CODE = f"{SYNTHESIZED_BUILD}/synthesized"
@@ -30,12 +31,12 @@ BOILERPLATE_CHOICE_SN = "shared-nothing"
 BOILERPLATE_CHOICE_TM = "tm"
 
 BOILERPLATE_TO_MAKEFILE = {
-  BOILERPLATE_CHOICE_BMV2: "Makefile.bmv2_controller",
-  BOILERPLATE_CHOICE_CALL_PATH_HITTER: "Makefile.cph",
-  BOILERPLATE_CHOICE_LOCKS: "Makefile.maestro",
-  BOILERPLATE_CHOICE_SQ: "Makefile.maestro",
-  BOILERPLATE_CHOICE_SN: "Makefile.maestro",
-  BOILERPLATE_CHOICE_TM: "Makefile.maestro",
+  BOILERPLATE_CHOICE_BMV2: f"{MAKEFILES_DIR}/Makefile.bmv2_controller",
+  BOILERPLATE_CHOICE_CALL_PATH_HITTER: f"{MAKEFILES_DIR}/Makefile.cph",
+  BOILERPLATE_CHOICE_LOCKS: f"{MAKEFILES_DIR}/Makefile.maestro",
+  BOILERPLATE_CHOICE_SQ: f"{MAKEFILES_DIR}/Makefile.maestro",
+  BOILERPLATE_CHOICE_SN: f"{MAKEFILES_DIR}/Makefile.maestro",
+  BOILERPLATE_CHOICE_TM: f"{MAKEFILES_DIR}/Makefile.maestro",
 }
 
 def build_impl(boilerplate, impl):
@@ -97,7 +98,7 @@ def build(boilerplate, impl, nf):
   srcs = get_original_nf_srcs(nf)
   build_makefile(boilerplate, nf, srcs)
 
-  subprocess.call([ "make", "-f", "Makefile.nf" ], cwd=SYNTHESIZED_BUNDLE)
+  subprocess.call([ "make", "-f", "Makefile.nf" ], cwd=SYNTHESIZED_BUNDLE)#, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
   subprocess.call([ "cp" ] +  glob.glob(f"{SYNTHESIZED_BUNDLE}/build/app/*") + [ f"{SYNTHESIZED_APP}/" ])
   
 if __name__ == "__main__":

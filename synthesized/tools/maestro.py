@@ -23,7 +23,7 @@ elif not KLEE_DIR:
   print("Missing KLEE_DIR env var. Exiting.")
   exit(1)
 
-SYNTHESIZED_DIR=pathlib.Path(__file__).parent.absolute()
+SYNTHESIZED_DIR=pathlib.Path(__file__).parent.parent.absolute()
 
 BUILD_DIR = f"{SYNTHESIZED_DIR}/build/maestro"
 BUILD_SYNTHESIZED_DIR = f"{SYNTHESIZED_DIR}/build/synthesized"
@@ -54,7 +54,6 @@ LVA_DEBUG         = f"{BUILD_DIR}/report.txt"
 RSS_CONF          = f"{BUILD_DIR}/rss_conf.txt"
 RSS_KEY_LEN       = 52
 
-EXTRA_VAR_MAKEFILE = f"{os.getcwd()}/Makefile.maestro"
 COMPATIBLE_OPTS = [ "ETH_RSS_NONFRAG_IPV4_TCP", "ETH_RSS_NONFRAG_IPV4_UDP" ]
 
 def error():
@@ -69,7 +68,7 @@ def clean_maestro():
   
 def symbex(nf):
   subprocess.Popen("rm -rf klee-*", shell=True, cwd=os.path.abspath(nf), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-  code = subprocess.call([ "make", "symbex" ], cwd=os.path.abspath(nf))
+  code = subprocess.call([ "make", "symbex" ], cwd=os.path.abspath(nf), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
   if code != 0: error()
 
@@ -257,21 +256,21 @@ if __name__ == "__main__":
   args = parser.parse_args()
   args.nf = os.path.abspath(args.nf)
 
-  print("\n[*] Building maestro")
+  print("[*] Building maestro")
   build_maestro()
 
   t_start = perf_counter()
 
-  print("\n[*] Running symbolic execution")
+  print("[*] Running symbolic execution")
   call_paths = symbex(args.nf)
   t_symbex = perf_counter()
 
   if args.target != CHOICE_SEQUENTIAL and args.target != CHOICE_CPH:
-    print("\n[*] Analyzing call paths")
+    print("[*] Analyzing call paths")
     analyze_call_paths(args.nf, call_paths)
     t_analyze_call_paths = perf_counter()
 
-    print("\n[*] Finding RSS configuration")
+    print("[*] Finding RSS configuration")
     if not args.randomize and args.target == CHOICE_SHARED_NOTHING:
       success = rss_conf_from_lvas()
       if not success:
@@ -283,7 +282,7 @@ if __name__ == "__main__":
 
     t_rss_conf = perf_counter()
 
-  print("\n[*] Synthesizing")
+  print("[*] Synthesizing")
   synthesized_content = []
 
   rss_conf_code, keys = synthesize_rss_conf(args.target)
@@ -296,12 +295,12 @@ if __name__ == "__main__":
   synthesized_content.append(balance_lut_code)
 
   stitch_synthesized_nf(synthesized_content, args.target)
-  build.build(CHOICE_TO_BOILERPLATE[args.target], SYNTHESIZED, args.nf, EXTRA_VAR_MAKEFILE)
+  build.build(CHOICE_TO_BOILERPLATE[args.target], SYNTHESIZED, args.nf)
 
   t_synthesize = perf_counter()
   t_end = t_synthesize
 
-  print("\n[*] Cleaning")
+  print("[*] Cleaning")
   clean_maestro()
 
   print()

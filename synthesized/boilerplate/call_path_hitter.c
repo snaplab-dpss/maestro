@@ -466,28 +466,41 @@ void load_pkts(const char *pcap, unsigned device) {
   pcap_close(descr);
 }
 
+struct config_t {
+  const char* pcap;
+  uint32_t loops;
+};
+
+struct config_t config;
+
 // Main worker method (for now used on a single thread...)
 static void worker_main() {
   if (!nf_init()) {
     rte_exit(EXIT_FAILURE, "Error initializing NF");
   }
 
-  int threshold = 0;
-  for (unsigned pkti = 0; pkti < pkts.n_pkts; pkti++) {
-    struct pkt pkt = pkts.pkts[pkti];
+  vigor_time_t last_ts = 0;
+  vigor_time_t base_ts = 0;
+  for (unsigned loop_it = 0; loop_it < config.loops; loop_it++) {
+    for (unsigned pkti = 0; pkti < pkts.n_pkts; pkti++) {
+      struct pkt pkt = pkts.pkts[pkti];
+      vigor_time_t current_time = pkt.ts + base_ts;
 
-    if ((int)(100 * (pkti + 1) / (double)pkts.n_pkts) >= threshold) {
-      printf("\rProcessing packets (%d%%)",
-             (int)(100 * (pkti + 1) / (double)pkts.n_pkts));
+      printf("\rProcessing packets (%02d %% | loop %d/%d) ...",
+            (int)(100 * (pkti + 1) / (double)pkts.n_pkts),
+            loop_it+1, config.loops);
       fflush(stdout);
-      threshold += 1;
+
+      packet_state_total_length(pkt.pkt, &(pkt.pktlen));
+
+      // ignore destination device, we don't forward anywhere
+      nf_process(pkt.device, pkt.pkt, pkt.pktlen, current_time);
+      nf_return_all_chunks(pkt.pkt);
+
+      last_ts = current_time;
     }
 
-    packet_state_total_length(pkt.pkt, &(pkt.pktlen));
-
-    // ignore destination device, we don't forward anywhere
-    nf_process(pkt.device, pkt.pkt, pkt.pktlen, pkt.ts);
-    nf_return_all_chunks(pkt.pkt);
+    base_ts = last_ts;
   }
 
   printf("\n");
@@ -495,36 +508,84 @@ static void worker_main() {
 
   printf("Generating report...\n");
 
-  FILE *report = fopen("report.txt", "w");
+  FILE *report = fopen("report.tsv", "w");
+  fprintf(report, "#cp\thits\n");
   for (unsigned i = 0; i < call_path_hit_counter_sz; i++) {
-    if (i != 0) {
-      fprintf(report, " ");
-    }
-    fprintf(report, "%lu", call_path_hit_counter_ptr[i]);
+    fprintf(report, "%u\t%lu\n", i, call_path_hit_counter_ptr[i]);
   }
-  fprintf(report, "\n");
   fclose(report);
 
   exit(0);
 }
 
+void nf_config_usage(void) {
+  NF_INFO(
+      "Usage:\n"
+      "[DPDK EAL options] --\n"
+      "\t--pcap <pcap>: traffic trace to analyze.\n"
+      "\t--loops <n>: number of times to loop the pcap\n");
+}
+
+void nf_config_print(void) {
+  NF_INFO("\n--- Config ---\n");
+
+  NF_INFO("PCAP:  %s", config.pcap);
+  NF_INFO("loops: %" PRIu32, config.loops);
+
+  NF_INFO("\n--- --- ------ ---\n");
+}
+
+#define PARSE_ERROR(format, ...)          \
+  nf_config_usage();                      \
+  fprintf(stderr, format, ##__VA_ARGS__); \
+  exit(EXIT_FAILURE);
+
 void nf_config_init(int argc, char **argv) {
+  struct option long_options[] = {
+      {"pcap", required_argument, NULL, 'p'},
+      {"loops", required_argument, NULL, 'l'},
+      {NULL, 0, NULL, 0}};
+  
+  config.pcap = NULL;
+  config.loops = 1;
+
+  int opt;
+  opterr = 0;
+  while ((opt = getopt_long(argc, argv, "p:l:", long_options, NULL)) != EOF) {
+    switch (opt) {
+      case 'p':
+        config.pcap = optarg;
+        printf("pcap optargs %s\n", optarg);
+        if (access(config.pcap, F_OK) != 0) {
+          PARSE_ERROR("No such file \"%s\".\n", config.pcap);
+        }
+        break;
+
+      case 'l':
+        printf("loops optargs %s\n", optarg);
+        config.loops = nf_util_parse_int(optarg, "loops", 10, '\0');
+        break;
+
+      default:
+        PARSE_ERROR("Unknown option.\n");
+        break;
+    }
+  }
+
+  if (config.pcap == NULL) {
+    PARSE_ERROR("PCAP not provided.\n");
+  }
+
+  // Reset getopt
+  optind = 1;
+
   pkts.pkts = NULL;
   pkts.n_pkts = 0;
   pkts.reserved = 0;
 
-  if (argc <= 1) {
-    rte_exit(EXIT_FAILURE, "Provide at least 1 path to a pcap.\n");
-  }
-
   for (int argi = 1; argi < argc; argi++) {
     unsigned device = argi - 1;
-    const char *pcap = argv[argi];
-    if (access(pcap, F_OK) != 0) {
-      rte_exit(EXIT_FAILURE, "Invalid file \"%s\".\n", pcap);
-    }
-
-    load_pkts(pcap, device);
+    load_pkts(config.pcap, device);
   }
 
   printf("Sorting %u packets...\n", pkts.n_pkts);
@@ -549,6 +610,7 @@ int MAIN(int argc, char **argv) {
   argv += ret;
 
   nf_config_init(argc, argv);
+  nf_config_print();
 
   // Run!
   worker_main();

@@ -23,7 +23,7 @@ void nf_config_init(int argc, char **argv) {
       {NULL, 0, NULL, 0}};
 
   int opt;
-  while ((opt = getopt_long(argc, argv, "m:e:t:i:l:f:p:s:w:", long_options,
+  while ((opt = getopt_long(argc, argv, "pl:", long_options,
                             NULL)) != EOF) {
     unsigned device;
     switch (opt) {

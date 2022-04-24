@@ -1,5 +1,4 @@
-SYNTHESIZED_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-
+SYNTHESIZED_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../)
 EXTRA-SRCS-y := $(shell echo $(SYNTHESIZED_DIR)/synapse-runtime/*.c)
 LDLIBS := -lsynapse_runtime -rpath,$(SYNAPSE_RUNTIME_DIR)/build/lib -L$(SYNAPSE_RUNTIME_DIR)/build/lib
 SYNTHESIZED_FILE := $(SYNTHESIZED_DIR)/build/synthesized/nf.c

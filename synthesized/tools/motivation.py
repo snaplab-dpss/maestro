@@ -6,7 +6,7 @@ import argparse
 import os
 import subprocess
 
-SYNTHESIZED_DIR = pathlib.Path(__file__).parent.absolute()
+SYNTHESIZED_DIR = pathlib.Path(__file__).parent.parent.absolute()
 
 EXTRA_VARS_MAKEFILE = f"{SYNTHESIZED_DIR}/Makefile.maestro"
 

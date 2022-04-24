@@ -386,3 +386,13 @@ new-nf:
 	 mkdir vig$${name}; \
 	 cp template/* vig$${name}/.; \
 	 echo "Go to the vig$${name} folder, and check out the comments in each file."
+
+# ====================================
+# BDD creation
+# ====================================
+
+bdd: symbex
+	$(KLEE_BUILD_PATH)/bin/call-paths-to-bdd \
+		-out nf.bdd \
+		-gv nf.gv \
+		klee-last/*.call_path
