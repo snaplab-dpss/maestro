@@ -40,6 +40,6 @@ fspec_gen.ml
 __pycache__
 Makefile.nf
 *.pcap
-report.tsv
+*.tsv
 *.gv
 *.bdd

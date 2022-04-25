@@ -46,6 +46,7 @@
 #include "libvig/verified/expirator.h"
 #include "libvig/verified/cht.h"
 
+#include "libvig/unverified/sketch.h"
 #include "libvig/unverified/expirator.h"
 
 /**********************************************
@@ -508,7 +509,7 @@ static void worker_main() {
 
   printf("Generating report...\n");
 
-  FILE *report = fopen("report.tsv", "w");
+  FILE *report = fopen("nf-cph.tsv", "w");
   fprintf(report, "#cp\thits\n");
   for (unsigned i = 0; i < call_path_hit_counter_sz; i++) {
     fprintf(report, "%u\t%lu\n", i, call_path_hit_counter_ptr[i]);
