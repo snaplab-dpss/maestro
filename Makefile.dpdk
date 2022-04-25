@@ -113,7 +113,7 @@ verifast: autogen
 
 # Cleanup
 CLEAN_BUILD_ARTIFACTS_COMMAND := rm -rf *.bc *.os *.ll
-CLEAN_ALL_COMMAND := $(CLEAN_BUILD_ARTIFACTS_COMMAND) && rm -rf {loop,state}.{c,h} *.gen.{c,h}
+CLEAN_ALL_COMMAND := $(CLEAN_BUILD_ARTIFACTS_COMMAND) && rm -rf {loop,state}.{c,h} *.gen.{c,h} *.bdd *.gv
 # Compilation
 COMPILE_COMMAND := clang
 # Linking with klee-uclibc, but without some methods we are modeling
