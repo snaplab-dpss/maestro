@@ -467,8 +467,14 @@ void load_pkts(const char *pcap, unsigned device) {
   pcap_close(descr);
 }
 
-struct config_t {
+struct device_conf_t {
+  uint16_t device_id;
   const char* pcap;
+};
+
+struct config_t {
+  struct device_conf_t* devices_conf;
+  uint16_t devices;
   uint32_t loops;
 };
 
@@ -522,15 +528,19 @@ static void worker_main() {
 void nf_config_usage(void) {
   NF_INFO(
       "Usage:\n"
-      "[DPDK EAL options] --\n"
-      "\t--pcap <pcap>: traffic trace to analyze.\n"
-      "\t--loops <n>: number of times to loop the pcap\n");
+      "[DPDK EAL options] -- [<device:pcap> ...] --loops <loops>\n"
+      "\n"
+      "\t device: networking device to feed the pcap\n"
+      "\t pcap: traffic trace to analyze\n"
+      "\t loops: number of times to loop the pcap\n");
 }
 
 void nf_config_print(void) {
   NF_INFO("\n--- Config ---\n");
 
-  NF_INFO("PCAP:  %s", config.pcap);
+  for (uint16_t device = 0; device < config.devices; device++) {
+    NF_INFO("device: %" PRIu16 " PCAP:%s", device, config.devices_conf[device].pcap);
+  }
   NF_INFO("loops: %" PRIu32, config.loops);
 
   NF_INFO("\n--- --- ------ ---\n");
@@ -541,52 +551,74 @@ void nf_config_print(void) {
   fprintf(stderr, format, ##__VA_ARGS__); \
   exit(EXIT_FAILURE);
 
-void nf_config_init(int argc, char **argv) {
-  struct option long_options[] = {
-      {"pcap", required_argument, NULL, 'p'},
-      {"loops", required_argument, NULL, 'l'},
-      {NULL, 0, NULL, 0}};
+void nf_config_init_device(uint16_t device_id) {
+  for (int i = 0; i < config.devices; i++) {
+    if (config.devices_conf[i].device_id == device_id) {
+      PARSE_ERROR("Duplicated device: %" PRIu16 ".", device_id);
+    }
+  }
   
-  config.pcap = NULL;
+  config.devices++;
+  config.devices_conf = (struct device_conf_t*) realloc(
+    config.devices_conf,
+    sizeof(struct device_conf_t) * config.devices);
+
+  config.devices_conf[config.devices - 1].pcap = NULL;
+  config.devices_conf[config.devices - 1].device_id = device_id;
+
+}
+void nf_config_init(int argc, char **argv) {
+  config.devices = 0;
   config.loops = 1;
 
+  struct option long_options[] = {
+    {"loops", required_argument, NULL, 'l'},
+    { NULL, 0, NULL, 0}};
+ 
   int opt;
   opterr = 0;
-  while ((opt = getopt_long(argc, argv, "p:l:", long_options, NULL)) != EOF) {
+  while ((opt = getopt_long(argc, argv, "l:", long_options, NULL)) != EOF) {
     switch (opt) {
-      case 'p':
-        config.pcap = optarg;
-        printf("pcap optargs %s\n", optarg);
-        if (access(config.pcap, F_OK) != 0) {
-          PARSE_ERROR("No such file \"%s\".\n", config.pcap);
-        }
-        break;
-
-      case 'l':
-        printf("loops optargs %s\n", optarg);
+      case 'l': {
         config.loops = nf_util_parse_int(optarg, "loops", 10, '\0');
         break;
+      }
 
       default:
         PARSE_ERROR("Unknown option.\n");
-        break;
     }
   }
 
-  if (config.pcap == NULL) {
-    PARSE_ERROR("PCAP not provided.\n");
+  for (int iarg = optind; iarg < argc; iarg++) {
+    const char* delim = ":";
+    char* token;
+    
+    token = strtok(argv[iarg], delim);
+    if (token == NULL) {
+      PARSE_ERROR("Missing \"device\" argument.\n");
+    }
+
+    uint16_t device_id = nf_util_parse_int(token, "device", 10, '\0');
+    nf_config_init_device(device_id);
+
+    token = strtok(NULL, delim);
+    if (token == NULL) {
+      PARSE_ERROR("Missing \"pcap\" argument.\n");
+    }
+
+    if (access(token, F_OK) != 0) {
+      PARSE_ERROR("No such file \"%s\".\n", token);
+    }
+
+    config.devices_conf[config.devices - 1].pcap = token;
   }
-
-  // Reset getopt
-  optind = 1;
-
+  
   pkts.pkts = NULL;
   pkts.n_pkts = 0;
   pkts.reserved = 0;
 
-  for (int argi = 1; argi < argc; argi++) {
-    unsigned device = argi - 1;
-    load_pkts(config.pcap, device);
+  for (int i = 0; i < config.devices; i++) {
+    load_pkts(config.devices_conf[i].pcap, config.devices_conf[i].device_id);
   }
 
   printf("Sorting %u packets...\n", pkts.n_pkts);

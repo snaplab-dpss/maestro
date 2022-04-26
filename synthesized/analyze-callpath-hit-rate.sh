@@ -3,7 +3,7 @@
 set -euo pipefail
 
 function help {
-  echo "Usage: $0 nf-dir pcap [pcap loops]" >&2
+  echo "Usage: $0 nf-dir [device:pcap ...] --loops <loops>" >&2
   exit 1
 }
 
@@ -12,27 +12,13 @@ TOOLS=$SCRIPT_DIR/tools
 BUILD=$SCRIPT_DIR/build
 SYNTHESIZED=$BUILD/synthesized
 
-if [ "$#" -lt 2 ] || ! [ -d "$1" ]; then
+if [ "$#" -lt 3 ] || ! [ -d "$1" ]; then
   help
 fi
 
 NF_DIR=$1
-PCAP=$2
-LOOPS=1
-
-if ! test -f "$PCAP" || ! file "$PCAP" | grep -q "pcap"; then
-  echo "$PCAP not found or not a pcap file."
-  help
-fi
-
-if [ "$#" -gt 2 ]; then
-  re='^[0-9]+$'
-  if ! [[ $3 =~ $re ]]; then
-    echo "$3 not a number" >&2
-    help
-  fi
-  LOOPS=$3
-fi
+shift 1
+CPH_ARGS=$@
 
 if ! test -f "$NF_DIR/nf.bdd"; then
   pushd $NF_DIR
@@ -49,7 +35,7 @@ $KLEE_BUILD_PATH/bin/bdd-to-c -in $NF_DIR/nf.bdd -out $SYNTHESIZED/nf-cph.c -tar
 $TOOLS/build.py $SYNTHESIZED/nf-cph.c call_path_hitter --nf $NF_DIR
 
 # Generating the call path hit rate report
-$BUILD/app/nf --no-huge -- --pcap $PCAP --loops $LOOPS
+$BUILD/app/nf --no-huge -- $CPH_ARGS
 
 # Generating call path hit rate graphviz file
 $KLEE_BUILD_PATH/bin/call-path-hit-rate-graphviz-generator \
