@@ -78,7 +78,7 @@ def symbex(nf):
   return call_paths
 
 def analyze_call_paths(nf, call_paths):
-  analyze 		= f"{KLEE_DIR}/build/bin/analyse-libvig-call-paths"
+  analyze 		= f"{KLEE_DIR}/Release/bin/analyse-libvig-call-paths"
   analyze_args	= [ os.path.abspath(cp) for cp in call_paths ]
 
   lva = open(LVA, mode="w")
@@ -165,7 +165,7 @@ def synthesize_rss_conf(target):
 def synthesize_nf(nf, call_paths, target):
   assert(call_paths)
 
-  bdd_to_c      = f"{KLEE_DIR}/build/bin/bdd-to-c"
+  bdd_to_c      = f"{KLEE_DIR}/Release/bin/bdd-to-c"
   bdd_to_c_args	= f"-out={SYNTHESIZED} -xml={SYNTHESIZED_XML} -target={target} {' '.join(call_paths)}"
 
   code = subprocess.call([ bdd_to_c ] + bdd_to_c_args.split(' '))

@@ -424,9 +424,6 @@ if [ ! -e "$BUILDDIR/verifast" ]; then
   popd
 fi
 
-
-
-
 # ====
 # KLEE
 # ====
@@ -453,33 +450,14 @@ if [ ! -e "$BUILDDIR/klee-uclibc" ]; then
 fi
 
 if [ ! -e "$BUILDDIR/klee" ]; then
-  git clone --depth 1 https://github.com/luispedrosa/vigor-klee.git "$BUILDDIR/klee"
+  git clone --depth 1 https://github.com/fchamicapereira/vigor-klee.git "$BUILDDIR/klee"
   pushd "$BUILDDIR/klee"
-    rm -rf build
-    mkdir build
-    pushd build
-      CXXFLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" \
-      CMAKE_PREFIX_PATH="$BUILDDIR/z3/build" \
-      CMAKE_INCLUDE_PATH="$BUILDDIR/z3/build/include/" \
-       cmake \
-       -DENABLE_UNIT_TESTS=OFF \
-       -DBUILD_SHARED_LIBS=OFF \
-       -DENABLE_KLEE_ASSERTS=ON \
-       -DLLVM_CONFIG_BINARY="$BUILDDIR/llvm/Release/bin/llvm-config" \
-       -DLLVMCC="$BUILDDIR/llvm/Release/bin/clang" \
-       -DLLVMCXX="$BUILDDIR/llvm/Release/bin/clang++" \
-       -DENABLE_SOLVER_Z3=ON \
-       -DENABLE_KLEE_UCLIBC=ON \
-       -DKLEE_UCLIBC_PATH="$BUILDDIR/klee-uclibc" \
-       -DENABLE_POSIX_RUNTIME=ON \
-       ..
-      make -j$(nproc)
-      echo 'PATH='"$BUILDDIR/klee/build/bin"':$PATH' >> "$PATHSFILE"
-      echo "export KLEE_DIR=$BUILDDIR/klee" >> "$PATHSFILE"
-      echo "export KLEE_INCLUDE=$BUILDDIR/klee/include" >> "$PATHSFILE"
-      echo "export KLEE_BUILD_PATH=$BUILDDIR/klee/build" >> "$PATHSFILE"
-      . "$PATHSFILE"
-    popd
+    ./build.sh
+    echo 'PATH='"$BUILDDIR/klee/Release/bin"':$PATH' >> "$PATHSFILE"
+    echo "export KLEE_DIR=$BUILDDIR/klee" >> "$PATHSFILE"
+    echo "export KLEE_INCLUDE=$BUILDDIR/klee/include" >> "$PATHSFILE"
+    echo "export KLEE_BUILD_PATH=$BUILDDIR/klee/Release" >> "$PATHSFILE"
+    . "$PATHSFILE"
   popd
 fi
 
