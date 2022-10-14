@@ -488,7 +488,7 @@ if [ ! -e "$BUILDDIR/synapse-runtime" ]; then
   sudo apt-get install -y autoconf automake libtool curl make g++ unzip cmake
 
   # protobuf
-  git clone https://github.com/protocolbuffers/protobuf.git --recursive "$BUILDDIR/protobuf"
+  git clone --depth 1 --branch v18.3 https://github.com/protocolbuffers/protobuf.git --recursive "$BUILDDIR/protobuf"
   pushd "$BUILDDIR/protobuf"
     ./autogen.sh
     ./configure
