@@ -396,3 +396,9 @@ bdd: symbex
 		-out nf.bdd \
 		-gv nf.gv \
 		klee-last/*.call_path
+
+%.i: %.c
+	@mkdir -p build/app
+	gcc -E $(filter-out -O3 -c,$(CFLAGS)) $^ -o build/app/$@
+
+pre-processor: all $(NF_FILES:.c=.i)
