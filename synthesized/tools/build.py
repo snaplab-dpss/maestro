@@ -258,6 +258,9 @@ def find_missing_code(nf, impl, makefile_report):
 	if missing_defs:
 		print('Missing types: ', missing_defs)
 		return get_user_defined_types(nf, impl, missing_defs)
+	
+	print(makefile_report)
+	exit(1)
 
 def build(boilerplate, impl, nf):
 	assert boilerplate in BOILERPLATE_TO_MAKEFILE
@@ -266,19 +269,19 @@ def build(boilerplate, impl, nf):
 	build_impl(boilerplate, impl)
 	success, makefile_report = compile(makefile)
 
-	if not success:
-		extras = []
+	extras = []
+	while not success:
+		last_report = makefile_report
 
 		extra_code = find_missing_code(nf, impl, makefile_report)
 		extras = extra_code + extras
 		build_impl(boilerplate, impl, extras)
 		success, makefile_report = compile(makefile)
-		
-		extra_code = find_missing_code(nf, impl, makefile_report)
-		extras = extra_code + extras
-		build_impl(boilerplate, impl, extras)
-		# success, makefile_report = compile(makefile)
-		# assert success
+
+		if makefile_report == last_report:
+			print(makefile_report)
+			print('Getting the same report after trying to fix it.')
+			exit(1)
 	
 	final_compilation(makefile)
 
