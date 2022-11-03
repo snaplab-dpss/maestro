@@ -70,7 +70,7 @@ def get_original_nf_srcs(nf):
 	original_nf_files += glob.glob(f"{nf}/build/app/*.i")
 
 	if not original_nf_files:
-		subprocess.call([ "make" ], cwd=nf)
+		subprocess.call([ "make", "pre-processor" ], cwd=nf)
 		original_nf_files += glob.glob(f"{nf}/build/app/*.i")
 		assert original_nf_files
 
@@ -223,7 +223,6 @@ def compile(makefile):
 	return proc.returncode == 0, stderr
 
 def final_compilation(makefile):
-	print("Compiling...")
 	subprocess.call([ "cp", makefile, f"{SYNTHESIZED_CODE}/Makefile" ])
 	subprocess.call([ "make" ], cwd=SYNTHESIZED_CODE)
 	subprocess.call([ "cp", f"{SYNTHESIZED_CODE}/build/app/nf", f"{SYNTHESIZED_APP}/nf" ])
