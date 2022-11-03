@@ -80,35 +80,33 @@ void RSSConfigBuilder::filter_constraints() {
   std::vector<R3S::R3S_pf_t> pfs = unique_packet_fields_dependencies;
 
   // get the smallest set of pfs
+  // check only for the first device
   for (auto constraint : constraints) {
-    std::vector<unsigned> devices = {constraint->get_devices().first,
-                                     constraint->get_devices().second};
-    for (auto device : devices) {
-      auto saved_constraint_pfs = constraint->get_packet_fields(device);
+    auto device = constraint->get_devices().first;
+    auto saved_constraint_pfs = constraint->get_packet_fields(device);
 
-      if (saved_constraint_pfs.size() == 0 ||
-          saved_constraint_pfs.size() >= pfs.size()) {
-        continue;
-      }
-
-      bool not_found = false;
-      for (auto pf : saved_constraint_pfs) {
-        auto found_it = std::find(pfs.begin(), pfs.end(), pf);
-        if (found_it == pfs.end()) {
-          not_found = true;
-          break;
-        }
-      }
-
-      if (not_found) {
-        return;
-      }
-
-      pfs.clear();
-      pfs = saved_constraint_pfs;
+    if (saved_constraint_pfs.size() == 0 ||
+        saved_constraint_pfs.size() >= pfs.size()) {
+    continue;
     }
-  }
 
+    bool not_found = false;
+    for (auto pf : saved_constraint_pfs) {
+    auto found_it = std::find(pfs.begin(), pfs.end(), pf);
+    if (found_it == pfs.end()) {
+        not_found = true;
+        break;
+    }
+    }
+
+    if (not_found) {
+    return;
+    }
+
+    pfs.clear();
+    pfs = saved_constraint_pfs;
+  }
+    
   if (pfs.size() == unique_packet_fields_dependencies.size()) {
     return;
   }
@@ -117,21 +115,19 @@ void RSSConfigBuilder::filter_constraints() {
   constraints.erase(
       std::remove_if(constraints.begin(), constraints.end(),
                      [&](const std::shared_ptr<Constraint> &constraint) {
-        std::vector<unsigned> devices = {constraint->get_devices().first,
-                                         constraint->get_devices().second};
-        for (auto device : devices) {
-          auto saved_constraint_pfs = constraint->get_packet_fields(device);
-          if (saved_constraint_pfs.size() != pfs.size()) {
-            return true;
-          }
+      auto device = constraint->get_devices().first;
+      auto saved_constraint_pfs = constraint->get_packet_fields(device);
+      if (saved_constraint_pfs.size() != pfs.size()) {
+          return true;
+      }
 
-          auto eq = std::equal(saved_constraint_pfs.begin(),
-                               saved_constraint_pfs.end(), pfs.begin());
-          if (!eq) {
-            return true;
-          }
-        }
-        return false;
+      auto eq = std::equal(saved_constraint_pfs.begin(),
+                          saved_constraint_pfs.end(), pfs.begin());
+      if (!eq) {
+          return true;
+      }
+
+      return false;
       }),
       constraints.end());
 
