@@ -259,7 +259,6 @@ int map_allocate(map_keys_equality *keq, map_key_hash *khash, unsigned capacity,
 }
 
 int map_get(struct Map *map, void *key, int *value_out) {
-  return 1;
   map_key_hash *khash = map->khash;
   unsigned hash = khash(key);
   return map_impl_get(map->busybits, map->keyps, map->khs, map->chns, map->vals,
