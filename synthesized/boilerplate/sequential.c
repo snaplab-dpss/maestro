@@ -593,6 +593,18 @@ int expire_items_single_map(struct DoubleChain *chain, struct Vector *vector,
   return count;
 }
 
+int expire_items_single_map_iteratively(struct Vector *vector, struct Map *map,
+                                        int start, int n_elems) {
+  assert(start >= 0);
+  assert(n_elems >= 0);
+  void *key;
+  for (int i = start; i < n_elems; i++) {
+    vector_borrow(vector, i, (void **)&key);
+    map_erase(map, key, (void **)&key);
+    vector_return(vector, i, key);
+  }
+}
+
 // Careful: SKETCH_HASHES needs to be <= SKETCH_SALTS_BANK_SIZE
 #define SKETCH_HASHES 8
 #define SKETCH_SALTS_BANK_SIZE 64
