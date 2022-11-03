@@ -276,9 +276,9 @@ if __name__ == "__main__":
 			if not success:
 				print("Unable to synthesize a parallel implementation using a shared nothing model.")
 				exit(1)
-			else:
-				success = rss_conf_random(2) # TODO devices
-				assert(success)
+		else:
+			success = rss_conf_random(2) # TODO devices
+			assert(success)
 
 		t_rss_conf = perf_counter()
 

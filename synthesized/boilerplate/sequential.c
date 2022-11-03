@@ -1000,14 +1000,6 @@ int nf_process(uint16_t device, uint8_t *buffer, uint16_t packet_length,
 // Unverified support for batching, useful for performance comparisons
 #define VIGOR_BATCH_SIZE 32
 
-#define VIGOR_LOOP_BEGIN                                                \
-  while (1) {                                                           \
-    vigor_time_t VIGOR_NOW = current_time();                            \
-    unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();           \
-    for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT; \
-         VIGOR_DEVICE++) {
-#define VIGOR_LOOP_END
-
 // Do the opposite: we want batching!
 static const uint16_t RX_QUEUE_SIZE = 256;
 static const uint16_t TX_QUEUE_SIZE = 256;
