@@ -16,6 +16,7 @@ SRCS-y = ./nf.c
 CFLAGS += -std=gnu11
 CFLAGS += -DCAPACITY_POW2
 CFLAGS += -O3
+CFLAGS += -mrtm
 # CFLAGS += -O0 -g -rdynamic -DENABLE_LOG -Wfatal-errors
 
 # GCC optimizes a checksum check in rte_ip.h into a CMOV, which is a very poor choice
