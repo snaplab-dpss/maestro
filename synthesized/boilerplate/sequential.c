@@ -606,7 +606,7 @@ int expire_items_single_map_iteratively(struct Vector *vector, struct Map *map,
 }
 
 // Careful: SKETCH_HASHES needs to be <= SKETCH_SALTS_BANK_SIZE
-#define SKETCH_HASHES 8
+#define SKETCH_HASHES 4
 #define SKETCH_SALTS_BANK_SIZE 64
 
 struct internal_data {
