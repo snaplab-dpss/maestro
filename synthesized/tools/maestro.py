@@ -213,8 +213,8 @@ def synthesize_balance_lut(keys, pcap, target):
 		for j, lut_core in enumerate(lut):
 			code += "\n"
 
-		for k, bucket in enumerate(lut_core):
-			code += f"  retas_per_device[{ikey}].tables[{j}][{k}] = {bucket};\n"
+			for k, bucket in enumerate(lut_core):
+				code += f"  retas_per_device[{ikey}].tables[{j}][{k}] = {bucket};\n"
 	
 	code += "}"
 
