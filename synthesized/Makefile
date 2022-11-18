@@ -6,7 +6,7 @@ Z3_INCLUDE := -I$(Z3_DIR)/build/include
 R3S_INCLUDE := -I$(R3S_DIR)/include
 
 Z3_LIB_FLAGS := -lz3 -Wl,-rpath,$(Z3_DIR)/build/lib -L$(Z3_DIR)/build/lib
-R3S_LIB_FLAGS := -lr3s -Wl,-rpath,$(R3S_DIR)/build/libs -L$(R3S_DIR)/build/libs
+R3S_LIB_FLAGS := -lr3s -Wl,-rpath,$(R3S_DIR)/build/libs -L$(R3S_DIR)/builds/release/lib
 
 KLEE_DIR := $(VIGOR_DIR)/klee
 BUILD := $(SYNTHESIZED_DIR)/build/maestro
