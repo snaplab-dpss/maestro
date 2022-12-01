@@ -60,22 +60,21 @@ struct Map {
 };
 
 static unsigned loop(unsigned k, unsigned capacity) {
-  unsigned g = k % capacity;
-  unsigned res = (g + capacity) % capacity;
-  return res;
+  return k & (capacity - 1);
 }
 
-static int find_key(int *busybits, void **keyps, unsigned *k_hashes, int *chns,
-                    void *keyp, map_keys_equality *eq, unsigned key_hash,
-                    unsigned capacity) {
+static int find_key(int* busybits, void** keyps,
+                                 unsigned* k_hashes, int* chns, void* keyp,
+                                 map_keys_equality* eq, unsigned key_hash,
+                                 unsigned capacity) {
   unsigned start = loop(key_hash, capacity);
   unsigned i = 0;
-  for (; i < capacity; ++i) {
+  for (; i < capacity; ++i)  {
     unsigned index = loop(start + i, capacity);
     int bb = busybits[index];
     unsigned kh = k_hashes[index];
     int chn = chns[index];
-    void *kp = keyps[index];
+    void* kp = keyps[index];
     if (bb != 0 && kh == key_hash) {
       if (eq(kp, keyp)) {
         return (int)index;
@@ -86,23 +85,23 @@ static int find_key(int *busybits, void **keyps, unsigned *k_hashes, int *chns,
       }
     }
   }
-
+  
   return -1;
 }
 
-static unsigned find_key_remove_chain(int *busybits, void **keyps,
-                                      unsigned *k_hashes, int *chns, void *keyp,
-                                      map_keys_equality *eq, unsigned key_hash,
-                                      unsigned capacity, void **keyp_out) {
+static unsigned find_key_remove_chain(
+    int* busybits, void** keyps, unsigned* k_hashes, int* chns, void* keyp,
+    map_keys_equality* eq, unsigned key_hash, unsigned capacity,
+    void** keyp_out) {
   unsigned i = 0;
   unsigned start = loop(key_hash, capacity);
-
+  
   for (; i < capacity; ++i) {
     unsigned index = loop(start + i, capacity);
     int bb = busybits[index];
     unsigned kh = k_hashes[index];
     int chn = chns[index];
-    void *kp = keyps[index];
+    void* kp = keyps[index];
     if (bb != 0 && kh == key_hash) {
       if (eq(kp, keyp)) {
         busybits[index] = 0;
@@ -110,33 +109,33 @@ static unsigned find_key_remove_chain(int *busybits, void **keyps,
         return index;
       }
     }
-
+	
     chns[index] = chn - 1;
   }
 
   return -1;
 }
 
-static unsigned find_empty(int *busybits, int *chns, unsigned start,
-                           unsigned capacity) {
+static unsigned find_empty(int* busybits, int* chns,
+                                        unsigned start, unsigned capacity) {
   unsigned i = 0;
   for (; i < capacity; ++i) {
     unsigned index = loop(start + i, capacity);
-
     int bb = busybits[index];
     if (0 == bb) {
       return index;
     }
-    int chn = chns[index];
 
+    int chn = chns[index];
     chns[index] = chn + 1;
   }
-
+  
   return -1;
 }
 
-void map_impl_init(int *busybits, map_keys_equality *eq, void **keyps,
-                   unsigned *khs, int *chns, int *vals, unsigned capacity) {
+void map_impl_init(int* busybits, map_keys_equality* eq,
+                                void** keyps, unsigned* khs, int* chns,
+                                int* vals, unsigned capacity) {
   (uintptr_t) eq;
   (uintptr_t) keyps;
   (uintptr_t) khs;
@@ -149,24 +148,23 @@ void map_impl_init(int *busybits, map_keys_equality *eq, void **keyps,
   }
 }
 
-int map_impl_get(int *busybits, void **keyps, unsigned *k_hashes, int *chns,
-                 int *values, void *keyp, map_keys_equality *eq, unsigned hash,
-                 int *value, unsigned capacity) {
+int map_impl_get(int* busybits, void** keyps, unsigned* k_hashes,
+                              int* chns, int* values, void* keyp,
+                              map_keys_equality* eq, unsigned hash, int* value,
+                              unsigned capacity) {
   int index =
       find_key(busybits, keyps, k_hashes, chns, keyp, eq, hash, capacity);
-
   if (-1 == index) {
     return 0;
   }
-
+  
   *value = values[index];
-
   return 1;
 }
 
-void map_impl_put(int *busybits, void **keyps, unsigned *k_hashes, int *chns,
-                  int *values, void *keyp, unsigned hash, int value,
-                  unsigned capacity) {
+void map_impl_put(int* busybits, void** keyps, unsigned* k_hashes,
+                               int* chns, int* values, void* keyp,
+                               unsigned hash, int value, unsigned capacity) {
   unsigned start = loop(hash, capacity);
   unsigned index = find_empty(busybits, chns, start, capacity);
 
@@ -176,14 +174,15 @@ void map_impl_put(int *busybits, void **keyps, unsigned *k_hashes, int *chns,
   values[index] = value;
 }
 
-void map_impl_erase(int *busybits, void **keyps, unsigned *k_hashes, int *chns,
-                    void *keyp, map_keys_equality *eq, unsigned hash,
-                    unsigned capacity, void **keyp_out) {
+void map_impl_erase(int* busybits, void** keyps,
+                                 unsigned* k_hashes, int* chns, void* keyp,
+                                 map_keys_equality* eq, unsigned hash,
+                                 unsigned capacity, void** keyp_out) {
   find_key_remove_chain(busybits, keyps, k_hashes, chns, keyp, eq, hash,
                         capacity, keyp_out);
 }
 
-unsigned map_impl_size(int *busybits, unsigned capacity) {
+unsigned map_impl_size(int* busybits, unsigned capacity) {
   unsigned s = 0;
   unsigned i = 0;
   for (; i < capacity; ++i) {
@@ -191,7 +190,6 @@ unsigned map_impl_size(int *busybits, unsigned capacity) {
       ++s;
     }
   }
-
   return s;
 }
 
