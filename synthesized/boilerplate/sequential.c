@@ -56,9 +56,7 @@ struct Map {
 };
 
 static unsigned loop(unsigned k, unsigned capacity) {
-  unsigned g = k % capacity;
-  unsigned res = (g + capacity) % capacity;
-  return res;
+  return k & (capacity - 1);
 }
 
 static int find_key(int *busybits, void **keyps, unsigned *k_hashes, int *chns,
@@ -606,7 +604,7 @@ int expire_items_single_map_iteratively(struct Vector *vector, struct Map *map,
 }
 
 // Careful: SKETCH_HASHES needs to be <= SKETCH_SALTS_BANK_SIZE
-#define SKETCH_HASHES 4
+#define SKETCH_HASHES 5
 #define SKETCH_SALTS_BANK_SIZE 64
 
 struct internal_data {
