@@ -1,6 +1,7 @@
 #include "psd_state.h"
 
 #include <stdlib.h>
+#include <rte_lcore.h>
 
 #include "libvig/verified/boilerplate-util.h"
 #ifdef KLEE_VERIFICATION
@@ -18,11 +19,31 @@ bool counter_condition(void *value, int index, void *state) {
 
 #endif  // KLEE_VERIFICATION
 
+bool spread_capacity_among_cores(uint32_t* capacity) {
+    *capacity /= rte_lcore_count();
+
+    // find power of 2
+    for (int pow = 0; pow < 32; pow++) {
+        if ((1 << pow) >= *capacity) {
+            *capacity = (1 << pow);
+            return true;
+        }
+    }
+
+    // we should not be here
+    return false;
+}
+
 struct State *allocated_nf_state = NULL;
 
 struct State *alloc_state(uint32_t capacity, uint64_t max_ports,
                           uint32_t dev_count) {
   if (allocated_nf_state != NULL) return allocated_nf_state;
+
+  int success = spread_capacity_among_cores(&capacity);
+  if (!success) {
+    return NULL;
+  }
 
   struct State *ret = malloc(sizeof(struct State));
 
