@@ -89,10 +89,9 @@ def analyze_call_paths(nf, call_paths):
 
 def rss_conf_from_lvas():
 	rss_conf_from_lva = f"{BUILD_DIR}/rss-config-from-lvas"
-	rss_conf_from_lva_arg = f"{BUILD_DIR}/report.lva"
 
 	rss_conf = open(RSS_CONF, mode='w')
-	code = subprocess.call([ rss_conf_from_lva, rss_conf_from_lva_arg ], stdout=rss_conf)
+	code = subprocess.call([ rss_conf_from_lva, LVA ], stdout=rss_conf)
 	rss_conf.close()
 
 	return code == 0
