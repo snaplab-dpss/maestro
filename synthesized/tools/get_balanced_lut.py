@@ -24,7 +24,7 @@ from multiprocessing import Pool
 
 from numpy import percentile
 
-MAX_CORES=16
+MAX_CORES=32
 LUT_SIZE=512
 
 PCAP_PARTITIONS_MAX_SIZE = 100 # MB
