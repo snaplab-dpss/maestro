@@ -255,6 +255,10 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 	args.nf = os.path.abspath(args.nf)
 
+	if args.balance and not os.path.exists(args.balance):
+		print(f"Error: no such file or directory \"{args.balance}\"")
+		exit(1)
+
 	print("[*] Building maestro")
 	build_maestro()
 
