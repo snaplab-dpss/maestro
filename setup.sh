@@ -1,17 +1,9 @@
 #!/bin/bash
-# $1: "no-verify" to only install compile/runtime dependencies,
-#     or no argument to install everything
 
-# Bash "strict mode"
 set -euo pipefail
 
-
-# =====
-# Setup
-# =====
-
-# OCaml (installed later) uses variables in its scripts without
-# defining them first - we're in strict mode!
+# Note that opam needs bash, not just sh
+# Also it uses undefined variables so let's set them now otherwise it'll fail due to strict mode
 if [ -z ${PERL5LIB+x} ]; then
   export PERL5LIB=''
 fi
@@ -22,251 +14,351 @@ if [ -z ${PROMPT_COMMAND+x} ]; then
   export PROMPT_COMMAND=''
 fi
 
-
-VNDSDIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
-BUILDDIR=`pwd`
-PATHSFILE="$BUILDDIR/paths.sh"
-
-
-OS='linux'
-if grep docker /proc/1/cgroup -qa; then
-  OS='docker'
-fi
-
-# might not have sudo, especially in Docker, install it for simplicity so that scripts work in either case
-if [ "$(which sudo)" = '' ] ; then
-  apt-get update
-  apt-get install -y sudo
-fi
-
-
-if [ "$BUILDDIR" -ef "$VNDSDIR" ] && [ "$OS" != "docker" ]; then
-  echo 'It is not recommented to install the dependencies into the project root directory.'
-  echo "We recommend you to run the script from the parent directory like this:"
-  echo ". $VNDSDIR/setup.sh"
-  read -p "Continue installing into $BUILDDIR? [y/n]" -n 1 -r
-  echo # move to a new line
-  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    # handle exits from shell or function but don't exit interactive shell
-    [[ "$0" = "$BASH_SOURCE" ]] && exit 1 || return 1
-  fi
-fi
-
-
-if [ ! -f "$PATHSFILE" ]; then
-  echo '# The configuration paths for VNDS dependencies' > "$PATHSFILE"
-  echo "export VIGOR_DIR=$BUILDDIR" >> "$PATHSFILE"
-  # Source the paths file at login
-  echo ". $PATHSFILE" >> "$HOME/.profile"
-fi
-
-sudo apt-get update
-sudo DEBIAN_FRONTEND=noninteractive \
-     apt-get install -y ca-certificates software-properties-common \
-                        patch wget build-essential git cloc
-
-# If there is a single version of GCC and it's a single digit, as in e.g. GCC 9 on Ubuntu 20.04,
-# our clang won't detect it because it expects a version in the format x.y.z with all components
-# so let's create a symlink
-# 0 -> nothing, 2 -> a single dot (because there is also \0)
-GCC_VER=$(ls -1 /usr/lib/gcc/x86_64-linux-gnu/ | sort -V | tail -n 1)
-if [ $(echo $GCC_VER | grep -Fo . | wc -c) -eq 0 ]; then sudo ln -s "/usr/lib/gcc/x86_64-linux-gnu/$GCC_VER" "/usr/lib/gcc/x86_64-linux-gnu/$GCC_VER.0.0" ; fi
-if [ $(echo $GCC_VER | grep -Fo . | wc -c) -eq 2 ]; then sudo ln -s "/usr/lib/gcc/x86_64-linux-gnu/$GCC_VER" "/usr/lib/gcc/x86_64-linux-gnu/$GCC_VER.0" ; fi
-
-
-# ====
-# DPDK
-# ====
-
-sudo DEBIAN_FRONTEND=noninteractive \
-     apt-get install -y libpcap-dev libnuma-dev
-
-# Install the right headers
-if [ "$OS" = 'linux' -o "$OS" = 'docker' ]; then
-  if [ "$OS" = 'docker' ]; then
-      echo "Warning: the guest uses the host kernel,"
-      echo " so the guest should be able to install headers for the host's kernel..."
-  fi
-
-  sudo apt-get install -y "linux-headers-generic"
-fi
-
 DPDK_RELEASE='20.08'
-DPDK_SUFFIX='' # e.g. for LTS releases '-stable', for non-LTS ''
-pushd "$BUILDDIR"
-  if [ ! -f dpdk/.version ] || \
-     [ "$(cat dpdk/.version)" != "$DPDK_RELEASE" ]; then
-    rm -rf dpdk # in case it already exists
+KLEE_RELEASE='master'
+KLEE_UCLIBC_RELEASE='klee_uclibc_v1.2'
+LLVM_RELEASE=8.0.0
+Z3_RELEASE='z3-4.5.0'
+OCAML_RELEASE='4.06.0'
 
-    wget -O dpdk.tar.xz "https://fast.dpdk.org/rel/dpdk-$DPDK_RELEASE.tar.xz"
-    tar xf dpdk.tar.xz
-    rm dpdk.tar.xz
-    mv "dpdk$DPDK_SUFFIX-$DPDK_RELEASE" dpdk
+# Stop script if we do not have root access
+check_sudo()
+{
+	echo 'Checking for sudo rights:'
+	if ! sudo -v;
+	then
+		echo 'sudo rights not obtained, or sudo not installed.' >&2;
+		exit 1;
+	fi
+}
 
-    echo 'export RTE_TARGET=x86_64-native-linuxapp-gcc' >> "$PATHSFILE"
-    echo "export RTE_SDK=$BUILDDIR/dpdk" >> "$PATHSFILE"
-    . "$PATHSFILE"
+# Detect the running operating system
+# stdout: 'windows', 'docker' or 'linux'
+detect_os()
+{
+	# Detect WSL
+	case $(uname -r) in
+		*Microsoft*)
+			echo 'windows'
+			return 0
+			;;
+	esac
 
-    pushd dpdk
-      # Apply the Vigor patches
-      for p in "$VNDSDIR/setup/"dpdk.*.patch; do
-        patch -p1 < "$p"
-      done
+	# Or docker ?
+	if grep docker /proc/1/cgroup -qa;
+	then
+		echo 'docker'
+		return 0
+	fi
 
-      make install -j$(nproc) T=x86_64-native-linuxapp-gcc DESTDIR=. MAKE_PAUSE=n
+	# Use generic "linux" tag for the rest.
+	# XXX: Support some more distributions ?
+	echo 'linux'
+	return 0
+}
 
-      echo "$DPDK_RELEASE" > .version
+# Install arguments using system's package manager.
+# XXX: Make the package manager depend on "$OS".
+# shellcheck disable=SC2086
+package_install()
+{
+	# Concatenate arguments into a list
+	old_ifs="$IFS"
+	IFS=' '
+	packages="$*"
+	IFS="$old_ifs"
+
+	sudo apt-get install -yqq $packages
+}
+
+# Update list of available packages.
+# XXX: Make the package manager depend on "$OS".
+package_sync()
+{
+	sudo apt-get update -qq
+}
+
+source_install_dpdk()
+{
+	cd "$BUILDDIR"
+
+	# Install kernel headers
+	case "$OS" in
+		'microsoft')
+			package_install "linux-headers-$KERNEL_VER-generic"
+
+			# Fix the kernel dir, since the WSL doesn't have an actual Linux kernel.
+			export RTE_KERNELDIR="/usr/src/linux-headers-$KERNEL_VER-generic/"
+			;;
+		'linux')
+			package_install linux-headers-generic
+			;;
+	esac
+
+	# Install other dependencies
+	package_install \
+		gperf \
+		libgoogle-perftools-dev \
+		libpcap-dev
+
+	# Ensure environment is correct.
+	line "$PATHSFILE" 'RTE_TARGET' 'x86_64-native-linuxapp-gcc'
+	line "$PATHSFILE" 'RTE_SDK' "$BUILDDIR/dpdk"
+
+	# shellcheck source=../paths.sh
+	. "$PATHSFILE"
+
+	# Get, Patch and Compile
+	if [ ! -f dpdk/.version ] || [ "$(cat dpdk/.version)" != "$DPDK_RELEASE" ]
+	then
+		# get sources
+		rm -rf dpdk
+		curl -s "https://fast.dpdk.org/rel/dpdk-$DPDK_RELEASE.tar.xz" | tar xJf -
+		mv "dpdk-$DPDK_RELEASE" dpdk
+
+		# patch
+		cd dpdk
+		for p in "$VNDSDIR"/setup/dpdk.*.patch;
+		do
+			patch -p 1 < "$p"
+		done
+
+		# Compile
+		make config T=x86_64-native-linuxapp-gcc
+		make install -j T=x86_64-native-linuxapp-gcc DESTDIR=.
+
+		echo "$DPDK_RELEASE" > .version
+	fi
+}
+
+clean_dpdk()
+{
+	cd "$BUILDDIR"
+	rm -rf dpdk
+}
+
+source_install_z3()
+{
+	cd "$BUILDDIR"
+	if [ -d 'z3/.git' ];
+	then
+		cd z3;
+		git fetch && git checkout "$Z3_RELEASE"
+	else
+		git clone --depth 1 --branch "$Z3_RELEASE" https://github.com/Z3Prover/z3 "$BUILDDIR/z3"
+		cd z3;
+	fi
+
+	if  [ ! -f "build/z3" ] || [ ! "z3-$(build/z3 --version | cut -f3 -d' ')" = "$Z3_RELEASE" ];	then
+		python scripts/mk_make.py -p "$BUILDDIR/z3/build"
+		cd build
+		make -kj || make
+		make install
+	fi
+}
+
+clean_z3()
+{
+	cd "$BUILDDIR"
+	rm -rf z3
+}
+
+source_install_llvm()
+{
+	package_install bison flex zlib1g-dev libncurses5-dev libpcap-dev
+	# Python2 needs to be available as python for some configure scripts, which is not the case in Ubuntu 20.04
+	if [ ! -e /usr/bin/python ] ; then
+  		sudo ln -s /usr/bin/python2.7 /usr/bin/python
+	fi
+
+	line_multi "$PATHSFILE" 'PATH' "$BUILDDIR/llvm/build/bin:\$PATH"
+	# shellcheck source=../paths.sh
+	. "$PATHSFILE"
+
+	cd "$BUILDDIR"
+
+	# TODO: Optimize. Currently we clone and build from scratch even if source is present but hasn't been built
+	if [ ! -f llvm/build/bin/clang-8 ] || [ ! -f llvm/build/bin/llvm-config ];
+	then
+		git clone --branch llvmorg-$LLVM_RELEASE --depth 1  \
+		https://github.com/llvm/llvm-project "$BUILDDIR/llvm-project"
+		mv "$BUILDDIR/llvm-project/llvm" "$BUILDDIR/llvm"
+		mv "$BUILDDIR/llvm-project/clang" "$BUILDDIR/llvm/tools/clang"
+		rm -rf "$BUILDDIR/llvm-project"
+		cd llvm
+	       	mkdir build
+		cd build
+		[ -f "Makefile" ] || \
+			CXXFLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" \
+			cmake ../
+		make -j30
+	fi
+}
+
+clean_llvm()
+{
+	cd "$BUILDDIR"
+	rm -rf llvm
+}
+
+source_install_klee_uclibc()
+{
+	cd "$BUILDDIR"
+	if [ -d 'klee-uclibc/.git' ];
+	then
+		cd klee-uclibc
+		git fetch && git checkout "$KLEE_UCLIBC_RELEASE"
+	else
+		git clone --depth 1 --branch "$KLEE_UCLIBC_RELEASE" https://github.com/klee/klee-uclibc.git "$BUILDDIR/klee-uclibc";
+		cd klee-uclibc
+	fi
+
+	./configure \
+		--make-llvm-lib \
+		--with-llvm-config="../llvm/build/bin/llvm-config" \
+		--with-cc="../llvm/build/bin/clang"
+
+	cp "$VNDSDIR/install/klee-uclibc.config" '.config'
+	make -kj
+}
+
+clean_klee_uclibc()
+{
+	cd "$BUILDDIR"
+	rm -rf klee-uclibc
+}
+
+source_install_klee()
+{
+	line "$PATHSFILE" 'KLEE_INCLUDE' "$BUILDDIR/klee/include"
+	line_multi "$PATHSFILE" 'PATH' "$BUILDDIR/klee/build/bin:\$PATH"
+	# shellcheck source=../paths.sh
+	. "$PATHSFILE"
+
+	cd "$BUILDDIR"
+	if [ -d 'klee/.git' ];
+	then
+		cd klee
+		git fetch && git checkout "$KLEE_RELEASE"
+	else
+		git clone --recurse-submodules https://github.com/bolt-perf-contracts/klee.git
+		cd klee
+		git checkout "$KLEE_RELEASE"
+	fi
+
+	./build.sh
+}
+
+clean_klee()
+{
+	cd "$BUILDDIR"
+	rm -rf klee
+}
+
+bin_install_ocaml() {
+	# we depend on an OCaml package that needs libgmp-dev
+	package_install opam m4 libgmp-dev
+
+	opam init -y
+	eval "$(opam config env)"
+	# Opam 1.x doesn't have "create", later versions require it but only the first time
+	if opam --version | grep '^1.' >/dev/null ; then
+		opam switch $OCAML_RELEASE
+	else
+		opam switch list
+		if ! opam switch list 2>&1 | grep -Fq 4.06 ; then
+			opam switch create $OCAML_RELEASE
+		fi
+	fi
+
+	line_multi "$PATHSFILE" 'PATH' "$HOME/.opam/system/bin:\$PATH"
+    # `|| :` at the end of the following command ensures that in the event the
+    # init.sh script fails, the shell will not exit. opam suggests we do this.
+	echo ". $HOME/.opam/opam-init/init.sh || :" >> "$PATHSFILE"
+	. "$PATHSFILE"
+
+	# Codegenerator dependencies.
+	opam install goblint-cil core -y
+	opam install ocamlfind num -y
+	opam install ocamlfind sexplib menhir -y
+}
+
+clean_ocaml() {
+	rm -rf $HOME/.opam
+}
+
+source_install_rs3() {
+  package_install libsctp-dev
+  if [ ! -e "$BUILDDIR/libr3s" ]; then
+    git clone --depth 1 https://github.com/fchamicapereira/libr3s.git "$BUILDDIR/libr3s"
+    pushd "$BUILDDIR/libr3s"
+      rm -rf build
+      mkdir build
+      pushd build
+        ../build.sh
+        echo "export R3S_DIR=$BUILDDIR/libr3s" >> "$PATHSFILE"
+        . "$PATHSFILE"
+      popd
     popd
   fi
-popd
+}
 
+clean_rs3() {
+  cd "$BUILDDIR"
+	rm -rf rs3
+}
 
+## Constants
+VNDSDIR="$(dirname "$(realpath "$0")")"
+BUILDDIR="$(realpath -e "$VNDSDIR"/..)"
+PATHSFILE="$BUILDDIR/paths.sh"
+KERNEL_VER=$(uname -r | sed 's/-Microsoft//')
+OS="$(detect_os)"
 
-# =====
-# OCaml
-# =====
+# Environment
+check_sudo
+package_sync
 
-# we depend on an OCaml package that needs libgmp-dev
-sudo DEBIAN_FRONTEND=noninteractive \
-     apt-get install -y opam m4 libgmp-dev
+# Common dependencies
+package_install \
+	build-essential \
+	curl \
+	git \
+	libgoogle-perftools-dev \
+	python2.7 \
+	python3 \
+	python3-pip \
+	parallel \
+	gcc-multilib \
+	graphviz \
+  libpcap-dev \
+	libnuma-dev \
+	cmake \
+  ca-certificates \
+  software-properties-common \
+  patch \
+  wget \
+  build-essential \
+  cloc
 
-opam init --disable-sandboxing -y
-eval "$(opam env)"
-# Opam 1.x doesn't have "create", later versions require it but only the first time
-if opam --version | grep '^1.' >/dev/null ; then
-  opam switch 4.06.0
-else
-  opam switch list
-  if ! opam switch list 2>&1 | grep -Fq 4.06 ; then
-    opam switch create 4.06.0
-  fi
-fi
+# Clean things
+clean_dpdk
+clean_pin
+clean_z3
+clean_llvm
+clean_klee_uclibc
+clean_klee
+clean_ocaml
+clean_rs3
 
-if ! grep -q opam "$PATHSFILE"; then
-  echo 'PATH='"$HOME/.opam/system/bin"':$PATH' >> "$PATHSFILE"
-  echo ". $HOME/.opam/opam-init/init.sh" >> "$PATHSFILE"
-  . "$PATHSFILE"
-fi
-
-# Codegenerator dependencies
-opam install goblint-cil core -y
-
-
-
-# ======
-# Python
-# ======
-
-sudo DEBIAN_FRONTEND=noninteractive \
-     apt-get install -y python3.6 python3-pip
-
-sudo DEBIAN_FRONTEND=noninteractive \
-     pip3 install numpy scapy
-
-
-
-# =========
-# FastClick
-# =========
-
-sudo DEBIAN_FRONTEND=noninteractive \
-     apt-get install -y libz-dev
-
-# We make two folders,
-# one configured with batching and the other without,
-# because it's a configure-time thing and rebuilding it takes a long time
-if [ ! -e "$BUILDDIR/fastclick" ]; then
-  git clone https://github.com/tbarbette/fastclick "$BUILDDIR/fastclick"
-  pushd "$BUILDDIR/fastclick"
-    git checkout e14b85d5ee801f92c762a11614802ee6af6b6316
-    cp elements/etherswitch/etherswitch.* elements/ethernet/. # more convenient
-  popd
-  cp -r "$BUILDDIR/fastclick" "$BUILDDIR/fastclick-batch"
-  for dir in "$BUILDDIR/fastclick" "$BUILDDIR/fastclick-batch"; do
-    pushd "$dir"
-      if [ "$dir" = "$BUILDDIR/fastclick" ]; then
-        CLICK_BATCH_PARAM=--disable-batch
-      else
-        CLICK_BATCH_PARAM=--enable-auto-batch
-      fi
-      # most likely some of those flags are redundant with the defaults, oh well
-      CFLAGS="-O3" CXXFLAGS="-std=gnu++11 -O3" \
-            ./configure --quiet --enable-multithread \
-                        --disable-linuxmodule --enable-intel-cpu \
-                        --enable-user-multithread \
-                        --disable-dynamic-linking --enable-poll \
-                        --enable-bound-port-transfer --enable-dpdk \
-                        --with-netmap=no --enable-zerocopy \
-                        --disable-dpdk-pool --disable-dpdk-packet \
-                        $CLICK_BATCH_PARAM
-      make -j$(nproc)
-    popd
-  done
-fi
-
-
-
-# =======
-# Libmoon
-# =======
-
-# the libmoon readme doesn't mention libtbb2, but libmoon fails without it
-sudo DEBIAN_FRONTEND=noninteractive \
-     apt-get install -y libtbb2 lshw cmake
-
-if [ ! -e "$BUILDDIR/libmoon" ]; then
-  git clone https://github.com/libmoon/libmoon "$BUILDDIR/libmoon"
-  pushd "$BUILDDIR/libmoon"
-    git checkout 0cb0843957a1aa8a3580096eee0f5d7246449c85
-    # Don't try to bind interfaces
-    sed -i '/bind.interfaces/d' build.sh
-    # Don't set --lcores, we set it ourselves
-    sed -i '/--lcores=/d' lua/dpdk.lua
-    ./build.sh
-  popd
-fi
-
-
-
-# ================
-# NFOS build tools
-# ================
-
-# Make sure grub doesn't ask stupid questions
-sudo DEBIAN_FRONTEND=noninteractive \
-     apt-get install -yq qemu-system-x86 build-essential wget bison flex \
-                         libgmp3-dev libmpc-dev libmpfr-dev texinfo \
-                         gnupg \
-                         xorriso nasm git grub-pc
-
-NFOS_TARGET=x86_64-elf
-BINUTILS_RELEASE="2.26.1"
-pushd "$BUILDDIR"
-  if [ ! -e binutils-build ]; then
-    wget -O gnu-keyring.gpg https://ftp.gnu.org/gnu/gnu-keyring.gpg
-    wget -O binutils.tar.gz \
-         "https://ftp.gnu.org/gnu/binutils/binutils-$BINUTILS_RELEASE.tar.gz"
-    wget -O binutils.tar.gz.sig \
-         "https://ftp.gnu.org/gnu/binutils/binutils-$BINUTILS_RELEASE.tar.gz.sig"
-
-    gpg --verify --keyring ./gnu-keyring.gpg binutils.tar.gz.sig binutils.tar.gz
-
-    tar xf binutils.tar.gz
-    mv "binutils-$BINUTILS_RELEASE" binutils
-    rm binutils.tar.gz binutils.tar.gz.sig
-
-    mkdir binutils-build
-    pushd binutils-build
-      ../binutils/configure --target=$NFOS_TARGET \
-                            --prefix="$BUILDDIR/binutils-build" --with-sysroot \
-                            --disable-nls --disable-werror
-      make -j$(nproc)
-      make -j$(nproc) install
-      echo 'PATH='"$BUILDDIR/binutils-build/bin"':$PATH' >> "$PATHSFILE"
-      . "$PATHSFILE"
-    popd
-  fi
-popd
+# Install things
+source_install_dpdk
+source_install_pin
+source_install_z3
+source_install_llvm
+source_install_klee_uclibc
+bin_install_ocaml
+source_install_klee
 
 GCC_RELEASE="5.4.0"
 pushd "$BUILDDIR"
@@ -324,37 +416,6 @@ if [ ! -e "$BUILDDIR/llvm" ]; then
   popd
 fi
 
-# micro libC for producing the NFOS standalone OS images
-
-if [ ! -e "$BUILDDIR/klee-uclibc-binary" ]; then
-  git clone --depth 1 --branch klee_uclibc_v1.2 \
-            https://github.com/klee/klee-uclibc.git "$BUILDDIR/klee-uclibc-binary"
-  pushd "$BUILDDIR/klee-uclibc-binary"
-    ./configure \
-       --make-native \
-       --with-llvm-config="../llvm/Release/bin/llvm-config" \
-       --with-cc="../llvm/Release/bin/clang"
-
-    # Use our minimalistic config
-    cp "$VNDSDIR/setup/klee-uclibc.config" '.config'
-
-    # Use our patches
-    for f in "$VNDSDIR/setup/uclibc/"* ; do
-      cat "$f" >> "libc/stdio/$(basename "$f")"
-    done
-
-    make clean
-    make -j$(nproc)
-  popd
-fi
-
-
-
-# ==============================================================================
-# End of compile/runtime dependencies
-if [ $# -eq 0 ] || [ "$1" != 'no-verify' ]; then
-
-
 
 # ==
 # Z3
@@ -390,37 +451,6 @@ if [ ! -e "$BUILDDIR/z3" ]; then
       echo "export Z3_DIR=$BUILDDIR/z3" >> "$PATHSFILE"
       . "$PATHSFILE"
     popd
-  popd
-fi
-
-
-
-# ========
-# VeriFast
-# ========
-
-# inspired from VeriFast's readme
-sudo apt-get install -y --no-install-recommends \
-                     ocaml-native-compilers camlp4 unzip libgtk2.0-dev \
-                     valac gtksourceview2.0-dev \
-                     liblablgtk2-ocaml-dev liblablgtksourceview2-ocaml-dev
-# Not mentioned by VeriFast's readme, required anyway
-opam install ocamlfind camlp4 -y
-
-# For some reason this was breaking our vagranfile provision.
-# We removed it, and couldn't see any visible repercussions.
-#           |
-#           V
-# VFIDE dependency
-#opam install lablgtk -y
-
-if [ ! -e "$BUILDDIR/verifast" ]; then
-  git clone --depth 1 https://github.com/vigor-nf/verifast "$BUILDDIR/verifast"
-  pushd "$BUILDDIR/verifast/src"
-    make verifast # should be just "make",
-                  # but the verifast checks fail due to a non auto lemma
-    echo 'PATH='"$BUILDDIR/verifast/bin"':$PATH' >> "$PATHSFILE"
-    . "$PATHSFILE"
   popd
 fi
 
@@ -460,94 +490,3 @@ if [ ! -e "$BUILDDIR/klee" ]; then
     . "$PATHSFILE"
   popd
 fi
-
-# ====
-# libR3S
-# ====
-
-sudo apt-get install -y libsctp-dev
-if [ ! -e "$BUILDDIR/libr3s" ]; then
-  git clone --depth 1 https://github.com/fchamicapereira/libr3s.git "$BUILDDIR/libr3s"
-  pushd "$BUILDDIR/libr3s"
-    rm -rf build
-    mkdir build
-    pushd build
-      ../build.sh
-      echo "export R3S_DIR=$BUILDDIR/libr3s" >> "$PATHSFILE"
-      . "$PATHSFILE"
-    popd
-  popd
-fi
-
-# ===============
-# Synapse runtime
-# ===============
-
-if [ ! -e "$BUILDDIR/synapse-runtime" ]; then
-  # protobuf dependencies
-  sudo apt-get install -y autoconf automake libtool curl make g++ unzip cmake
-
-  # protobuf
-  git clone --depth 1 --branch v18.3 https://github.com/protocolbuffers/protobuf.git --recursive "$BUILDDIR/protobuf"
-  pushd "$BUILDDIR/protobuf"
-    ./autogen.sh
-    ./configure
-    make
-    sudo make install
-    sudo ldconfig
-    
-    echo "export PROTOBUF_DIR=$BUILDDIR/protobuf" >> "$PATHSFILE"
-    . "$PATHSFILE"
-  popd
-
-  # gRPC C++
-  git clone https://github.com/grpc/grpc.git --recursive "$BUILDDIR/grpc"
-  pushd "$BUILDDIR/grpc"
-    mkdir -p cmake/build
-    pushd cmake/build
-      cmake ../.. -DgRPC_INSTALL=ON \
-                  -DCMAKE_BUILD_TYPE=Release \
-                  -DgRPC_PROTOBUF_PROVIDER=package \
-                  -DgRPC_ABSL_PROVIDER=module \
-                  -DBUILD_SHARED_LIBS=ON
-      make
-      sudo make install
-      sudo ldconfig
-      sudo cp -r ../../third_party/abseil-cpp/absl /usr/local/include # abominable
-
-      echo "export GRPC_DIR=$BUILDDIR/grpc" >> "$PATHSFILE"
-      . "$PATHSFILE"
-    popd
-  popd
-
-  git clone https://github.com/joaomtiago/synapse-runtime.git "$BUILDDIR/synapse-runtime"
-  pushd "$BUILDDIR/synapse-runtime"
-    mkdir -p build
-    pushd build
-      cmake ..
-      make
-      sudo make install
-
-      echo "export SYNAPSE_RUNTIME_DIR=$BUILDDIR/synapse-runtime" >> "$PATHSFILE"
-      . "$PATHSFILE"
-    popd
-  popd
-fi
-
-# =====
-# Vigor
-# =====
-
-sudo apt-get install -y time parallel bc
-
-# Validator dependencies
-opam install ocamlfind sexplib menhir -y
-
-
-
-# end of the if that checked for no-verif
-fi
-
-printf '\n\n!!!\nIf you ran this script rather than sourcing it,'
-printf ' you must source your profile now (e.g. `. ~/.profile`)'
-printf ' to get Vigor tools to work.\n!!!\n\n'

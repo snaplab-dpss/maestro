@@ -1,0 +1,320 @@
+# This Makefile expects to be included from the shared one
+
+# Skeleton Makefile for Vigor NFs
+# Variables that should be defined by inheriting Makefiles:
+# - NF_NO_BASE := <true to not include nf*.c files>
+# - NF_DEVICES := <number of devices during verif-time, default 2>
+# - NF_ARGS := <arguments to pass to the NF>
+# -----------------------------------------------------------------------
+
+
+# get current dir, see https://stackoverflow.com/a/8080530
+SELF_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+
+# needs to be defined, see shared Makefile
+NF_PROCESS_NAME := nf
+
+# Default value for arguments
+NF_DEVICES ?= 2
+
+# DPDK stuff
+include $(RTE_SDK)/mk/rte.vars.mk
+
+# Same name for everyone, makes it easier to run them all with the same script
+APP := nf
+# allow the use of advanced globs in paths
+SHELL := /bin/bash -O extglob -O globstar -c
+# NF base source;
+# somehow because of DPDK makefile magic wildcards mess up everything here,
+# so we ask echo to expand those
+ifneq (true,$(NF_NO_BASE))
+SRCS-y := $(shell echo $(SELF_DIR)/nf*.c)
+endif
+SRCS-y += $(shell echo $(SELF_DIR)/libvig/verified/*.c)
+SRCS-y += $(shell find $(SELF_DIR)/libvig/unverified -name "*.c" ! -name "*tm*" ! -name "*locks*" -printf "%p ")
+SRCS-y += $(NF_FILES)
+# Compiler flags
+CFLAGS += -I $(SELF_DIR)
+CFLAGS += -std=gnu11
+CFLAGS += -DCAPACITY_POW2
+CFLAGS += -O3
+# CFLAGS += -O0 -g -rdynamic -DENABLE_LOG -Wfatal-errors
+
+# GCC optimizes a checksum check in rte_ip.h into a CMOV, which is a very poor choice
+# that causes 99th percentile latency to go through the roof;
+# force it to not do that with no-if-conversion
+ifeq ($(CC),gcc)
+CFLAGS += -fno-if-conversion -fno-if-conversion2
+endif
+
+# It seems the DPDK makefiles really don't like being recursively invoked -
+# and benchmarking invokes make run;
+# so we just don't include the DPDK makefile if we're benchmarking
+ifeq (,$(findstring benchmark-,$(MAKECMDGOALS)))
+include $(RTE_SDK)/mk/rte.extapp.mk
+endif
+
+# =========================================
+# Verification general commands and targets
+# =========================================
+
+# Cleanup
+CLEAN_BUILD_ARTIFACTS_COMMAND := rm -rf *.bc *.os *.ll
+CLEAN_ALL_COMMAND := $(CLEAN_BUILD_ARTIFACTS_COMMAND) && rm -rf *.bdd *.gv
+# Compilation
+COMPILE_COMMAND := clang
+# Linking with klee-uclibc, but without some methods we are modeling
+# (not sure why they're in klee-uclibc.bca);
+# also purge the pointless GNU linker warnings
+# so KLEE doesn't warn about module asm
+LINK_COMMAND := llvm-ar x $(KLEE_BUILD_PATH)/Release+Debug+Asserts/lib/klee-uclibc.bca && \
+                rm -f sleep.os vfprintf.os socket.os fflush_unlocked.os fflush.os && \
+                llvm-link -o nf_raw.bc  *.os *.bc && \
+                llvm-dis -o nf_raw.ll nf_raw.bc && \
+                sed -i -e 's/module asm ".section .gnu.warning.*"//g' \
+                       -e 's/module asm "\\09.previous"//g' \
+                       -e 's/module asm ""//g' \
+                       nf_raw.ll && \
+                llvm-as -o nf_raw.bc nf_raw.ll
+# Optimization; analyze and remove as much provably dead code as possible
+# (exceptions are models;
+#  also, mem* functions, not sure why it DCEs them since they are used...
+#  and sscanf, which is accessed via its __isoc99_sscanf alias
+#  maybe related to LLVM having intrinsics for them?)
+# We tried adding '-constprop -ipconstprop -ipsccp -correlated-propagation
+#                  -loop-deletion -dce -die -dse -adce -deadargelim -instsimplify';
+# this works but the traced prefixes seem messed up :(
+OPT_EXCEPTIONS := sscanf,memset,memcpy,memmove,stub_abort,stub_free,stub_hardware_read,stub_hardware_write,stub_prefetch,stub_rdtsc,stub_socket,stub_strerror,stub_delay
+OPT_COMMAND := opt -basicaa -basiccg -internalize \
+                   -internalize-public-api-list=main,$(OPT_EXCEPTIONS) \
+                   -globaldce nf_raw.bc \
+                   > nf.bc
+# KLEE verification;
+# if something takes longer than expected,
+# try --max-solver-time=3 --debug-report-symbdex (to avoid symbolic indices)
+VERIF_COMMAND := /usr/bin/time -v \
+                 klee -no-externals -allocate-determ \
+                      -allocate-determ-start-address=0x00040000000 \
+                      -allocate-determ-size=1000 -dump-call-traces \
+                      -dump-call-trace-prefixes -solver-backend=z3 \
+                      -exit-on-error -max-memory=750000 -search=dfs \
+                      -condone-undeclared-havocs --debug-report-symbdex \
+                 nf.bc
+
+# Cleanup after ourselves, but don't shadow the existing DPDK target
+clean-vigor:
+	@$(CLEAN_ALL_COMMAND)
+clean: clean-vigor
+
+# Built-in DPDK default target,
+# make it clean every time because our dependency tracking is nonexistent...
+all: clean
+
+# =======================
+# Symbex with DPDK models
+# =======================
+
+# Basic flags: only compile, emit debug code, in LLVM format,
+#              with checks for overflows (but not unsigned overflows -
+#              they're not UB and DPDK depends on them)
+#              also no unused-value, DPDK triggers that...
+VERIF_FLAGS := -c -g -emit-llvm -fsanitize=signed-integer-overflow -Wno-unused-value
+# Basic includes: NF root, KLEE
+VERIF_INCLUDES := -I $(SELF_DIR) -I $(KLEE_INCLUDE)
+# Basic defines
+VERIF_DEFS := -D_GNU_SOURCE -DKLEE_VERIFICATION
+# Silly workaround for numaif.h changing between Ubuntu 18.04 and 20.04
+ifneq (,$(shell grep -A 1 get_mempolicy /usr/include/numaif.h | grep 'unsigned flags'))
+VERIF_DEFS += -DNUMA_GET_MEMPOLICY_UNSIGNED_FLAGS
+endif
+# Number of devices
+VERIF_DEFS += -DSTUB_DEVICES_COUNT=$(NF_DEVICES)
+# NF base
+VERIF_FILES := $(SELF_DIR)/nf*.c
+# Specific NF
+VERIF_FILES += $(NF_FILES) *loop.c
+# Models
+VERIF_FILES += $(SELF_DIR)/libvig/models/verified/*.c \
+               $(SELF_DIR)/libvig/models/unverified/*.c \
+               $(SELF_DIR)/libvig/models/externals/*.c
+
+# The only thing we don't put in variables is the DPDK model headers,
+# since we don't want to use those for the other symbex targets
+symbex: clean
+	@$(COMPILE_COMMAND) $(VERIF_DEFS) $(VERIF_INCLUDES) \
+	                    -I $(SELF_DIR)/libvig/models/dpdk \
+	                    $(VERIF_FILES) $(VERIF_FLAGS)
+	@$(LINK_COMMAND)
+	@$(OPT_COMMAND)
+	@$(VERIF_COMMAND) $(NF_ARGS)
+	@$(CLEAN_BUILD_ARTIFACTS_COMMAND)
+
+
+
+# ==================================
+# Symbex with hardware and OS models
+# ==================================
+
+# CPUFLAGS is set to a sentinel value;
+# usually it's passed from the DPDK build system
+VERIF_WITHDPDK_DEFS := -DRTE_COMPILE_TIME_CPUFLAGS=424242
+# Let hardware models know we want them
+VERIF_WITHDPDK_DEFS += -DVIGOR_MODEL_HARDWARE
+# Disable deprecation warnings
+VERIF_WITHDPDK_DEFS += -DALLOW_EXPERIMENTAL_API
+# Disable internal warnings
+VERIF_WITHDPDK_DEFS += -DALLOW_INTERNAL_API
+# Enable function versioning
+VERIF_WITHDPDK_DEFS += -DRTE_USE_FUNCTION_VERSIONING
+# We need librte_eal/common because eal_private.h is in there,
+# required by eal_thread.c...
+# We need bus/pci because the linuxapp PCI stuff requires a private.h file in there...
+# net/ixgbe is for model hardware (the ixgbe driver)
+VERIF_WITHDPDK_INCLUDES := -I $(RTE_SDK)/$(RTE_TARGET)/include \
+			   -I $(RTE_SDK)/lib/librte_eal/common \
+			   -I $(RTE_SDK)/drivers/bus/pci \
+			   -I $(RTE_SDK)/drivers/net/ixgbe
+ifdef TINYNF_DIR
+# TinyNF includes
+VERIF_WITHDPDK_INCLUDES += -I $(TINYNF_DIR)/code
+# TinyNF files
+VERIF_WITHDPDK_FILES += $(TINYNF_DIR)/code/net/82599/ixgbe.c
+# TinyNF DPDK shim file with variables
+VERIF_WITHDPDK_FILES += $(RTE_SDK)/tn_dpdk.c
+# TinyNF environment models
+VERIF_WITHDPDK_FILES += $(SELF_DIR)/libvig/models/tinynf-env/*.c
+# Hardware models
+VERIF_WITHDPDK_FILES += $(SELF_DIR)/libvig/models/hardware.c
+# TinyNF defs
+VERIF_WITHDPDK_DEFS += -DVIGOR_SYMBEX
+ifeq ($(NF_DEVICES),2)
+VERIF_WITHDPDK_DEFS += -DASSUME_ONE_WAY
+endif
+# Fake PCI devices
+NF_ARGS := $(shell for i in $$(seq 1 $(NF_DEVICES)); do printf '00:00.%d ' $$(echo "$$i-1" | bc); done) $(NF_ARGS)
+else
+# Some special DPDK includes: builtin models for built-ins DPDK uses,
+# rte_config.h because many files forget to include it
+VERIF_WITHDPDK_INCLUDES += --include=libvig/models/builtin.h \
+                           --include=rte_config.h
+# Platform-independent and Linux-specific EAL
+DPDK_FILES += $(RTE_SDK)/lib/librte_eal/common/*.c \
+              $(RTE_SDK)/lib/librte_eal/linux/*.c \
+              $(RTE_SDK)/lib/librte_eal/unix/*.c
+
+# Default ring mempool driver
+DPDK_FILES += $(RTE_SDK)/drivers/mempool/ring/rte_mempool_ring.c
+# Other libraries, except acl and distributor
+# which use CPU intrinsics (there is a generic version of distributor,
+#                           but we don't need it)
+# power has been broken for a while:
+# http://dpdk.org/ml/archives/dev/2016-February/033152.html
+# metrics and bpf use non-standard libraries
+DPDK_FILES += $(RTE_SDK)/lib/!(librte_acl|librte_distributor|librte_power|librte_bpf|librte_metrics)/*.c
+# PCI driver support (for ixgbe driver)
+DPDK_FILES += $(RTE_SDK)/drivers/bus/pci/*.c $(RTE_SDK)/drivers/bus/pci/linux/*.c
+# ixgbe driver
+IXGBE_FILES := $(RTE_SDK)/drivers/net/ixgbe/ixgbe_{fdir,flow,ethdev,ipsec,pf,rxtx,tm,rxtx_vec_sse}.c \
+               $(RTE_SDK)/drivers/net/ixgbe/base/ixgbe_{api,common,phy,82599}.c
+# DPDK, ixgbe, hardware models
+VERIF_WITHDPDK_FILES := $(DPDK_FILES) $(IXGBE_FILES) \
+                        $(SELF_DIR)/libvig/models/hardware.c
+# Low-level models for specific functions
+VERIF_WITHDPDK_FILES += $(SELF_DIR)/libvig/models/dpdk-low-level.c
+endif
+
+symbex-withdpdk: clean
+	@$(COMPILE_COMMAND) $(VERIF_DEFS) $(VERIF_WITHDPDK_DEFS) $(VERIF_INCLUDES) \
+	                    $(VERIF_WITHDPDK_INCLUDES) $(VERIF_FILES) \
+	                    $(VERIF_WITHDPDK_FILES) $(VERIF_FLAGS)
+	@$(LINK_COMMAND)
+	@$(OPT_COMMAND)
+	@$(VERIF_COMMAND) $(NF_ARGS)
+	@$(CLEAN_BUILD_ARTIFACTS_COMMAND)
+
+# ==========
+# Validation
+# ==========
+
+validate:
+	@cd $(SELF_DIR)/validator && make $(notdir $(shell pwd))
+
+# =======
+# Running
+# =======
+
+run: all
+	@sudo ./build/app/nf $(NF_ARGS) || true
+
+
+
+# ======================
+# Counting lines of code
+# ======================
+
+# cloc instead of sloccount because the latter does not report comments,
+# and all VeriFast annotations are comments
+
+count-loc:
+	@cloc -q $(NF_FILES) $(subst .c,.h,$(NF_FILES)) \
+                 $(SELF_DIR)/nf*.{c,h} 2>/dev/null
+
+count-spec-loc:
+	@cloc -q spec.py
+
+count-libvig-loc:
+	@# Bit of a hack for this one,
+	@# cloc can\'t be given a custom language but for some reason
+	@# it knows about Pig Latin, which is never gonna happen in our codebase, so...
+	@cloc --quiet --force-lang 'Pig Latin',gh \
+	      $(SELF_DIR)/libvig/verified/* $(SELF_DIR)/libvig/proof/* | \
+	 sed 's/Pig Latin/VeriFast /g'
+	@echo "NOTE: Annotations == VeriFast code + C comments - \
+	       $$(grep '//[^@]' $(SELF_DIR)/libvig/verified/*.{c,h} | wc -l) \
+	       (that last number is the non-VeriFast C comments)"
+	@if grep -F '/*' $(SELF_DIR)/libvig/verified/* $(SELF_DIR)/libvig/proof/* | grep -vF '/*@'; then \
+           echo 'ERROR: There are multiline non-VeriFast comments in the C code, \
+	         the total above is wrong!'; \
+	 fi
+
+count-dpdk-loc:
+	@cloc -q $(DPDK_FILES) $(subst .c,.h,$(DPDK_FILES)) 2>/dev/null
+
+count-ixgbe-loc:
+	@cloc -q $(IXGBE_FILES) $(subst .c,.h,$(IXGBE_FILES)) 2>/dev/null
+
+# This is a horrible hack - we get the files included in the build process by...
+# running make -n
+count-uclibc-loc:
+	@cd $(VIGOR_DIR)/klee-uclibc; \
+	 make clean >> /dev/null 2>&1; \
+	 cloc $$(for f in $$(make -n | grep --null -oh '[_a-zA-Z0-9][_a-zA-Z0-9]*\.[ch]'); \
+	                     do find . -name $$f; done); \
+	 make -j >> /dev/null 2>&1
+
+
+# =============
+# Create new NF
+# =============
+
+new-nf:
+	@read -p 'NF short name, e.g. "nat": ' name; \
+	 mkdir vig$${name}; \
+	 cp template/* vig$${name}/.; \
+	 echo "Go to the vig$${name} folder, and check out the comments in each file."
+
+# ====================================
+# BDD creation
+# ====================================
+
+bdd: symbex
+	$(KLEE_BUILD_PATH)/bin/call-paths-to-bdd \
+		-out nf.bdd \
+		-gv nf.gv \
+		klee-last/*.call_path
+
+%.i: %.c
+	@mkdir -p build/app
+	gcc -E $(filter-out -O3 -c,$(CFLAGS)) $^ -o build/app/$@
+
+pre-processor: all $(NF_FILES:.c=.i)
