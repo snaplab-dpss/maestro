@@ -222,6 +222,27 @@ source_install_klee_uclibc()
 	make -kj
 }
 
+if [ ! -e "$BUILDDIR/klee-uclibc" ]; then
+  git clone --depth 1 --branch klee_uclibc_v1.2 \
+            https://github.com/klee/klee-uclibc.git "$BUILDDIR/klee-uclibc"
+  pushd "$BUILDDIR/klee-uclibc"
+    ./configure \
+     --make-llvm-lib \
+     --with-llvm-config="../llvm/Release/bin/llvm-config" \
+     --with-cc="../llvm/Release/bin/clang"
+
+    # Use our minimalistic config
+    cp "$VNDSDIR/setup/klee-uclibc.config" '.config'
+
+    # Use our patches
+    for f in "$VNDSDIR/setup/uclibc/"* ; do
+      cat "$f" >> "libc/stdio/$(basename "$f")"
+    done
+
+    make -j$(nproc)
+  popd
+fi
+
 clean_klee_uclibc()
 {
 	cd "$BUILDDIR"
@@ -360,36 +381,6 @@ source_install_klee_uclibc
 bin_install_ocaml
 source_install_klee
 
-GCC_RELEASE="5.4.0"
-pushd "$BUILDDIR"
-  if [ ! -e gcc-build ]; then
-    wget -O gnu-keyring.gpg https://ftp.gnu.org/gnu/gnu-keyring.gpg
-    wget -O gcc.tar.gz \
-         "https://ftp.gnu.org/gnu/gcc/gcc-5.4.0/gcc-$GCC_RELEASE.tar.gz"
-    wget -O gcc.tar.gz.sig \
-         "https://ftp.gnu.org/gnu/gcc/gcc-5.4.0/gcc-$GCC_RELEASE.tar.gz.sig"
-
-    gpg --verify --keyring ./gnu-keyring.gpg gcc.tar.gz.sig gcc.tar.gz
-
-    tar xf gcc.tar.gz
-    mv "gcc-$GCC_RELEASE" gcc
-    rm gcc.tar.gz gcc.tar.gz.sig
-
-    mkdir gcc-build
-    pushd gcc-build
-      ../gcc/configure --target=$NFOS_TARGET --prefix="$BUILDDIR/gcc-build" \
-                       --disable-nls --enable-languages=c --without-headers
-      make -j$(nproc) all-gcc
-      make -j$(nproc) all-target-libgcc
-      make -j$(nproc) install-gcc
-      make -j$(nproc) install-target-libgcc
-      make clean
-      echo 'PATH='"$BUILDDIR/gcc-build/bin"':$PATH' >> "$PATHSFILE"
-      . "$PATHSFILE"
-    popd
-  fi
-popd
-
 # LLVM required to build klee-uclibc
 # (including the libc necessary to build NFOS)
 sudo apt-get install -y bison flex zlib1g-dev libncurses5-dev \
@@ -457,27 +448,6 @@ fi
 # ====
 # KLEE
 # ====
-
-if [ ! -e "$BUILDDIR/klee-uclibc" ]; then
-  git clone --depth 1 --branch klee_uclibc_v1.2 \
-            https://github.com/klee/klee-uclibc.git "$BUILDDIR/klee-uclibc"
-  pushd "$BUILDDIR/klee-uclibc"
-    ./configure \
-     --make-llvm-lib \
-     --with-llvm-config="../llvm/Release/bin/llvm-config" \
-     --with-cc="../llvm/Release/bin/clang"
-
-    # Use our minimalistic config
-    cp "$VNDSDIR/setup/klee-uclibc.config" '.config'
-
-    # Use our patches
-    for f in "$VNDSDIR/setup/uclibc/"* ; do
-      cat "$f" >> "libc/stdio/$(basename "$f")"
-    done
-
-    make -j$(nproc)
-  popd
-fi
 
 if [ ! -e "$BUILDDIR/klee" ]; then
   git clone --depth 1 https://github.com/fchamicapereira/vigor-klee.git "$BUILDDIR/klee"
