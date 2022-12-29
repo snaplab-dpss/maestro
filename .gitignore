@@ -43,3 +43,4 @@ Makefile.nf
 *.tsv
 *.gv
 *.bdd
+build
