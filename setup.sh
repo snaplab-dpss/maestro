@@ -17,21 +17,21 @@ if [ -z ${PROMPT_COMMAND+x} ]; then
 fi
 
 DPDK_RELEASE='20.08'
-KLEE_RELEASE='master'
 KLEE_UCLIBC_RELEASE='klee_uclibc_v1.2'
 LLVM_RELEASE=8.0.0
 Z3_RELEASE='z3-4.5.0'
 OCAML_RELEASE='4.06.0'
 
 # Stop script if we do not have root access
-check_sudo() {
+check_sudo()
+{
 	echo 'Checking for sudo rights...'
 	if ! sudo -v;
 	then
 		echo 'sudo rights not obtained, or sudo not installed.' >&2;
 		exit 1;
 	fi
-	echo 'Done.'
+	echo "Done."
 }
 
 # Detect the running operating system
@@ -117,13 +117,46 @@ package_sync() {
 }
 
 ## Constants
+SCRIPT_DIR=$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)
 BUILD_DIR="$SCRIPT_DIR/build"
 PATHSFILE="$BUILD_DIR/paths.sh"
 KERNEL_VER=$(uname -r | sed 's/-Microsoft//')
 OS="$(detect_os)"
 
+setup_build_environment() {
+	mkdir -p "$BUILD_DIR"
+	rm -f "$PATHSFILE" || true
+	touch "$PATHSFILE"
+}
+
+# Checks if a variable is set in a file. If it is not in the file, add it with
+# given value, otherwise change the value to match the current one.
+# $1 : the name of the variable
+# $2 : the value to set
+add_var_to_paths_file()
+{
+	if grep "^export $1" "$PATHSFILE" >/dev/null;
+	then
+		# Using sed directly to change the value would be dangerous as
+		# we would need to correctly escape the value, which is hard.
+		sed -i "/^export $1/d" "$PATHSFILE"
+	fi
+	echo "export ${1}=${2}" >> "$PATHSFILE"
+}
+
+# Same as line, but without the unicity checks.
+# $1 : the name of the variable
+# $2 : the value to set
+add_multiline_var_to_paths_file()
+{
+	if ! grep "^export ${1}=${2}" "$PATHSFILE" >/dev/null;
+	then
+		echo "export ${1}=${2}" >> "$PATHSFILE"
+	fi
+}
+
 source_install_dpdk() {
-	echo "Installing dpdk..."
+	echo "Installing DPDK..."
 	cd "$BUILD_DIR"
 
 	# Install kernel headers
@@ -168,12 +201,11 @@ source_install_dpdk() {
 		done
 
 		# Compile
-		make config T=x86_64-native-linuxapp-gcc MAKE_PAUSE=n 
+		make config T=x86_64-native-linuxapp-gcc MAKE_PAUSE=n
 		make install -j T=x86_64-native-linuxapp-gcc MAKE_PAUSE=n DESTDIR=.
 
 		echo "$DPDK_RELEASE" > .version
 	fi
-
 	echo "Done."
 }
 
@@ -183,7 +215,7 @@ clean_dpdk() {
 }
 
 source_install_z3() {
-	echo "Installing z3..."
+	echo "Installing Z3..."
 	cd "$BUILD_DIR"
 	if [ -d 'z3/.git' ];
 	then
@@ -195,11 +227,13 @@ source_install_z3() {
 	fi
 
 	if  [ ! -f "build/z3" ] || [ ! "z3-$(build/z3 --version | cut -f3 -d' ')" = "$Z3_RELEASE" ];	then
-		python scripts/mk_make.py -p "$BUILD_DIR/z3/build"
+		python3 scripts/mk_make.py -p "$BUILD_DIR/z3/build"
 		cd build
 		make -kj || make
 		make install
 	fi
+
+	add_var_to_paths_file 'Z3_DIR' "$BUILD_DIR/z3"
 	echo "Done."
 }
 
@@ -216,7 +250,7 @@ source_install_llvm() {
   		sudo ln -s /usr/bin/python2.7 /usr/bin/python
 	fi
 
-	add_var_to_paths_file_multiline 'PATH' "$BUILD_DIR/llvm/build/bin:\$PATH"
+	add_multiline_var_to_paths_file 'PATH' "$BUILD_DIR/llvm/build/bin:\$PATH"
 	# shellcheck source=../paths.sh
 	. "$PATHSFILE"
 
@@ -248,25 +282,19 @@ clean_llvm() {
 
 source_install_klee_uclibc() {
 	echo "Installing KLEE uclibc..."
-	git clone --depth 1 --branch klee_uclibc_v1.2 \
-            https://github.com/klee/klee-uclibc.git "$BUILD_DIR/klee-uclibc"
+	cd "$BUILD_DIR"
+
+	git clone --depth 1 --branch "$KLEE_UCLIBC_RELEASE" https://github.com/klee/klee-uclibc.git "$BUILD_DIR/klee-uclibc";
+	cd klee-uclibc
 
 	pushd "$BUILD_DIR/klee-uclibc"
 		./configure \
 		--make-llvm-lib \
 		--with-llvm-config="$BUILD_DIR/llvm/build/bin/llvm-config" \
-		--with-cc="$BUILD_DIR/llvm/build/bin/clang-8"
+		--with-cc="$BUILD_DIR/llvm/build/bin/clang"
 
-		# Use our minimalistic config
-		cp "$SCRIPT_DIR/setup/klee-uclibc.config" '.config'
-
-		# Use our patches
-		for f in "$SCRIPT_DIR/setup/uclibc/"* ; do
-			cat "$f" >> "libc/stdio/$(basename "$f")"
-		done
-
-		make -j$(nproc)
-	popd
+	cp "$SCRIPT_DIR/setup/klee-uclibc.config" '.config'
+	make -kj
 	echo "Done."
 }
 
@@ -276,27 +304,29 @@ clean_klee_uclibc() {
 }
 
 source_install_klee() {
+	echo "Installing KLEE..."
 	add_var_to_paths_file 'KLEE_INCLUDE' "$BUILD_DIR/klee/include"
-	add_var_to_paths_file_multiline 'PATH' "$BUILD_DIR/klee/build/bin:\$PATH"
+	add_multiline_var_to_paths_file 'PATH' "$BUILD_DIR/klee/build/bin:\$PATH"
 	# shellcheck source=../paths.sh
 	. "$PATHSFILE"
 
 	cd "$BUILD_DIR"
-	git clone --depth 1 https://github.com/fchamicapereira/maestro-klee.git
+	git clone --recurse-submodules https://github.com/fchamicapereira/maestro-klee.git klee
+	cd klee
 
 	mv maestro-klee klee
 	cd klee
 	./build.sh
+	echo "Done."
 }
 
 clean_klee() {
 	cd "$BUILD_DIR"
-	rm -rf klee || true
-	rm -rf maestro-klee || true
+	rm -rf klee
 }
 
 bin_install_ocaml() {
-	echo "Installing ocaml..."
+	echo "Installing OCaml..."
 	# we depend on an OCaml package that needs libgmp-dev
 	package_install opam m4 libgmp-dev
 
@@ -312,7 +342,7 @@ bin_install_ocaml() {
 		fi
 	fi
 
-	add_var_to_paths_file_multiline 'PATH' "$HOME/.opam/system/bin:\$PATH"
+	add_multiline_var_to_paths_file 'PATH' "$HOME/.opam/system/bin:\$PATH"
     # `|| :` at the end of the following command ensures that in the event the
     # init.sh script fails, the shell will not exit. opam suggests we do this.
 	echo ". $HOME/.opam/opam-init/init.sh || :" >> "$PATHSFILE"
@@ -348,13 +378,14 @@ source_install_rs3() {
 }
 
 clean_rs3() {
-  cd "$BUILD_DIR"
+	cd "$BUILD_DIR"
 	rm -rf rs3
 }
 
 # Environment
 check_sudo
 package_sync
+setup_build_environment
 
 # Common dependencies
 package_install \
@@ -362,6 +393,7 @@ package_install \
 	curl \
 	wget \
 	git \
+	wget \
 	libgoogle-perftools-dev \
 	python2.7 \
 	python3 \
@@ -377,7 +409,7 @@ package_install \
 	patch \
 	cloc
 
-# Setup build structure and path files
+# Build setup environment
 installation_setup
 
 # Clean things
@@ -394,5 +426,6 @@ source_install_dpdk
 source_install_z3
 source_install_llvm
 source_install_klee_uclibc
-bin_install_ocaml
 source_install_klee
+bin_install_ocaml
+source_install_rs3
