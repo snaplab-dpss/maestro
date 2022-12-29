@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euox pipefail
+set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 
@@ -23,11 +23,9 @@ Z3_RELEASE='z3-4.5.0'
 OCAML_RELEASE='4.06.0'
 
 # Stop script if we do not have root access
-check_sudo()
-{
+check_sudo() {
 	echo 'Checking for sudo rights...'
-	if ! sudo -v;
-	then
+	if ! sudo -v; then
 		echo 'sudo rights not obtained, or sudo not installed.' >&2;
 		exit 1;
 	fi
@@ -312,9 +310,7 @@ source_install_klee() {
 
 	cd "$BUILD_DIR"
 	git clone --recurse-submodules https://github.com/fchamicapereira/maestro-klee.git klee
-	cd klee
 
-	mv maestro-klee klee
 	cd klee
 	./build.sh
 	echo "Done."
