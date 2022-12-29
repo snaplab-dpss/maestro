@@ -1,6 +1,8 @@
 #!/bin/bash
 
-set -euo pipefail
+set -euox pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 
 # Note that opam needs bash, not just sh
 # Also it uses undefined variables so let's set them now otherwise it'll fail due to strict mode
@@ -22,20 +24,19 @@ Z3_RELEASE='z3-4.5.0'
 OCAML_RELEASE='4.06.0'
 
 # Stop script if we do not have root access
-check_sudo()
-{
-	echo 'Checking for sudo rights:'
+check_sudo() {
+	echo 'Checking for sudo rights...'
 	if ! sudo -v;
 	then
 		echo 'sudo rights not obtained, or sudo not installed.' >&2;
 		exit 1;
 	fi
+	echo 'Done.'
 }
 
 # Detect the running operating system
 # stdout: 'windows', 'docker' or 'linux'
-detect_os()
-{
+detect_os() {
 	# Detect WSL
 	case $(uname -r) in
 		*Microsoft*)
@@ -57,11 +58,49 @@ detect_os()
 	return 0
 }
 
+# Checks if a variable is set in a file. If it is not in the file, add it with
+# given value, otherwise change the value to match the current one.
+# $1 : the name of the variable
+# $2 : the value to set
+add_var_to_paths_file() {
+	if grep "^export $1" "$PATHSFILE" >/dev/null;
+	then
+		# Using sed directly to change the value would be dangerous as
+		# we would need to correctly escape the value, which is hard.
+		sed -i "/^export $1/d" "$PATHSFILE"
+	fi
+	echo "export ${1}=${2}" >> "$PATHSFILE"
+}
+
+# Same as line, but without the unicity checks.
+# $1 : the name of the file
+# $2 : the name of the variable
+# $3 : the value to set
+add_var_to_paths_file_multiline() {
+	if ! grep "^export ${1}=${2}" "$PATHSFILE" >/dev/null;
+	then
+		echo "export ${1}=${2}" >> "$PATHSFILE"
+	fi
+}
+
+create_paths_file() {
+	rm -f $PATHSFILE > /dev/null 2>&1 || true
+	touch $PATHSFILE
+}
+
+create_build_dir() {
+	mkdir -p $BUILD_DIR
+}
+
+installation_setup() {
+	create_build_dir
+	create_paths_file
+}
+
 # Install arguments using system's package manager.
 # XXX: Make the package manager depend on "$OS".
 # shellcheck disable=SC2086
-package_install()
-{
+package_install() {
 	# Concatenate arguments into a list
 	old_ifs="$IFS"
 	IFS=' '
@@ -73,14 +112,19 @@ package_install()
 
 # Update list of available packages.
 # XXX: Make the package manager depend on "$OS".
-package_sync()
-{
+package_sync() {
 	sudo apt-get update -qq
 }
 
-source_install_dpdk()
-{
-	cd "$BUILDDIR"
+## Constants
+BUILD_DIR="$SCRIPT_DIR/build"
+PATHSFILE="$BUILD_DIR/paths.sh"
+KERNEL_VER=$(uname -r | sed 's/-Microsoft//')
+OS="$(detect_os)"
+
+source_install_dpdk() {
+	echo "Installing dpdk..."
+	cd "$BUILD_DIR"
 
 	# Install kernel headers
 	case "$OS" in
@@ -102,8 +146,8 @@ source_install_dpdk()
 		libpcap-dev
 
 	# Ensure environment is correct.
-	line "$PATHSFILE" 'RTE_TARGET' 'x86_64-native-linuxapp-gcc'
-	line "$PATHSFILE" 'RTE_SDK' "$BUILDDIR/dpdk"
+	add_var_to_paths_file 'RTE_TARGET' 'x86_64-native-linuxapp-gcc'
+	add_var_to_paths_file 'RTE_SDK' "$BUILD_DIR/dpdk"
 
 	# shellcheck source=../paths.sh
 	. "$PATHSFILE"
@@ -118,165 +162,141 @@ source_install_dpdk()
 
 		# patch
 		cd dpdk
-		for p in "$VNDSDIR"/setup/dpdk.*.patch;
+		for p in "$SCRIPT_DIR"/setup/dpdk.*.patch;
 		do
 			patch -p 1 < "$p"
 		done
 
 		# Compile
-		make config T=x86_64-native-linuxapp-gcc
-		make install -j T=x86_64-native-linuxapp-gcc DESTDIR=.
+		make config T=x86_64-native-linuxapp-gcc MAKE_PAUSE=n 
+		make install -j T=x86_64-native-linuxapp-gcc MAKE_PAUSE=n DESTDIR=.
 
 		echo "$DPDK_RELEASE" > .version
 	fi
+
+	echo "Done."
 }
 
-clean_dpdk()
-{
-	cd "$BUILDDIR"
+clean_dpdk() {
+	cd "$BUILD_DIR"
 	rm -rf dpdk
 }
 
-source_install_z3()
-{
-	cd "$BUILDDIR"
+source_install_z3() {
+	echo "Installing z3..."
+	cd "$BUILD_DIR"
 	if [ -d 'z3/.git' ];
 	then
 		cd z3;
 		git fetch && git checkout "$Z3_RELEASE"
 	else
-		git clone --depth 1 --branch "$Z3_RELEASE" https://github.com/Z3Prover/z3 "$BUILDDIR/z3"
+		git clone --depth 1 --branch "$Z3_RELEASE" https://github.com/Z3Prover/z3 "$BUILD_DIR/z3"
 		cd z3;
 	fi
 
 	if  [ ! -f "build/z3" ] || [ ! "z3-$(build/z3 --version | cut -f3 -d' ')" = "$Z3_RELEASE" ];	then
-		python scripts/mk_make.py -p "$BUILDDIR/z3/build"
+		python scripts/mk_make.py -p "$BUILD_DIR/z3/build"
 		cd build
 		make -kj || make
 		make install
 	fi
+	echo "Done."
 }
 
-clean_z3()
-{
-	cd "$BUILDDIR"
+clean_z3() {
+	cd "$BUILD_DIR"
 	rm -rf z3
 }
 
-source_install_llvm()
-{
+source_install_llvm() {
+	echo "Installing LLVM..."
 	package_install bison flex zlib1g-dev libncurses5-dev libpcap-dev
 	# Python2 needs to be available as python for some configure scripts, which is not the case in Ubuntu 20.04
 	if [ ! -e /usr/bin/python ] ; then
   		sudo ln -s /usr/bin/python2.7 /usr/bin/python
 	fi
 
-	line_multi "$PATHSFILE" 'PATH' "$BUILDDIR/llvm/build/bin:\$PATH"
+	add_var_to_paths_file_multiline 'PATH' "$BUILD_DIR/llvm/build/bin:\$PATH"
 	# shellcheck source=../paths.sh
 	. "$PATHSFILE"
 
-	cd "$BUILDDIR"
+	cd "$BUILD_DIR"
 
 	# TODO: Optimize. Currently we clone and build from scratch even if source is present but hasn't been built
 	if [ ! -f llvm/build/bin/clang-8 ] || [ ! -f llvm/build/bin/llvm-config ];
 	then
 		git clone --branch llvmorg-$LLVM_RELEASE --depth 1  \
-		https://github.com/llvm/llvm-project "$BUILDDIR/llvm-project"
-		mv "$BUILDDIR/llvm-project/llvm" "$BUILDDIR/llvm"
-		mv "$BUILDDIR/llvm-project/clang" "$BUILDDIR/llvm/tools/clang"
-		rm -rf "$BUILDDIR/llvm-project"
+			https://github.com/llvm/llvm-project "$BUILD_DIR/llvm-project"
+		mv "$BUILD_DIR/llvm-project/llvm" "$BUILD_DIR/llvm"
+		mv "$BUILD_DIR/llvm-project/clang" "$BUILD_DIR/llvm/tools/clang"
+		rm -rf "$BUILD_DIR/llvm-project"
 		cd llvm
-	       	mkdir build
+		mkdir build
 		cd build
 		[ -f "Makefile" ] || \
 			CXXFLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" \
-			cmake ../
-		make -j30
+			cmake -DLLVM_PARALLEL_LINK_JOBS=1 ../
+		make -j4
 	fi
+	echo "Done."
 }
 
-clean_llvm()
-{
-	cd "$BUILDDIR"
+clean_llvm() {
+	cd "$BUILD_DIR"
 	rm -rf llvm
 }
 
-source_install_klee_uclibc()
-{
-	cd "$BUILDDIR"
-	if [ -d 'klee-uclibc/.git' ];
-	then
-		cd klee-uclibc
-		git fetch && git checkout "$KLEE_UCLIBC_RELEASE"
-	else
-		git clone --depth 1 --branch "$KLEE_UCLIBC_RELEASE" https://github.com/klee/klee-uclibc.git "$BUILDDIR/klee-uclibc";
-		cd klee-uclibc
-	fi
+source_install_klee_uclibc() {
+	echo "Installing KLEE uclibc..."
+	git clone --depth 1 --branch klee_uclibc_v1.2 \
+            https://github.com/klee/klee-uclibc.git "$BUILD_DIR/klee-uclibc"
 
-	./configure \
+	pushd "$BUILD_DIR/klee-uclibc"
+		./configure \
 		--make-llvm-lib \
-		--with-llvm-config="../llvm/build/bin/llvm-config" \
-		--with-cc="../llvm/build/bin/clang"
+		--with-llvm-config="$BUILD_DIR/llvm/build/bin/llvm-config" \
+		--with-cc="$BUILD_DIR/llvm/build/bin/clang-8"
 
-	cp "$VNDSDIR/install/klee-uclibc.config" '.config'
-	make -kj
+		# Use our minimalistic config
+		cp "$SCRIPT_DIR/setup/klee-uclibc.config" '.config'
+
+		# Use our patches
+		for f in "$SCRIPT_DIR/setup/uclibc/"* ; do
+			cat "$f" >> "libc/stdio/$(basename "$f")"
+		done
+
+		make -j$(nproc)
+	popd
+	echo "Done."
 }
 
-if [ ! -e "$BUILDDIR/klee-uclibc" ]; then
-  git clone --depth 1 --branch klee_uclibc_v1.2 \
-            https://github.com/klee/klee-uclibc.git "$BUILDDIR/klee-uclibc"
-  pushd "$BUILDDIR/klee-uclibc"
-    ./configure \
-     --make-llvm-lib \
-     --with-llvm-config="../llvm/Release/bin/llvm-config" \
-     --with-cc="../llvm/Release/bin/clang"
-
-    # Use our minimalistic config
-    cp "$VNDSDIR/setup/klee-uclibc.config" '.config'
-
-    # Use our patches
-    for f in "$VNDSDIR/setup/uclibc/"* ; do
-      cat "$f" >> "libc/stdio/$(basename "$f")"
-    done
-
-    make -j$(nproc)
-  popd
-fi
-
-clean_klee_uclibc()
-{
-	cd "$BUILDDIR"
+clean_klee_uclibc() {
+	cd "$BUILD_DIR"
 	rm -rf klee-uclibc
 }
 
-source_install_klee()
-{
-	line "$PATHSFILE" 'KLEE_INCLUDE' "$BUILDDIR/klee/include"
-	line_multi "$PATHSFILE" 'PATH' "$BUILDDIR/klee/build/bin:\$PATH"
+source_install_klee() {
+	add_var_to_paths_file 'KLEE_INCLUDE' "$BUILD_DIR/klee/include"
+	add_var_to_paths_file_multiline 'PATH' "$BUILD_DIR/klee/build/bin:\$PATH"
 	# shellcheck source=../paths.sh
 	. "$PATHSFILE"
 
-	cd "$BUILDDIR"
-	if [ -d 'klee/.git' ];
-	then
-		cd klee
-		git fetch && git checkout "$KLEE_RELEASE"
-	else
-		git clone --recurse-submodules https://github.com/bolt-perf-contracts/klee.git
-		cd klee
-		git checkout "$KLEE_RELEASE"
-	fi
+	cd "$BUILD_DIR"
+	git clone --depth 1 https://github.com/fchamicapereira/maestro-klee.git
 
+	mv maestro-klee klee
+	cd klee
 	./build.sh
 }
 
-clean_klee()
-{
-	cd "$BUILDDIR"
-	rm -rf klee
+clean_klee() {
+	cd "$BUILD_DIR"
+	rm -rf klee || true
+	rm -rf maestro-klee || true
 }
 
 bin_install_ocaml() {
+	echo "Installing ocaml..."
 	# we depend on an OCaml package that needs libgmp-dev
 	package_install opam m4 libgmp-dev
 
@@ -292,7 +312,7 @@ bin_install_ocaml() {
 		fi
 	fi
 
-	line_multi "$PATHSFILE" 'PATH' "$HOME/.opam/system/bin:\$PATH"
+	add_var_to_paths_file_multiline 'PATH' "$HOME/.opam/system/bin:\$PATH"
     # `|| :` at the end of the following command ensures that in the event the
     # init.sh script fails, the shell will not exit. opam suggests we do this.
 	echo ". $HOME/.opam/opam-init/init.sh || :" >> "$PATHSFILE"
@@ -302,6 +322,7 @@ bin_install_ocaml() {
 	opam install goblint-cil core -y
 	opam install ocamlfind num -y
 	opam install ocamlfind sexplib menhir -y
+	echo "Done."
 }
 
 clean_ocaml() {
@@ -309,32 +330,27 @@ clean_ocaml() {
 }
 
 source_install_rs3() {
-  package_install libsctp-dev
-  if [ ! -e "$BUILDDIR/libr3s" ]; then
-    git clone --depth 1 https://github.com/fchamicapereira/libr3s.git "$BUILDDIR/libr3s"
-    pushd "$BUILDDIR/libr3s"
-      rm -rf build
-      mkdir build
-      pushd build
-        ../build.sh
-        echo "export R3S_DIR=$BUILDDIR/libr3s" >> "$PATHSFILE"
-        . "$PATHSFILE"
-      popd
-    popd
-  fi
+	echo "Installing RS3..."
+	package_install libsctp-dev
+	if [ ! -e "$BUILD_DIR/libr3s" ]; then
+		git clone --depth 1 https://github.com/fchamicapereira/libr3s.git "$BUILD_DIR/libr3s"
+		pushd "$BUILD_DIR/libr3s"
+			rm -rf build
+			mkdir build
+			pushd build
+				../build.sh
+				echo "export R3S_DIR=$BUILD_DIR/libr3s" >> "$PATHSFILE"
+				. "$PATHSFILE"
+			popd
+		popd
+	fi
+	echo "Done."
 }
 
 clean_rs3() {
-  cd "$BUILDDIR"
+  cd "$BUILD_DIR"
 	rm -rf rs3
 }
-
-## Constants
-VNDSDIR="$(dirname "$(realpath "$0")")"
-BUILDDIR="$(realpath -e "$VNDSDIR"/..)"
-PATHSFILE="$BUILDDIR/paths.sh"
-KERNEL_VER=$(uname -r | sed 's/-Microsoft//')
-OS="$(detect_os)"
 
 # Environment
 check_sudo
@@ -344,6 +360,7 @@ package_sync
 package_install \
 	build-essential \
 	curl \
+	wget \
 	git \
 	libgoogle-perftools-dev \
 	python2.7 \
@@ -352,111 +369,30 @@ package_install \
 	parallel \
 	gcc-multilib \
 	graphviz \
-  libpcap-dev \
+	libpcap-dev \
 	libnuma-dev \
 	cmake \
-  ca-certificates \
-  software-properties-common \
-  patch \
-  wget \
-  build-essential \
-  cloc
+	ca-certificates \
+	software-properties-common \
+	patch \
+	cloc
+
+# Setup build structure and path files
+installation_setup
 
 # Clean things
 clean_dpdk
-clean_pin
 clean_z3
 clean_llvm
 clean_klee_uclibc
-clean_klee
 clean_ocaml
+clean_klee
 clean_rs3
 
 # Install things
 source_install_dpdk
-source_install_pin
 source_install_z3
 source_install_llvm
 source_install_klee_uclibc
 bin_install_ocaml
 source_install_klee
-
-# LLVM required to build klee-uclibc
-# (including the libc necessary to build NFOS)
-sudo apt-get install -y bison flex zlib1g-dev libncurses5-dev \
-                        libcap-dev python2.7
-
-# Python2 needs to be available as python for some configure scripts, which is not the case in Ubuntu 20.04
-if [ ! -e /usr/bin/python ] ; then
-  sudo ln -s /usr/bin/python2.7 /usr/bin/python
-fi
-
-if [ ! -e "$BUILDDIR/llvm" ]; then
-  git clone --branch llvmorg-3.4.2 --depth 1 https://github.com/llvm/llvm-project "$BUILDDIR/llvm-project"
-  mv "$BUILDDIR/llvm-project/llvm" "$BUILDDIR/llvm"
-  mv "$BUILDDIR/llvm-project/clang" "$BUILDDIR/llvm/tools/clang"
-  mv "$BUILDDIR/llvm-project/libcxx" "$BUILDDIR/llvm/projects/libcxx"
-  rm -rf "$BUILDDIR/llvm-project"
-  pushd "$BUILDDIR/llvm"
-    CXXFLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" \
-        ./configure --enable-optimized --disable-assertions \
-                    --enable-targets=host --with-python='/usr/bin/python2'
-    make -j$(nproc)
-    echo 'PATH='"$BUILDDIR/llvm/Release/bin"':$PATH' >> "$PATHSFILE"
-    . "$PATHSFILE"
-  popd
-fi
-
-
-# ==
-# Z3
-# ==
-
-sudo apt-get install -y python2.7
-
-# for Z3 ML bindings
-# Num is required for Big_int
-opam install ocamlfind num -y
-
-if [ ! -e "$BUILDDIR/z3" ]; then
-  git clone --depth 1 --branch z3-4.5.0 \
-            https://github.com/Z3Prover/z3 "$BUILDDIR/z3"
-  pushd "$BUILDDIR/z3"
-    python2 scripts/mk_make.py --ml -p "$BUILDDIR/z3/build"
-    pushd build
-      make -k -j$(nproc) || true
-      # -jN here may break the make (hidden deps or something)
-      make
-      make install
-      # Weird, but required sometimes
-      # Remove the outdated libz3.so
-      sudo apt-get remove -y libz3-dev || true
-      sudo rm -f /usr/lib/x86_64-linux-gnu/libz3.so || true
-      sudo rm -f /usr/lib/x86_64-linux-gnu/libz3.so.4 || true
-      sudo rm -f /usr/lib/libz3.so || true
-      # Install the new libz3.so
-      sudo ln -fs "$BUILDDIR/z3/build/libz3.so" "/usr/lib/libz3.so"
-      sudo ldconfig
-      # Install it in .opam as well, VeriFast wants it there...
-      ln -fs /usr/lib/libz3.so ~/.opam/4.06.0/.
-      echo "export Z3_DIR=$BUILDDIR/z3" >> "$PATHSFILE"
-      . "$PATHSFILE"
-    popd
-  popd
-fi
-
-# ====
-# KLEE
-# ====
-
-if [ ! -e "$BUILDDIR/klee" ]; then
-  git clone --depth 1 https://github.com/fchamicapereira/vigor-klee.git "$BUILDDIR/klee"
-  pushd "$BUILDDIR/klee"
-    ./build.sh
-    echo 'PATH='"$BUILDDIR/klee/Release/bin"':$PATH' >> "$PATHSFILE"
-    echo "export KLEE_DIR=$BUILDDIR/klee" >> "$PATHSFILE"
-    echo "export KLEE_INCLUDE=$BUILDDIR/klee/include" >> "$PATHSFILE"
-    echo "export KLEE_BUILD_PATH=$BUILDDIR/klee/Release" >> "$PATHSFILE"
-    . "$PATHSFILE"
-  popd
-fi
