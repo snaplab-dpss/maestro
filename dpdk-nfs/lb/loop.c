@@ -1,3 +1,4 @@
+#ifdef KLEE_VERIFICATION
 #include <klee/klee.h>
 #include "loop.h"
 #include "libvig/models/verified/vigor-time-control.h"
@@ -111,3 +112,4 @@ void loop_iteration_border(struct Map** flow_to_flow_id,
   loop_reset(flow_to_flow_id, flow_heap, flow_chain, flow_id_to_backend_id, ip_to_backend_id, backend_ips, backends, active_backends, cht, backend_capacity, flow_capacity, cht_height, lcore_id, &time);
   loop_invariant_produce(flow_to_flow_id, flow_heap, flow_chain, flow_id_to_backend_id, ip_to_backend_id, backend_ips, backends, active_backends, cht, backend_capacity, flow_capacity, cht_height, &lcore_id, &time);
 }
+#endif//KLEE_VERIFICATION

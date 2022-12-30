@@ -293,8 +293,13 @@ clean_klee_uclibc() {
 
 source_install_klee() {
 	echo "Installing KLEE..."
+
+	add_var_to_paths_file 'KLEE_DIR' "$BUILD_DIR/klee"
 	add_var_to_paths_file 'KLEE_INCLUDE' "$BUILD_DIR/klee/include"
-	add_multiline_var_to_paths_file 'PATH' "$BUILD_DIR/klee/build/bin:\$PATH"
+	add_var_to_paths_file 'KLEE_BUILD_PATH' "$BUILD_DIR/klee/Release"
+
+	add_multiline_var_to_paths_file 'PATH' "$BUILD_DIR/klee/Release/bin:\$PATH"
+	
 	# shellcheck source=../paths.sh
 	. "$PATHSFILE"
 
