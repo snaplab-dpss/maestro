@@ -22,16 +22,6 @@ LLVM_RELEASE=8.0.0
 Z3_RELEASE='z3-4.5.0'
 OCAML_RELEASE='4.06.0'
 
-# Stop script if we do not have root access
-check_sudo() {
-	echo 'Checking for sudo rights...'
-	if ! sudo -v; then
-		echo 'sudo rights not obtained, or sudo not installed.' >&2;
-		exit 1;
-	fi
-	echo "Done."
-}
-
 # Detect the running operating system
 # stdout: 'windows', 'docker' or 'linux'
 detect_os() {
@@ -379,7 +369,6 @@ clean_rs3() {
 }
 
 # Environment
-check_sudo
 package_sync
 setup_build_environment
 
