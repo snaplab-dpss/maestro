@@ -46,6 +46,13 @@ detect_os() {
 	return 0
 }
 
+## Constants
+SCRIPT_DIR=$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)
+BUILD_DIR="$SCRIPT_DIR/build"
+PATHSFILE="$BUILD_DIR/paths.sh"
+KERNEL_VER=$(uname -r | sed 's/-Microsoft//')
+OS="$(detect_os)"
+
 # Checks if a variable is set in a file. If it is not in the file, add it with
 # given value, otherwise change the value to match the current one.
 # $1 : the name of the variable
@@ -71,20 +78,6 @@ add_var_to_paths_file_multiline() {
 	fi
 }
 
-create_paths_file() {
-	rm -f $PATHSFILE > /dev/null 2>&1 || true
-	touch $PATHSFILE
-}
-
-create_build_dir() {
-	mkdir -p $BUILD_DIR
-}
-
-installation_setup() {
-	create_build_dir
-	create_paths_file
-}
-
 # Install arguments using system's package manager.
 # XXX: Make the package manager depend on "$OS".
 # shellcheck disable=SC2086
@@ -104,17 +97,26 @@ package_sync() {
 	sudo apt-get update -qq
 }
 
-## Constants
-SCRIPT_DIR=$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)
-BUILD_DIR="$SCRIPT_DIR/build"
-PATHSFILE="$BUILD_DIR/paths.sh"
-KERNEL_VER=$(uname -r | sed 's/-Microsoft//')
-OS="$(detect_os)"
+source_paths_in_profile() {
+	if ! grep "^source $PATHSFILE" ~/.profile >/dev/null;
+	then
+		echo "source $PATHSFILE" >> ~/.profile
+	fi
+}
 
-setup_build_environment() {
-	mkdir -p "$BUILD_DIR"
-	rm -f "$PATHSFILE" || true
-	touch "$PATHSFILE"
+create_paths_file() {
+	rm -f $PATHSFILE > /dev/null 2>&1 || true
+	touch $PATHSFILE
+}
+
+create_build_dir() {
+	mkdir -p $BUILD_DIR
+}
+
+installation_setup() {
+	create_build_dir
+	create_paths_file
+	source_paths_in_profile
 }
 
 # Checks if a variable is set in a file. If it is not in the file, add it with
@@ -299,7 +301,7 @@ source_install_klee() {
 	add_var_to_paths_file 'KLEE_BUILD_PATH' "$BUILD_DIR/klee/Release"
 
 	add_multiline_var_to_paths_file 'PATH' "$BUILD_DIR/klee/Release/bin:\$PATH"
-	
+
 	# shellcheck source=../paths.sh
 	. "$PATHSFILE"
 
@@ -375,7 +377,7 @@ clean_rs3() {
 
 # Environment
 package_sync
-setup_build_environment
+installation_setup
 
 # Common dependencies
 package_install \
@@ -398,9 +400,6 @@ package_install \
 	software-properties-common \
 	patch \
 	cloc
-
-# Build setup environment
-installation_setup
 
 # Clean things
 clean_dpdk
