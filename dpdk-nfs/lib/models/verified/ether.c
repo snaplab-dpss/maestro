@@ -14,17 +14,17 @@ unsigned rte_ether_addr_hash(void *obj) {
   for (int i = 0;
        i < sizeof(rte_ether_addr_descrs) / sizeof(rte_ether_addr_descrs[0]);
        ++i) {
-    klee_trace_param_ptr_field_directed(obj, rte_ether_addr_descrs[i].offset,
-                                        rte_ether_addr_descrs[i].width,
-                                        rte_ether_addr_descrs[i].name, TD_BOTH);
+    klee_trace_param_ptr_field_arr_directed(
+        obj, rte_ether_addr_descrs[i].offset, rte_ether_addr_descrs[i].width,
+        rte_ether_addr_descrs[i].count, rte_ether_addr_descrs[i].name, TD_BOTH);
   }
   for (int i = 0;
        i < sizeof(rte_ether_addr_nests) / sizeof(rte_ether_addr_nests[0]);
        ++i) {
-    klee_trace_param_ptr_nested_field_directed(
+    klee_trace_param_ptr_nested_field_arr_directed(
         obj, rte_ether_addr_nests[i].base_offset,
         rte_ether_addr_nests[i].offset, rte_ether_addr_nests[i].width,
-        rte_ether_addr_nests[i].name, TD_BOTH);
+        rte_ether_addr_nests[i].count, rte_ether_addr_nests[i].name, TD_BOTH);
   }
   return klee_int("rte_ether_addr_hash");
 }

@@ -52,14 +52,14 @@ unsigned hash_hash(void *obj) {
   klee_trace_ret();
   klee_trace_param_tagged_ptr(obj, sizeof(struct hash), "obj", "hash", TD_BOTH);
   for (int i = 0; i < sizeof(hash_descrs) / sizeof(hash_descrs[0]); ++i) {
-    klee_trace_param_ptr_field_directed(obj, hash_descrs[i].offset,
-                                        hash_descrs[i].width,
-                                        hash_descrs[i].name, TD_BOTH);
+    klee_trace_param_ptr_field_arr_directed(
+        obj, hash_descrs[i].offset, hash_descrs[i].width, hash_descrs[i].count,
+        hash_descrs[i].name, TD_BOTH);
   }
   for (int i = 0; i < sizeof(hash_nests) / sizeof(hash_nests[0]); ++i) {
-    klee_trace_param_ptr_nested_field_directed(
+    klee_trace_param_ptr_nested_field_arr_directed(
         obj, hash_nests[i].base_offset, hash_nests[i].offset,
-        hash_nests[i].width, hash_nests[i].name, TD_BOTH);
+        hash_nests[i].width, hash_nests[i].count, hash_nests[i].name, TD_BOTH);
   }
   return klee_int("hash_hash");
 }

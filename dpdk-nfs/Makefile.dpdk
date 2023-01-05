@@ -93,7 +93,7 @@ OPT_COMMAND := opt -basicaa -basiccg -internalize \
 # if something takes longer than expected,
 # try --max-solver-time=3 --debug-report-symbdex (to avoid symbolic indices)
 VERIF_COMMAND := /usr/bin/time -v \
-                 klee -no-externals
+                 klee -no-externals \
                       -allocate-determ \
                       -allocate-determ-start-address=0x00040000000 \
                       -allocate-determ-size=1000 \

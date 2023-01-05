@@ -40,15 +40,16 @@ unsigned StaticKey_hash(void *obj) {
                               TD_BOTH);
   for (int i = 0; i < sizeof(StaticKey_descrs) / sizeof(StaticKey_descrs[0]);
        ++i) {
-    klee_trace_param_ptr_field_directed(obj, StaticKey_descrs[i].offset,
-                                        StaticKey_descrs[i].width,
-                                        StaticKey_descrs[i].name, TD_BOTH);
+    klee_trace_param_ptr_field_arr_directed(
+        obj, StaticKey_descrs[i].offset, StaticKey_descrs[i].width,
+        StaticKey_descrs[i].count, StaticKey_descrs[i].name, TD_BOTH);
   }
   for (int i = 0; i < sizeof(StaticKey_nests) / sizeof(StaticKey_nests[0]);
        ++i) {
-    klee_trace_param_ptr_nested_field_directed(
+    klee_trace_param_ptr_nested_field_arr_directed(
         obj, StaticKey_nests[i].base_offset, StaticKey_nests[i].offset,
-        StaticKey_nests[i].width, StaticKey_nests[i].name, TD_BOTH);
+        StaticKey_nests[i].width, StaticKey_nests[i].count,
+        StaticKey_nests[i].name, TD_BOTH);
   }
   return klee_int("StaticKey_hash");
 }

@@ -277,16 +277,36 @@ source_install_klee_uclibc() {
 	echo "Installing KLEE uclibc..."
 	cd "$BUILD_DIR"
 
-	git clone --depth 1 --branch "$KLEE_UCLIBC_RELEASE" https://github.com/klee/klee-uclibc.git "$BUILD_DIR/klee-uclibc";
+	# If there is a single version of GCC and it's a single digit, as in e.g. GCC 9 on Ubuntu 20.04,
+	# our clang won't detect it because it expects a version in the format x.y.z with all components
+	# so let's create a symlink
+	# 0 -> nothing, 2 -> a single dot (because there is also \0)
+	GCC_VER=$(ls -1 /usr/lib/gcc/x86_64-linux-gnu/ | sort -V | tail -n 1)
+	
+	if [ $(echo $GCC_VER | grep -Fo . | wc -c) -eq 0 ]; then
+		sudo ln -s "/usr/lib/gcc/x86_64-linux-gnu/$GCC_VER" "/usr/lib/gcc/x86_64-linux-gnu/$GCC_VER.0.0" ;
+	fi
+
+	if [ $(echo $GCC_VER | grep -Fo . | wc -c) -eq 2 ]; then
+		sudo ln -s "/usr/lib/gcc/x86_64-linux-gnu/$GCC_VER" "/usr/lib/gcc/x86_64-linux-gnu/$GCC_VER.0" ;
+	fi
+
+	git clone --depth 1 --branch "$KLEE_UCLIBC_RELEASE" \
+		https://github.com/klee/klee-uclibc.git "$BUILD_DIR/klee-uclibc";
 	cd klee-uclibc
 
-	pushd "$BUILD_DIR/klee-uclibc"
-		./configure \
+	./configure \
 		--make-llvm-lib \
 		--with-llvm-config="$BUILD_DIR/llvm/Release/bin/llvm-config" \
 		--with-cc="$BUILD_DIR/llvm/Release/bin/clang"
 
 	cp "$SCRIPT_DIR/setup/klee-uclibc.config" '.config'
+
+	# Use our patches
+    for f in "$SCRIPT_DIR/setup/uclibc/"* ; do
+    	cat "$f" >> "libc/stdio/$(basename "$f")"
+    done		
+	
 	make -kj
 	echo "Done."
 }

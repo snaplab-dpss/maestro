@@ -109,18 +109,18 @@ void vector_borrow(struct Vector *vector, int index, void **val_out) {
   klee_assert(vector->elems_claimed < NUM_ELEMS);
   void *cell = vector->data + vector->elems_claimed * vector->elem_size;
   klee_trace_extra_ptr(cell, vector->elem_size, "borrowed_cell",
-                       vector->cell_type, "", TD_OUT);
+                       vector->cell_type, TD_OUT);
   {
     for (int i = 0; i < vector->field_count; ++i) {
-      klee_trace_extra_ptr_field(cell, vector->fields[i].offset,
-                                 vector->fields[i].width,
-                                 vector->fields[i].name, TD_OUT);
+      klee_trace_extra_ptr_field_arr(
+          cell, vector->fields[i].offset, vector->fields[i].width,
+          vector->fields[i].count, vector->fields[i].name, TD_OUT);
     }
     for (int i = 0; i < vector->nested_field_count; ++i) {
-      klee_trace_extra_ptr_nested_field(
+      klee_trace_extra_ptr_nested_field_arr(
           cell, vector->nest_fields[i].base_offset,
           vector->nest_fields[i].offset, vector->nest_fields[i].width,
-          vector->nest_fields[i].name, TD_OUT);
+          vector->nest_fields[i].count, vector->nest_fields[i].name, TD_OUT);
     }
   }
 
@@ -145,15 +145,15 @@ void vector_return(struct Vector *vector, int index, void *value) {
                               vector->cell_type, TD_IN);
   {
     for (int i = 0; i < vector->field_count; ++i) {
-      klee_trace_param_ptr_field_directed(value, vector->fields[i].offset,
-                                          vector->fields[i].width,
-                                          vector->fields[i].name, TD_IN);
+      klee_trace_param_ptr_field_arr_directed(
+          value, vector->fields[i].offset, vector->fields[i].width,
+          vector->fields[i].count, vector->fields[i].name, TD_IN);
     }
     for (int i = 0; i < vector->nested_field_count; ++i) {
-      klee_trace_param_ptr_nested_field_directed(
+      klee_trace_param_ptr_nested_field_arr_directed(
           vector->data, vector->nest_fields[i].base_offset,
           vector->nest_fields[i].offset, vector->nest_fields[i].width,
-          vector->nest_fields[i].name, TD_IN);
+          vector->nest_fields[i].count, vector->nest_fields[i].name, TD_IN);
     }
   }
 
