@@ -19,23 +19,23 @@
  * - network topology (i.e. the identifiers of network devices, used to
  * configure broadcasts issued by the dataplane);
  * - existing BMv2 tables (their name identifiers, tag value, and how they are
- * mapped onto one or more libvig objects).
+ * mapped onto one or more lib objects).
  */
 
-typedef enum { LIBVIG_VECTOR, LIBVIG_DCHAIN, LIBVIG_MAP } libvig_obj_type_t;
+typedef enum { LIBVIG_VECTOR, LIBVIG_DCHAIN, LIBVIG_MAP } lib_obj_type_t;
 
 typedef struct {
   void *ptr;
-  libvig_obj_type_t type;
+  lib_obj_type_t type;
 
-} libvig_obj_t;
+} lib_obj_t;
 
 typedef struct {
   string_t name;
   uint32_t tag;
 
-  libvig_obj_t *libvig_objs;
-  size_t libvig_objs_sz;
+  lib_obj_t *lib_objs;
+  size_t lib_objs_sz;
 
 } synapse_bmv2_table_t;
 
@@ -52,7 +52,7 @@ typedef struct {
 bool synapse_runtime_config(synapse_config_t *config);
 
 // FIXME Replace `void **` with `struct ? **`
-bool synapse_runtime_config_get_libvig_objs_by_table_name(string_t table_name,
+bool synapse_runtime_config_get_lib_objs_by_table_name(string_t table_name,
                                                           void **vector,
                                                           void **dchain,
                                                           void **map);

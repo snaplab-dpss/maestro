@@ -3,14 +3,14 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#include "libvig/verified/boilerplate-util.h"
+#include "lib/verified/boilerplate-util.h"
 #ifdef KLEE_VERIFICATION
-#include "libvig/models/verified/double-chain-control.h"
-#include "libvig/models/verified/ether.h"
-#include "libvig/models/verified/map-control.h"
-#include "libvig/models/verified/vector-control.h"
-#include "libvig/models/unverified/sketch-control.h"
-#include "libvig/models/verified/lpm-dir-24-8-control.h"
+#include "lib/models/verified/double-chain-control.h"
+#include "lib/models/verified/ether.h"
+#include "lib/models/verified/map-control.h"
+#include "lib/models/verified/vector-control.h"
+#include "lib/models/unverified/sketch-control.h"
+#include "lib/models/verified/lpm-dir-24-8-control.h"
 #endif  // KLEE_VERIFICATION
 
 struct State *allocated_nf_state = NULL;

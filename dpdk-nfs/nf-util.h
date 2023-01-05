@@ -11,13 +11,13 @@
 #include <rte_ethdev.h>
 #include <rte_ip.h>
 
-#include "libvig/verified/packet-io.h"
-#include "libvig/verified/tcpudp_hdr.h"
+#include "lib/verified/packet-io.h"
+#include "lib/verified/tcpudp_hdr.h"
 
 #ifdef KLEE_VERIFICATION
 #  include <rte_ether.h>
-#  include "libvig/models/str-descr.h"
-#  include "libvig/models/verified/packet-io-control.h"
+#  include "lib/models/str-descr.h"
+#  include "lib/models/verified/packet-io-control.h"
 #endif // KLEE_VERIFICATION
 
 // rte_ether

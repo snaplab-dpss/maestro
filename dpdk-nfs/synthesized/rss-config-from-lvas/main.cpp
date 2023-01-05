@@ -1,5 +1,5 @@
 #include "logger.h"
-#include "libvig_access.h"
+#include "lib_access.h"
 #include "constraint.h"
 #include "rss_config_builder.h"
 #include "parser.h"

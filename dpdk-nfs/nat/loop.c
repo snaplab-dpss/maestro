@@ -1,10 +1,10 @@
 #ifdef KLEE_VERIFICATION
 #include <klee/klee.h>
 #include "loop.h"
-#include "libvig/models/verified/vigor-time-control.h"
-#include "libvig/models/verified/double-chain-control.h"
-#include "libvig/models/verified/map-control.h"
-#include "libvig/models/verified/vector-control.h"
+#include "lib/models/verified/vigor-time-control.h"
+#include "lib/models/verified/double-chain-control.h"
+#include "lib/models/verified/map-control.h"
+#include "lib/models/verified/vector-control.h"
 void loop_reset(struct Map** fm,
                 struct Vector** fv,
                 struct DoubleChain** heap,

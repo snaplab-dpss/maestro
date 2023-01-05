@@ -78,7 +78,7 @@ def symbex(nf):
 	return call_paths
 
 def analyze_call_paths(nf, call_paths):
-	analyze 		= f"{KLEE_DIR}/Release/bin/analyse-libvig-call-paths"
+	analyze 		= f"{KLEE_DIR}/Release/bin/analyse-lib-call-paths"
 	analyze_args	= [ os.path.abspath(cp) for cp in call_paths ]
 
 	lva = open(LVA, mode="w")

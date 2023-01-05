@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "libvig/verified/vigor-time.h"
+#include "lib/verified/vigor-time.h"
 
 #define FLOOD_FRAME ((uint16_t) -1)
 

@@ -18,7 +18,7 @@ fi
 
 DPDK_RELEASE='20.08'
 KLEE_UCLIBC_RELEASE='klee_uclibc_v1.2'
-LLVM_RELEASE=8.0.0
+LLVM_RELEASE='3.4.2'
 Z3_RELEASE='z3-4.5.0'
 OCAML_RELEASE='4.06.0'
 
@@ -234,33 +234,36 @@ clean_z3() {
 
 source_install_llvm() {
 	echo "Installing LLVM..."
+	
 	package_install bison flex zlib1g-dev libncurses5-dev libpcap-dev
+
 	# Python2 needs to be available as python for some configure scripts, which is not the case in Ubuntu 20.04
 	if [ ! -e /usr/bin/python ] ; then
   		sudo ln -s /usr/bin/python2.7 /usr/bin/python
 	fi
 
-	add_multiline_var_to_paths_file 'PATH' "$BUILD_DIR/llvm/build/bin:\$PATH"
+	add_multiline_var_to_paths_file 'PATH' "$BUILD_DIR/llvm/Release/bin:\$PATH"
 	# shellcheck source=../paths.sh
 	. "$PATHSFILE"
 
 	cd "$BUILD_DIR"
 
 	# TODO: Optimize. Currently we clone and build from scratch even if source is present but hasn't been built
-	if [ ! -f llvm/build/bin/clang-8 ] || [ ! -f llvm/build/bin/llvm-config ];
+	if [ ! -f llvm/Release/bin/clang-8 ] || [ ! -f llvm/Release/bin/llvm-config ];
 	then
 		git clone --branch llvmorg-$LLVM_RELEASE --depth 1  \
 			https://github.com/llvm/llvm-project "$BUILD_DIR/llvm-project"
+
 		mv "$BUILD_DIR/llvm-project/llvm" "$BUILD_DIR/llvm"
 		mv "$BUILD_DIR/llvm-project/clang" "$BUILD_DIR/llvm/tools/clang"
+		mv "$BUILD_DIR/llvm-project/libcxx" "$BUILD_DIR/llvm/projects/libcxx"
+
 		rm -rf "$BUILD_DIR/llvm-project"
 		cd llvm
-		mkdir build
-		cd build
-		[ -f "Makefile" ] || \
-			CXXFLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" \
-			cmake -DLLVM_PARALLEL_LINK_JOBS=1 ../
-		make -j4
+		CXXFLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" \
+        ./configure --enable-optimized --disable-assertions \
+                    --enable-targets=host --with-python='/usr/bin/python'
+		make -j$(nproc)
 	fi
 	echo "Done."
 }
@@ -280,8 +283,8 @@ source_install_klee_uclibc() {
 	pushd "$BUILD_DIR/klee-uclibc"
 		./configure \
 		--make-llvm-lib \
-		--with-llvm-config="$BUILD_DIR/llvm/build/bin/llvm-config" \
-		--with-cc="$BUILD_DIR/llvm/build/bin/clang"
+		--with-llvm-config="$BUILD_DIR/llvm/Release/bin/llvm-config" \
+		--with-cc="$BUILD_DIR/llvm/Release/bin/clang"
 
 	cp "$SCRIPT_DIR/setup/klee-uclibc.config" '.config'
 	make -kj
@@ -306,7 +309,7 @@ source_install_klee() {
 	. "$PATHSFILE"
 
 	cd "$BUILD_DIR"
-	git clone --recurse-submodules https://github.com/fchamicapereira/maestro-klee.git klee
+	git clone --recurse-submodules https://github.com/fchamicapereira/vigor-klee.git klee
 
 	cd klee
 	./build.sh
@@ -399,7 +402,8 @@ package_install \
 	ca-certificates \
 	software-properties-common \
 	patch \
-	cloc
+	cloc \
+	time
 
 # Clean things
 clean_dpdk

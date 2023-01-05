@@ -25,16 +25,16 @@
 #include <rte_atomic.h>
 #include <rte_malloc.h>
 
-#include "libvig/verified/boilerplate-util.h"
-#include "libvig/verified/tcpudp_hdr.h"
-#include "libvig/verified/vigor-time.h"
-#include "libvig/verified/ether.h"
+#include "lib/verified/boilerplate-util.h"
+#include "lib/verified/tcpudp_hdr.h"
+#include "lib/verified/vigor-time.h"
+#include "lib/verified/ether.h"
 
-#include "libvig/unverified/double-chain-locks.h"
-#include "libvig/unverified/vector-locks.h"
-#include "libvig/unverified/map-locks.h"
-#include "libvig/unverified/expirator-locks.h"
-#include "libvig/unverified/cht-locks.h"
+#include "lib/unverified/double-chain-locks.h"
+#include "lib/unverified/vector-locks.h"
+#include "lib/unverified/map-locks.h"
+#include "lib/unverified/expirator-locks.h"
+#include "lib/unverified/cht-locks.h"
 
 /**********************************************
  *

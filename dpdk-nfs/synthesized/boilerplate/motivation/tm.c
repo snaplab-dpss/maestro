@@ -24,16 +24,16 @@
 #include <rte_lcore.h>
 #include <rte_malloc.h>
 
-#include "libvig/verified/boilerplate-util.h"
-#include "libvig/verified/tcpudp_hdr.h"
-#include "libvig/verified/vigor-time.h"
-#include "libvig/verified/ether.h"
+#include "lib/verified/boilerplate-util.h"
+#include "lib/verified/tcpudp_hdr.h"
+#include "lib/verified/vigor-time.h"
+#include "lib/verified/ether.h"
 
-#include "libvig/unverified/double-chain-tm.h"
-#include "libvig/verified/vector.h"
-#include "libvig/verified/map.h"
-#include "libvig/unverified/expirator-tm.h"
-#include "libvig/unverified/cht-tm.h"
+#include "lib/unverified/double-chain-tm.h"
+#include "lib/verified/vector.h"
+#include "lib/verified/map.h"
+#include "lib/unverified/expirator-tm.h"
+#include "lib/unverified/cht-tm.h"
 
 /**********************************************
  *

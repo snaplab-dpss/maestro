@@ -1,12 +1,7 @@
 #ifndef _LOOP_H_INCLUDED_
 #define _LOOP_H_INCLUDED_
-#include "libvig/verified/double-chain.h"
-#include "libvig/verified/map.h"
-#include "libvig/verified/vector.h"
-#include "libvig/verified/cht.h"
-#include "libvig/verified/lpm-dir-24-8.h"
-#include "libvig/proof/coherence.h"
-#include "libvig/verified/vigor-time.h"
+#include "lib/proof/coherence.h"
+#include "lib/verified/vigor-time.h"
 /*@
 @*/
 /*@

@@ -1,14 +1,14 @@
 #ifndef _CL_LOOP_H_INCLUDED_
 #define _CL_LOOP_H_INCLUDED_
 
-#include "libvig/verified/double-chain.h"
-#include "libvig/verified/map.h"
-#include "libvig/verified/vector.h"
-#include "libvig/verified/cht.h"
-#include "libvig/verified/lpm-dir-24-8.h"
-#include "libvig/proof/coherence.h"
-#include "libvig/verified/vigor-time.h"
-#include "libvig/unverified/sketch.h"
+#include "lib/verified/double-chain.h"
+#include "lib/verified/map.h"
+#include "lib/verified/vector.h"
+#include "lib/verified/cht.h"
+#include "lib/verified/lpm-dir-24-8.h"
+#include "lib/proof/coherence.h"
+#include "lib/verified/vigor-time.h"
+#include "lib/unverified/sketch.h"
 
 #include "flow.h"
 #include "client.h"

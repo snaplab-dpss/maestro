@@ -2,7 +2,7 @@
 
 #include "constraint.h"
 #include "rss_config.h"
-#include "libvig_access.h"
+#include "lib_access.h"
 
 #include <vector>
 #include <map>
@@ -19,7 +19,7 @@ private:
   R3S::R3S_cfg_t cfg;
   std::vector<std::shared_ptr<Constraint> > constraints;
 
-  std::vector<LibvigAccessConstraint> libvig_access_constraints;
+  std::vector<LibvigAccessConstraint> lib_access_constraints;
   std::vector<CallPathsConstraint> call_paths_constraints;
 
   std::map<std::string, unsigned int> device_per_call_path;
@@ -64,7 +64,7 @@ private:
 
   void filter_constraints();
   void
-  fill_libvig_access_constraints(const std::vector<LibvigAccess> &accesses);
+  fill_lib_access_constraints(const std::vector<LibvigAccess> &accesses);
   void generate_solver_constraints();
 
   static std::vector<std::shared_ptr<Constraint> >
@@ -94,7 +94,7 @@ public:
 
     auto trimmed_accesses = filter_reads_without_writes_on_objects(accesses);
 
-    fill_libvig_access_constraints(trimmed_accesses);
+    fill_lib_access_constraints(trimmed_accesses);
     analyse_dchain_interpretations(trimmed_accesses);
 
     Logger::debug() << "\n";
@@ -124,8 +124,8 @@ public:
 
   const R3S::R3S_cfg_t &get_cfg() const { return cfg; }
   const std::vector<LibvigAccessConstraint> &
-  get_libvig_access_constraints() const {
-    return libvig_access_constraints;
+  get_lib_access_constraints() const {
+    return lib_access_constraints;
   }
   RSSConfig &get_generated_rss_cfg() { return rss_config; }
 

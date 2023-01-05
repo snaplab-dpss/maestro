@@ -14,12 +14,12 @@ BUILD := $(SYNTHESIZED_DIR)/build/maestro
 before-maestro:
 	@mkdir -p $(BUILD)
 
-maestro: before-maestro $(BUILD)/dependency.o $(BUILD)/libvig_access.o $(BUILD)/rss_config_builder.o $(BUILD)/constraint.o \
+maestro: before-maestro $(BUILD)/dependency.o $(BUILD)/lib_access.o $(BUILD)/rss_config_builder.o $(BUILD)/constraint.o \
 	$(BUILD)/parser.o $(BUILD)/logger.o
 	$(MAESTRO_CC) $(MAESTRO_SRCS_DIR)/main.cpp \
 	-o $(BUILD)/rss-config-from-lvas                	      \
 	$(BUILD)/dependency.o                           	      \
-	$(BUILD)/libvig_access.o                        	      \
+	$(BUILD)/lib_access.o                        	      \
 	$(BUILD)/constraint.o                           	      \
 	$(BUILD)/parser.o                               	      \
 	$(BUILD)/rss_config_builder.o                   	      \
@@ -31,8 +31,8 @@ maestro: before-maestro $(BUILD)/dependency.o $(BUILD)/libvig_access.o $(BUILD)/
 $(BUILD)/dependency.o: $(MAESTRO_SRCS_DIR)/dependency.cpp $(MAESTRO_SRCS_DIR)/dependency.h
 	$(MAESTRO_CC) -c $(MAESTRO_SRCS_DIR)/dependency.cpp -o $(BUILD)/dependency.o $(R3S_INCLUDE) $(Z3_INCLUDE)
 
-$(BUILD)/libvig_access.o: $(MAESTRO_SRCS_DIR)/libvig_access.cpp $(MAESTRO_SRCS_DIR)/libvig_access.h
-	$(MAESTRO_CC) -c $(MAESTRO_SRCS_DIR)/libvig_access.cpp -o $(BUILD)/libvig_access.o $(R3S_INCLUDE) $(Z3_INCLUDE)
+$(BUILD)/lib_access.o: $(MAESTRO_SRCS_DIR)/lib_access.cpp $(MAESTRO_SRCS_DIR)/lib_access.h
+	$(MAESTRO_CC) -c $(MAESTRO_SRCS_DIR)/lib_access.cpp -o $(BUILD)/lib_access.o $(R3S_INCLUDE) $(Z3_INCLUDE)
 
 $(BUILD)/rss_config_builder.o: $(MAESTRO_SRCS_DIR)/rss_config_builder.cpp $(MAESTRO_SRCS_DIR)/rss_config_builder.h
 	$(MAESTRO_CC) -c $(MAESTRO_SRCS_DIR)/rss_config_builder.cpp -o $(BUILD)/rss_config_builder.o $(R3S_INCLUDE) $(Z3_INCLUDE)

@@ -42,7 +42,7 @@ void print_tag_entry(pair_ptr_t entry) {
 // Runtime configuration
 
 // FIXME Replace `void **` with `struct ? **`
-bool synapse_runtime_config_get_libvig_objs_by_table_name(string_t table_name,
+bool synapse_runtime_config_get_lib_objs_by_table_name(string_t table_name,
                                                           void **vector,
                                                           void **dchain,
                                                           void **map) {
@@ -50,22 +50,22 @@ bool synapse_runtime_config_get_libvig_objs_by_table_name(string_t table_name,
     synapse_bmv2_table_t table = synapse_config.bmv2_tables[i];
 
     if (synapse_runtime_wrappers_string_equals(&table_name, &(table.name))) {
-      for (size_t i = 0; i < table.libvig_objs_sz; i++) {
-        switch (table.libvig_objs[i].type) {
+      for (size_t i = 0; i < table.lib_objs_sz; i++) {
+        switch (table.lib_objs[i].type) {
           case LIBVIG_VECTOR: {
-            *vector = (struct Vector *)table.libvig_objs[i].ptr;
+            *vector = (struct Vector *)table.lib_objs[i].ptr;
           } break;
 
           case LIBVIG_DCHAIN: {
-            *dchain = (struct DoubleChain *)table.libvig_objs[i].ptr;
+            *dchain = (struct DoubleChain *)table.lib_objs[i].ptr;
           } break;
 
           case LIBVIG_MAP: {
-            *map = (struct Map *)table.libvig_objs[i].ptr;
+            *map = (struct Map *)table.lib_objs[i].ptr;
           } break;
 
           default:
-            SYNAPSE_ERROR("Unknown libvig object");
+            SYNAPSE_ERROR("Unknown lib object");
             return false;
         }
       }

@@ -40,7 +40,7 @@ void RSSConfigBuilder::load_rss_config_options() {
   R3S::R3S_cfg_set_number_of_keys(cfg, unique_devices.size());
   R3S::R3S_cfg_set_number_of_processes(cfg, n_threads / 2);
 
-  if (libvig_access_constraints.size() == 0) {
+  if (lib_access_constraints.size() == 0) {
     Logger::debug() << "No constraints. Configuring RSS with every possible "
                        "option available.";
     Logger::debug() << "\n";
@@ -134,7 +134,7 @@ void RSSConfigBuilder::filter_constraints() {
   // TODO: we should update the R3S configuration
 }
 
-void RSSConfigBuilder::fill_libvig_access_constraints(
+void RSSConfigBuilder::fill_lib_access_constraints(
     const std::vector<LibvigAccess> &accesses) {
   R3S::Z3_context ctx = R3S::R3S_cfg_get_z3_context(cfg);
 
@@ -164,7 +164,7 @@ void RSSConfigBuilder::fill_libvig_access_constraints(
       auto &second_read_arg =
           second.get_argument(LibvigAccessArgument::Type::READ);
 
-      libvig_access_constraints.emplace_back(first, second, ctx);
+      lib_access_constraints.emplace_back(first, second, ctx);
 
       auto first_dependencies = first_read_arg.get_dependencies();
       auto second_dependencies = second_read_arg.get_dependencies();
@@ -300,21 +300,21 @@ void RSSConfigBuilder::generate_solver_constraints() {
     constraints.emplace_back(constraint);
   }
 
-  for (auto libvig_access_constraint : libvig_access_constraints) {
-    libvig_access_constraint.process();
+  for (auto lib_access_constraint : lib_access_constraints) {
+    lib_access_constraint.process();
 
     auto devices = std::array<unsigned int, 2>{
-        libvig_access_constraint.get_devices().first,
-        libvig_access_constraint.get_devices().second};
+        lib_access_constraint.get_devices().first,
+        lib_access_constraint.get_devices().second};
 
     for (auto device : devices) {
 
-      if (!analyse_constraint(&libvig_access_constraint)) {
+      if (!analyse_constraint(&lib_access_constraint)) {
         continue;
       }
 
       auto device_packet_fields =
-          libvig_access_constraint.get_packet_fields(device);
+          lib_access_constraint.get_packet_fields(device);
 
       std::sort(device_packet_fields.begin(), device_packet_fields.end());
 
@@ -360,23 +360,23 @@ void RSSConfigBuilder::generate_solver_constraints() {
 
         Logger::error() << "Incoming constraint (device " << device << "):"
                         << "\n";
-        Logger::error() << libvig_access_constraint << "\n";
+        Logger::error() << lib_access_constraint << "\n";
 
         Logger::error() << "\n";
-        Logger::error() << "Associated libvig accesses:"
+        Logger::error() << "Associated lib accesses:"
                         << "\n";
 
         Logger::error() << "\n";
-        Logger::error() << libvig_access_constraint.get_first_access() << "\n";
+        Logger::error() << lib_access_constraint.get_first_access() << "\n";
 
         Logger::error() << "\n";
-        Logger::error() << libvig_access_constraint.get_second_access() << "\n";
+        Logger::error() << lib_access_constraint.get_second_access() << "\n";
 
         exit(0);
       }
 
       Constraint *constraint =
-          new LibvigAccessConstraint(libvig_access_constraint);
+          new LibvigAccessConstraint(lib_access_constraint);
 
       constraints.emplace_back(constraint);
     }
@@ -640,10 +640,10 @@ void RSSConfigBuilder::remove_constraints_from_object(unsigned int obj) {
     return a1.get_object() == obj;
   };
 
-  libvig_access_constraints.erase(
-      std::remove_if(libvig_access_constraints.begin(),
-                     libvig_access_constraints.end(), constraint_from_object),
-      libvig_access_constraints.end());
+  lib_access_constraints.erase(
+      std::remove_if(lib_access_constraints.begin(),
+                     lib_access_constraints.end(), constraint_from_object),
+      lib_access_constraints.end());
 }
 
 void RSSConfigBuilder::remove_constraints_with_access(unsigned int access_id) {
@@ -657,10 +657,10 @@ void RSSConfigBuilder::remove_constraints_with_access(unsigned int access_id) {
     return true;
   };
 
-  libvig_access_constraints.erase(
-      std::remove_if(libvig_access_constraints.begin(),
-                     libvig_access_constraints.end(), constraint_with_access),
-      libvig_access_constraints.end());
+  lib_access_constraints.erase(
+      std::remove_if(lib_access_constraints.begin(),
+                     lib_access_constraints.end(), constraint_with_access),
+      lib_access_constraints.end());
 }
 
 void RSSConfigBuilder::remove_constraints_with_pfs(
@@ -690,10 +690,10 @@ void RSSConfigBuilder::remove_constraints_with_pfs(
                       pfs.begin());
   };
 
-  libvig_access_constraints.erase(
-      std::remove_if(libvig_access_constraints.begin(),
-                     libvig_access_constraints.end(), constraint_with_pfs),
-      libvig_access_constraints.end());
+  lib_access_constraints.erase(
+      std::remove_if(lib_access_constraints.begin(),
+                     lib_access_constraints.end(), constraint_with_pfs),
+      lib_access_constraints.end());
 }
 
 void RSSConfigBuilder::remove_equivalent_index_dchain_constraints(
@@ -716,11 +716,11 @@ void RSSConfigBuilder::remove_equivalent_index_dchain_constraints(
     return true;
   };
 
-  libvig_access_constraints.erase(
-      std::remove_if(libvig_access_constraints.begin(),
-                     libvig_access_constraints.end(),
+  lib_access_constraints.erase(
+      std::remove_if(lib_access_constraints.begin(),
+                     lib_access_constraints.end(),
                      dchain_equivalent_constraint),
-      libvig_access_constraints.end());
+      lib_access_constraints.end());
 }
 
 void RSSConfigBuilder::verify_dchain_correctness(

@@ -3,11 +3,11 @@
 
 #include "cl_loop.h"
 
-#include "libvig/models/verified/vigor-time-control.h"
-#include "libvig/models/verified/double-chain-control.h"
-#include "libvig/models/verified/map-control.h"
-#include "libvig/models/verified/vector-control.h"
-#include "libvig/models/unverified/sketch-control.h"
+#include "lib/models/verified/vigor-time-control.h"
+#include "lib/models/verified/double-chain-control.h"
+#include "lib/models/verified/map-control.h"
+#include "lib/models/verified/vector-control.h"
+#include "lib/models/unverified/sketch-control.h"
 
 void loop_reset(struct Map **flows, struct Vector **flows_keys,
                 struct DoubleChain **flow_allocator, struct Sketch **sketch,

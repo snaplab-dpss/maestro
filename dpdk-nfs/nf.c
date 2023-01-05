@@ -10,24 +10,17 @@
 #include <rte_lcore.h>
 #include <rte_mbuf.h>
 
-#include "libvig/verified/boilerplate-util.h"
-#include "libvig/verified/packet-io.h"
+#include "lib/verified/boilerplate-util.h"
+#include "lib/verified/packet-io.h"
 #include "nf-log.h"
 #include "nf-util.h"
 #include "nf.h"
 
 #ifdef KLEE_VERIFICATION
-#include "libvig/models/hardware.h"
-#include "libvig/models/verified/vigor-time-control.h"
+#include "lib/models/hardware.h"
+#include "lib/models/verified/vigor-time-control.h"
 #include <klee/klee.h>
 #endif // KLEE_VERIFICATION
-
-// NFOS declares its own main method
-#ifdef NFOS
-#define MAIN nf_main
-#else // NFOS
-#define MAIN main
-#endif // NFOS
 
 // Unverified support for batching, useful for performance comparisons
 #ifndef VIGOR_BATCH_SIZE
@@ -230,7 +223,7 @@ static void worker_main(void) {
 }
 
 // Entry point
-int MAIN(int argc, char **argv) {
+int main(int argc, char **argv) {
   // Initialize the DPDK Environment Abstraction Layer (EAL)
   int ret = rte_eal_init(argc, argv);
   if (ret < 0) {

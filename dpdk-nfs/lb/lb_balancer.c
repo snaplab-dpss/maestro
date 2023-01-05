@@ -1,8 +1,8 @@
 #include "lb_balancer.h"
 #include "state.h"
 
-#include "libvig/verified/map.h"
-#include "libvig/verified/expirator.h"
+#include "lib/verified/map.h"
+#include "lib/verified/expirator.h"
 
 #include <rte_ethdev.h>
 

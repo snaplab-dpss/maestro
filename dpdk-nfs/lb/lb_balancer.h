@@ -1,9 +1,9 @@
 #ifndef _LB_BALANCER_H_INCLUDED_ // cannot use pragma once, included by VeriFast
 #define _LB_BALANCER_H_INCLUDED_
 
-#include "libvig/verified/vector.h"
-#include "libvig/verified/double-chain.h"
-#include "libvig/verified/cht.h"
+#include "lib/verified/vector.h"
+#include "lib/verified/double-chain.h"
+#include "lib/verified/cht.h"
 
 #include <rte_ether.h>
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "libvig_access.h"
+#include "lib_access.h"
 
 #include <iostream>
 #include <vector>

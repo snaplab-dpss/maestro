@@ -3,8 +3,8 @@
 
 #include <rte_byteorder.h>
 
-#include "libvig/verified/expirator.h"
-#include "libvig/unverified/expirator.h"
+#include "lib/verified/expirator.h"
+#include "lib/unverified/expirator.h"
 
 #include "nf.h"
 #include "nf-log.h"

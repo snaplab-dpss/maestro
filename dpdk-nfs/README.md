@@ -80,7 +80,7 @@ Pick the NF you want to work with by `cd`-ing to its folder, then use one of the
 | `count-loc`                | Count LoC in the NF                               | <1min                              |
 | `count-spec-loc`           | Count LoC in the specification                    | <1min                              |
 | `count-nfos-loc`           | Count LoC in the NFOS                             | <1min                              |
-| `count-libvig-loc`         | Count LoC in libVig                               | <1min                              |
+| `count-lib-loc`         | Count LoC in libVig                               | <1min                              |
 | `count-dpdk-loc`           | Count LoC in DPDK (not drivers)                   | <1min                              |
 | `count-ixgbe-loc`          | Count LoC in the ixgbe driver                     | <1min                              |
 | `count-uclibc-loc`         | Count LoC in KLEE-uClibc                          | <1min                              |
@@ -121,7 +121,7 @@ Besides the NF folders mentioned above, the repository contains:
 - `codegen`: Code generators, used as part of the Vigor build process
 - `doc`: Documentation files
 - `grub.cfg`, `linker.ld`, `pxe-boot.sh`: NFOS-related files
-- `libvig`: The libVig folder, containing `verified` code, `proof` code, `models`, and the NFOS `kernel`
+- `lib`: The libVig folder, containing `verified` code, `proof` code, `models`, and the NFOS `kernel`
 - `nf.{h,c}`, `nf-util.{h,c}`, `nf-log.h`: Skeleton code for Vigor NFs
 - `setup*`: Setup script and related files
 - `template`: Template for new Vigor NFs (see "Create your own Vigor NF" above)
@@ -248,9 +248,9 @@ This section details the justification for each figure and table in the SOSP pap
 Figure 1:
 - "NF logic" is the code in each NF's folder
 - "Packet I/O framework" is the `lib` folder in [the DPDK 17.11 repository](https://git.dpdk.org/dpdk/tree/?h=v17.11)
-- "libVig" is in `libvig`
+- "libVig" is in `lib`
 - "Driver" is a DPDK driver; we verified `drivers/net/ixgbe` in [the DPDK 17.11 repository](https://git.dpdk.org/dpdk/tree/?h=v17.11)
-- "NF-specific OS" is the NFOS in `libvig/kernel`
+- "NF-specific OS" is the NFOS in `lib/kernel`
 
 Figure 2:
 - "NF logic" / "libVig" / "System stack" have the same meanings as in Figure 1
@@ -263,7 +263,7 @@ Figure 3:
 
 Figure 4:
 - "Stateless logic" and "libVig" have the same meaning as Figure 1's "NF logic" and "libVig"
-- "libVig API" are the header files in the `libvig` folder
+- "libVig API" are the header files in the `lib` folder
 - "NF specification" has the same meaning as Figure 2's "RFC-derived specification"/"One-off properties"
 - Step 1 "Symbolic execution" is performed by KLEE, using one of the `symbex` Make targets as indicated in [Vigor NFs](#vigor-nfs)
 - Step 2 "Conversion" is performed by `validator/import.ml`

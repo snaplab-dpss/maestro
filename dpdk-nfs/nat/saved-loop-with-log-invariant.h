@@ -1,12 +1,12 @@
 #ifndef _LOOP_H_INCLUDED_
 #define _LOOP_H_INCLUDED_
-#include "libvig/containers/double-chain.h"
-#include "libvig/containers/map.h"
-#include "libvig/containers/vector.h"
-#include "libvig/containers/cht.h"
-#include "libvig/containers/lpm-dir-24-8.h"
-#include "libvig/coherence.h"
-#include "libvig/nf_time.h"
+#include "lib/containers/double-chain.h"
+#include "lib/containers/map.h"
+#include "lib/containers/vector.h"
+#include "lib/containers/cht.h"
+#include "lib/containers/lpm-dir-24-8.h"
+#include "lib/coherence.h"
+#include "lib/nf_time.h"
 #include "flow.h.gen.h"
 /*@
   fixpoint bool flow_cond(FlowIdi fid) {

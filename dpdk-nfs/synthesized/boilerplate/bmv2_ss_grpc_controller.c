@@ -24,18 +24,18 @@
 #include <rte_lcore.h>
 #include <rte_malloc.h>
 
-#include "libvig/verified/boilerplate-util.h"
-#include "libvig/verified/tcpudp_hdr.h"
-#include "libvig/verified/vigor-time.h"
-#include "libvig/verified/ether.h"
+#include "lib/verified/boilerplate-util.h"
+#include "lib/verified/tcpudp_hdr.h"
+#include "lib/verified/vigor-time.h"
+#include "lib/verified/ether.h"
 
-#include "libvig/verified/double-chain.h"
-#include "libvig/verified/vector.h"
-#include "libvig/verified/map.h"
-#include "libvig/verified/expirator.h"
-#include "libvig/verified/cht.h"
+#include "lib/verified/double-chain.h"
+#include "lib/verified/vector.h"
+#include "lib/verified/map.h"
+#include "lib/verified/expirator.h"
+#include "lib/verified/cht.h"
 
-#include "libvig/unverified/expirator.h"
+#include "lib/unverified/expirator.h"
 
 /**********************************************
  *
@@ -441,8 +441,8 @@ void nf_config_usage(void);
 void nf_config_print(void);
 
 #ifdef KLEE_VERIFICATION
-#include "libvig/models/hardware.h"
-#include "libvig/models/verified/vigor-time-control.h"
+#include "lib/models/hardware.h"
+#include "lib/models/verified/vigor-time-control.h"
 #include <klee/klee.h>
 #endif  // KLEE_VERIFICATION
 

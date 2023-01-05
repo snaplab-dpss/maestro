@@ -1,6 +1,6 @@
 #include "logger.h"
 #include "dependency.h"
-#include "libvig_access.h"
+#include "lib_access.h"
 
 #include <algorithm>
 #include <iostream>

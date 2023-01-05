@@ -1,5 +1,5 @@
 #ifdef KLEE_VERIFICATION
-#include "libvig/models/verified/map-control.h"  //for map_reset
+#include "lib/models/verified/map-control.h"  //for map_reset
 #endif                                           // KLEE_VERIFICATION
 #include <assert.h>
 #include <errno.h>
@@ -10,11 +10,11 @@
 #include <rte_common.h>
 #include <rte_ethdev.h>
 
-#include "libvig/verified/double-chain.h"
-#include "libvig/verified/map.h"
-#include "libvig/verified/vector.h"
-#include "libvig/verified/expirator.h"
-#include "libvig/verified/ether.h"
+#include "lib/verified/double-chain.h"
+#include "lib/verified/map.h"
+#include "lib/verified/vector.h"
+#include "lib/verified/expirator.h"
+#include "lib/verified/ether.h"
 
 #include "nf.h"
 #include "nf-util.h"

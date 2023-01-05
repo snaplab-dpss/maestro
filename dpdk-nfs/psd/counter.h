@@ -2,9 +2,9 @@
 #define _COUNTER_GEN_H_INCLUDED_
 
 #include <stdbool.h>
-#include "libvig/verified/boilerplate-util.h"
+#include "lib/verified/boilerplate-util.h"
 
-#include "libvig/verified/ether.h"
+#include "lib/verified/ether.h"
 
 #include <stdint.h>
 
@@ -24,7 +24,7 @@ void counter_allocate(void *obj);
 
 #ifdef KLEE_VERIFICATION
 #include <klee/klee.h>
-#include "libvig/models/str-descr.h"
+#include "lib/models/str-descr.h"
 
 extern struct str_field_descr counter_descrs[1];
 extern struct nested_field_descr counter_nests[0];

@@ -35,19 +35,19 @@
 #include <netinet/udp.h>
 #include <arpa/inet.h>
 
-#include "libvig/verified/boilerplate-util.h"
-#include "libvig/verified/tcpudp_hdr.h"
-#include "libvig/verified/vigor-time.h"
-#include "libvig/verified/ether.h"
+#include "lib/verified/boilerplate-util.h"
+#include "lib/verified/tcpudp_hdr.h"
+#include "lib/verified/vigor-time.h"
+#include "lib/verified/ether.h"
 
-#include "libvig/verified/double-chain.h"
-#include "libvig/verified/vector.h"
-#include "libvig/verified/map.h"
-#include "libvig/verified/expirator.h"
-#include "libvig/verified/cht.h"
+#include "lib/verified/double-chain.h"
+#include "lib/verified/vector.h"
+#include "lib/verified/map.h"
+#include "lib/verified/expirator.h"
+#include "lib/verified/cht.h"
 
-#include "libvig/unverified/sketch.h"
-#include "libvig/unverified/expirator.h"
+#include "lib/unverified/sketch.h"
+#include "lib/unverified/expirator.h"
 
 /**********************************************
  *

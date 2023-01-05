@@ -30,8 +30,8 @@ SHELL := /bin/bash -O extglob -O globstar -c
 ifneq (true,$(NF_NO_BASE))
 SRCS-y := $(shell echo $(SELF_DIR)/nf*.c)
 endif
-SRCS-y += $(shell echo $(SELF_DIR)/libvig/verified/*.c)
-SRCS-y += $(shell find $(SELF_DIR)/libvig/unverified -name "*.c" ! -name "*tm*" ! -name "*locks*" -printf "%p ")
+SRCS-y += $(shell echo $(SELF_DIR)/lib/verified/*.c)
+SRCS-y += $(shell find $(SELF_DIR)/lib/unverified -name "*.c" ! -name "*tm*" ! -name "*locks*" -printf "%p ")
 SRCS-y += $(NF_FILES)
 # Compiler flags
 CFLAGS += -I $(SELF_DIR)
@@ -93,13 +93,19 @@ OPT_COMMAND := opt -basicaa -basiccg -internalize \
 # if something takes longer than expected,
 # try --max-solver-time=3 --debug-report-symbdex (to avoid symbolic indices)
 VERIF_COMMAND := /usr/bin/time -v \
-                 klee -no-externals -allocate-determ \
+                 klee -no-externals
+                      -allocate-determ \
                       -allocate-determ-start-address=0x00040000000 \
-                      -allocate-determ-size=1000 -dump-call-traces \
-                      -dump-call-trace-prefixes -solver-backend=z3 \
-                      -exit-on-error -max-memory=750000 -search=dfs \
-                      -condone-undeclared-havocs --debug-report-symbdex \
-                 nf.bc
+                      -allocate-determ-size=1000 \
+                      -dump-call-traces \
+                      -dump-call-trace-prefixes \
+                      -solver-backend=z3 \
+                      -exit-on-error \
+                      -max-memory=750000 \
+                      -search=dfs \
+                      -condone-undeclared-havocs \
+                      --debug-report-symbdex \
+                      nf.bc
 
 # Cleanup after ourselves, but don't shadow the existing DPDK target
 clean-vigor:
@@ -119,6 +125,7 @@ all: clean
 #              they're not UB and DPDK depends on them)
 #              also no unused-value, DPDK triggers that...
 VERIF_FLAGS := -c -g -emit-llvm -fsanitize=signed-integer-overflow -Wno-unused-value
+VERIF_FLAGS += -msse4.2 # needed for __builtin_ia32_crc32si
 # Basic includes: NF root, KLEE
 VERIF_INCLUDES := -I $(SELF_DIR) -I $(KLEE_INCLUDE)
 # Basic defines
@@ -134,15 +141,15 @@ VERIF_FILES := $(SELF_DIR)/nf*.c
 # Specific NF
 VERIF_FILES += $(NF_FILES) *loop.c
 # Models
-VERIF_FILES += $(SELF_DIR)/libvig/models/verified/*.c \
-               $(SELF_DIR)/libvig/models/unverified/*.c \
-               $(SELF_DIR)/libvig/models/externals/*.c
+VERIF_FILES += $(SELF_DIR)/lib/models/verified/*.c \
+               $(SELF_DIR)/lib/models/unverified/*.c \
+               $(SELF_DIR)/lib/models/externals/*.c
 
 # The only thing we don't put in variables is the DPDK model headers,
 # since we don't want to use those for the other symbex targets
 symbex: clean
 	@$(COMPILE_COMMAND) $(VERIF_DEFS) $(VERIF_INCLUDES) \
-	                    -I $(SELF_DIR)/libvig/models/dpdk \
+	                    -I $(SELF_DIR)/lib/models/dpdk \
 	                    $(VERIF_FILES) $(VERIF_FLAGS)
 	@$(LINK_COMMAND)
 	@$(OPT_COMMAND)
@@ -182,9 +189,9 @@ VERIF_WITHDPDK_FILES += $(TINYNF_DIR)/code/net/82599/ixgbe.c
 # TinyNF DPDK shim file with variables
 VERIF_WITHDPDK_FILES += $(RTE_SDK)/tn_dpdk.c
 # TinyNF environment models
-VERIF_WITHDPDK_FILES += $(SELF_DIR)/libvig/models/tinynf-env/*.c
+VERIF_WITHDPDK_FILES += $(SELF_DIR)/lib/models/tinynf-env/*.c
 # Hardware models
-VERIF_WITHDPDK_FILES += $(SELF_DIR)/libvig/models/hardware.c
+VERIF_WITHDPDK_FILES += $(SELF_DIR)/lib/models/hardware.c
 # TinyNF defs
 VERIF_WITHDPDK_DEFS += -DVIGOR_SYMBEX
 ifeq ($(NF_DEVICES),2)
@@ -195,7 +202,7 @@ NF_ARGS := $(shell for i in $$(seq 1 $(NF_DEVICES)); do printf '00:00.%d ' $$(ec
 else
 # Some special DPDK includes: builtin models for built-ins DPDK uses,
 # rte_config.h because many files forget to include it
-VERIF_WITHDPDK_INCLUDES += --include=libvig/models/builtin.h \
+VERIF_WITHDPDK_INCLUDES += --include=lib/models/builtin.h \
                            --include=rte_config.h
 # Platform-independent and Linux-specific EAL
 DPDK_FILES += $(RTE_SDK)/lib/librte_eal/common/*.c \
@@ -218,9 +225,9 @@ IXGBE_FILES := $(RTE_SDK)/drivers/net/ixgbe/ixgbe_{fdir,flow,ethdev,ipsec,pf,rxt
                $(RTE_SDK)/drivers/net/ixgbe/base/ixgbe_{api,common,phy,82599}.c
 # DPDK, ixgbe, hardware models
 VERIF_WITHDPDK_FILES := $(DPDK_FILES) $(IXGBE_FILES) \
-                        $(SELF_DIR)/libvig/models/hardware.c
+                        $(SELF_DIR)/lib/models/hardware.c
 # Low-level models for specific functions
-VERIF_WITHDPDK_FILES += $(SELF_DIR)/libvig/models/dpdk-low-level.c
+VERIF_WITHDPDK_FILES += $(SELF_DIR)/lib/models/dpdk-low-level.c
 endif
 
 symbex-withdpdk: clean
@@ -262,17 +269,17 @@ count-loc:
 count-spec-loc:
 	@cloc -q spec.py
 
-count-libvig-loc:
+count-lib-loc:
 	@# Bit of a hack for this one,
 	@# cloc can\'t be given a custom language but for some reason
 	@# it knows about Pig Latin, which is never gonna happen in our codebase, so...
 	@cloc --quiet --force-lang 'Pig Latin',gh \
-	      $(SELF_DIR)/libvig/verified/* $(SELF_DIR)/libvig/proof/* | \
+	      $(SELF_DIR)/lib/verified/* $(SELF_DIR)/lib/proof/* | \
 	 sed 's/Pig Latin/VeriFast /g'
 	@echo "NOTE: Annotations == VeriFast code + C comments - \
-	       $$(grep '//[^@]' $(SELF_DIR)/libvig/verified/*.{c,h} | wc -l) \
+	       $$(grep '//[^@]' $(SELF_DIR)/lib/verified/*.{c,h} | wc -l) \
 	       (that last number is the non-VeriFast C comments)"
-	@if grep -F '/*' $(SELF_DIR)/libvig/verified/* $(SELF_DIR)/libvig/proof/* | grep -vF '/*@'; then \
+	@if grep -F '/*' $(SELF_DIR)/lib/verified/* $(SELF_DIR)/lib/proof/* | grep -vF '/*@'; then \
            echo 'ERROR: There are multiline non-VeriFast comments in the C code, \
 	         the total above is wrong!'; \
 	 fi

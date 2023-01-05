@@ -10,10 +10,10 @@
 #include "policer_config.h"
 #include "state.h"
 
-#include "libvig/verified/double-chain.h"
-#include "libvig/verified/map.h"
-#include "libvig/verified/vector.h"
-#include "libvig/verified/expirator.h"
+#include "lib/verified/double-chain.h"
+#include "lib/verified/map.h"
+#include "lib/verified/vector.h"
+#include "lib/verified/expirator.h"
 
 struct nf_config config;
 
