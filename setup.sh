@@ -261,9 +261,9 @@ source_install_llvm() {
 		rm -rf "$BUILD_DIR/llvm-project"
 		cd llvm
 		CXXFLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" \
-        ./configure --enable-optimized --disable-assertions \
+                ./configure --enable-optimized --disable-assertions \
                     --enable-targets=host --with-python='/usr/bin/python'
-		make -j$(nproc)
+		REQUIRES_RTTI=1 make -j$(nproc)
 	fi
 	echo "Done."
 }
