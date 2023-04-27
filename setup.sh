@@ -329,7 +329,7 @@ source_install_klee() {
 	. "$PATHSFILE"
 
 	cd "$BUILD_DIR"
-	git clone --recurse-submodules https://github.com/fchamicapereira/vigor-klee.git klee
+	git clone --recurse-submodules https://github.com/fchamicapereira/maestro-klee.git klee
 
 	cd klee
 	./build.sh
