@@ -182,9 +182,8 @@ int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
                vigor_time_t now, struct rte_mbuf *mbuf) {
   struct rte_ether_hdr *rte_ether_header = nf_then_get_rte_ether_header(buffer);
 
-  uint8_t *ip_options;
   struct rte_ipv4_hdr *rte_ipv4_header =
-      nf_then_get_rte_ipv4_header(rte_ether_header, buffer, &ip_options);
+      nf_then_get_rte_ipv4_header(rte_ether_header, buffer);
   if (rte_ipv4_header == NULL) {
     return device;
   }

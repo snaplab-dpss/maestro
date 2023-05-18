@@ -1,23 +1,23 @@
 #pragma once
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <assert.h>
 
-#include <rte_common.h>
 #include <rte_byteorder.h>
-#include <rte_mbuf.h>
+#include <rte_common.h>
 #include <rte_ethdev.h>
 #include <rte_ip.h>
+#include <rte_mbuf.h>
 
 #include "lib/verified/packet-io.h"
 #include "lib/verified/tcpudp_hdr.h"
 
 #ifdef KLEE_VERIFICATION
-#  include <rte_ether.h>
-#  include "lib/models/str-descr.h"
-#  include "lib/models/verified/packet-io-control.h"
+#include "lib/models/str-descr.h"
+#include "lib/models/verified/packet-io-control.h"
+#include <rte_ether.h>
 #endif // KLEE_VERIFICATION
 
 // rte_ether
@@ -62,9 +62,9 @@ static struct str_field_descr tcpudp_fields[] = {
 };
 static struct nested_field_descr rte_ether_nested_fields[] = {
   { offsetof(struct rte_ether_hdr, d_addr), 0, sizeof(uint8_t), 6,
-    "addr_bytes" },
+    "src_addr_bytes" },
   { offsetof(struct rte_ether_hdr, s_addr), 0, sizeof(uint8_t), 6,
-    "addr_bytes" }
+    "dst_addr_bytes" }
 };
 #endif // KLEE_VERIFICATION
 
@@ -101,13 +101,12 @@ static inline void *nf_borrow_next_chunk(uint8_t **p, size_t length) {
 }
 
 #ifdef KLEE_VERIFICATION
-#  define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests, tag)   \
-    packet_set_next_chunk_layout(pkt, len, fields, n_fields, nests, n_nests,   \
-                                 tag)
+#define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests, tag)     \
+  packet_set_next_chunk_layout(pkt, len, fields, n_fields, nests, n_nests, tag)
 #else // KLEE_VERIFICATION
-#  define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests,        \
-                            tag) /*nothing*/
-#endif                           // KLEE_VERIFICATION
+#define CHUNK_LAYOUT_IMPL(pkt, len, fields, n_fields, nests, n_nests,          \
+                          tag) /*nothing*/
+#endif                         // KLEE_VERIFICATION
 
 #define CHUNK_LAYOUT_N(pkt, str_name, fields, nests)                           \
   CHUNK_LAYOUT_IMPL(pkt, sizeof(struct str_name), fields,                      \
@@ -167,8 +166,26 @@ static inline struct rte_ether_hdr *nf_then_get_rte_ether_header(uint8_t **p) {
 }
 
 static inline struct rte_ipv4_hdr *
-nf_then_get_rte_ipv4_header(void *rte_ether_header_, uint8_t **p,
-                            uint8_t **ip_options) {
+nf_then_get_rte_ipv4_header(void *rte_ether_header_, uint8_t **p) {
+  struct rte_ether_hdr *rte_ether_header =
+      (struct rte_ether_hdr *)rte_ether_header_;
+
+  uint16_t unread_len = packet_get_unread_length(p);
+  if ((!nf_has_rte_ipv4_header(rte_ether_header)) |
+      (unread_len < sizeof(struct rte_ipv4_hdr))) {
+    return NULL;
+  }
+
+  CHUNK_LAYOUT(p, rte_ipv4_hdr, rte_ipv4_fields);
+  struct rte_ipv4_hdr *hdr = (struct rte_ipv4_hdr *)nf_borrow_next_chunk(
+      p, sizeof(struct rte_ipv4_hdr));
+
+  return hdr;
+}
+
+static inline struct rte_ipv4_hdr *
+nf_then_get_rte_ipv4_header_with_options(void *rte_ether_header_, uint8_t **p,
+                                         uint8_t **ip_options) {
   struct rte_ether_hdr *rte_ether_header =
       (struct rte_ether_hdr *)rte_ether_header_;
   *ip_options = NULL;

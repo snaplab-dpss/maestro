@@ -1109,8 +1109,6 @@ int sketch_locks_touch_buckets(struct SketchLocks *sketch, vigor_time_t now) {
 
       vector_locks_return(sketch->keys, offseted, saved_hash);
       vector_locks_return(sketch->buckets, offseted, saved_bucket);
-
-      return true;
     } else {
       dchain_locks_rejuvenate_index(sketch->allocators[i], bucket_index, now);
       uint32_t *bucket;
@@ -1118,9 +1116,10 @@ int sketch_locks_touch_buckets(struct SketchLocks *sketch, vigor_time_t now) {
       vector_locks_borrow(sketch->buckets, offseted, (void **)&bucket);
       (*bucket)++;
       vector_locks_return(sketch->buckets, offseted, bucket);
-      return true;
     }
   }
+
+  return true;
 }
 
 void sketch_locks_expire(struct SketchLocks *sketch, vigor_time_t time) {

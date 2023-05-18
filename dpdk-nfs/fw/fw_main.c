@@ -1,11 +1,11 @@
 #include <stdlib.h>
 
 #include "flow.h.gen.h"
-#include "fw_flowmanager.h"
 #include "fw_config.h"
-#include "nf.h"
+#include "fw_flowmanager.h"
 #include "nf-log.h"
 #include "nf-util.h"
+#include "nf.h"
 
 struct nf_config config;
 
@@ -25,9 +25,12 @@ int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
   NF_DEBUG("Flows have been expired");
 
   struct rte_ether_hdr *rte_ether_header = nf_then_get_rte_ether_header(buffer);
-  uint8_t *ip_options;
   struct rte_ipv4_hdr *rte_ipv4_header =
-      nf_then_get_rte_ipv4_header(rte_ether_header, buffer, &ip_options);
+      nf_then_get_rte_ipv4_header(rte_ether_header, buffer);
+  // uint8_t* ip_options;
+  // struct rte_ipv4_hdr *rte_ipv4_header =
+  //     nf_then_get_rte_ipv4_header_with_options(rte_ether_header, buffer,
+  //     &ip_options);
   if (rte_ipv4_header == NULL) {
     NF_DEBUG("Not IPv4, dropping");
     return device;
@@ -45,11 +48,13 @@ int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
   uint16_t dst_device;
   if (device == config.wan_device) {
     // Inverse the src and dst for the "reply flow"
-    struct FlowId id = {.src_port = tcpudp_header->dst_port,
-                        .dst_port = tcpudp_header->src_port,
-                        .src_ip = rte_ipv4_header->dst_addr,
-                        .dst_ip = rte_ipv4_header->src_addr,
-                        .protocol = rte_ipv4_header->next_proto_id, };
+    struct FlowId id = {
+      .src_port = tcpudp_header->dst_port,
+      .dst_port = tcpudp_header->src_port,
+      .src_ip = rte_ipv4_header->dst_addr,
+      .dst_ip = rte_ipv4_header->src_addr,
+      .protocol = rte_ipv4_header->next_proto_id,
+    };
 
     uint32_t dst_device_long;
     if (!flow_manager_get_refresh_flow(flow_manager, &id, now,
@@ -59,11 +64,13 @@ int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
     }
     dst_device = dst_device_long;
   } else {
-    struct FlowId id = {.src_port = tcpudp_header->src_port,
-                        .dst_port = tcpudp_header->dst_port,
-                        .src_ip = rte_ipv4_header->src_addr,
-                        .dst_ip = rte_ipv4_header->dst_addr,
-                        .protocol = rte_ipv4_header->next_proto_id, };
+    struct FlowId id = {
+      .src_port = tcpudp_header->src_port,
+      .dst_port = tcpudp_header->dst_port,
+      .src_ip = rte_ipv4_header->src_addr,
+      .dst_ip = rte_ipv4_header->dst_addr,
+      .protocol = rte_ipv4_header->next_proto_id,
+    };
     flow_manager_allocate_or_refresh_flow(flow_manager, &id, device, now);
     dst_device = config.wan_device;
   }
