@@ -37,8 +37,11 @@ SRCS-y += $(NF_FILES)
 CFLAGS += -I $(SELF_DIR)
 CFLAGS += -std=gnu11
 CFLAGS += -DCAPACITY_POW2
+ifndef DEBUG
 CFLAGS += -O3
-# CFLAGS += -O0 -g -rdynamic -DENABLE_LOG -Wfatal-errors
+else
+CFLAGS += -O0 -g -rdynamic -DENABLE_LOG -Wfatal-errors
+endif
 
 ifdef BATCH
 CFLAGS += -DVIGOR_BATCH_SIZE=$(BATCH)
