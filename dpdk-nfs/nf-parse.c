@@ -25,3 +25,11 @@ bool nf_parse_port(const char *str, uint16_t *port) {
   }
   return false;
 }
+
+bool nf_parse_proto(const char *str, uint8_t *proto) {
+  return sscanf(str, "%" SCNu8, proto) == 1;
+}
+
+bool nf_parse_device(const char *str, uint16_t *device) {
+  return sscanf(str, "%" SCNu16, device) == 1;
+}

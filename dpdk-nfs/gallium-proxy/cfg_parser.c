@@ -1,4 +1,4 @@
-#include "table_file_parser.h"
+#include "cfg_parser.h"
 
 #include "nf-log.h"
 #include "nf-parse.h"

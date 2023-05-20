@@ -3,7 +3,7 @@
 #include "nf.h"
 #include "proxy_config.h"
 #include "state.h"
-#include "table_file_parser.h"
+#include "cfg_parser.h"
 
 struct nf_config config;
 struct State *state;

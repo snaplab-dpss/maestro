@@ -1,4 +1,4 @@
-#include "proxy_config.h"
+#include "fw_config.h"
 
 #include <getopt.h>
 #include <stdio.h>
@@ -74,14 +74,14 @@ void nf_config_usage(void) {
           "[DPDK EAL options] --\n"
           "\t--lan <device>: set device to be the LAN device\n"
           "\t--wan <device>: set device to be the external one.\n"
-          "\t--capacity <n>: proxy table capacity"
+          "\t--capacity <n>: fw table capacity"
           " (default: %" PRIu32 ")\n"
           "\t--config <fname>: table configuration file.\n",
           DEFAULT_CAPACITY);
 }
 
 void nf_config_print(void) {
-  NF_INFO("\n--- Gallium Proxy Config ---\n");
+  NF_INFO("\n--- Gallium Firewall Config ---\n");
 
   NF_INFO("LAN device: %" PRIu16, config.lan_device);
   NF_INFO("WAN device: %" PRIu16, config.wan_device);

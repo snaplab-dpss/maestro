@@ -1,4 +1,4 @@
-NF_FILES := proxy_main.c proxy_config.c loop.c state.c backend.c entry.c cfg_parser.c
+NF_FILES := fw_main.c fw_config.c loop.c state.c flow.c cfg_parser.c
 
 NF_ARGS := --lan 0 \
            --wan 1 \
