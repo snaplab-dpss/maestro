@@ -4,29 +4,29 @@ bool flow_eq(void *a, void *b) {
   struct Flow *id1 = (struct Flow *)a;
   struct Flow *id2 = (struct Flow *)b;
 
-  return id1->device == id2->device && id1->src_addr == id2->src_addr &&
-         id1->dst_addr == id2->dst_addr && id1->src_port == id2->src_port &&
-         id1->dst_port == id2->dst_port && id1->proto == id2->proto;
+  return id1->src_addr == id2->src_addr && id1->dst_addr == id2->dst_addr &&
+         id1->src_port == id2->src_port && id1->dst_port == id2->dst_port &&
+         id1->device == id2->device && id1->proto == id2->proto;
 }
 
 void flow_allocate(void *obj) {
   struct Flow *id = (struct Flow *)obj;
-  id->device = 0;
   id->src_addr = 0;
   id->dst_addr = 0;
   id->src_port = 0;
   id->dst_port = 0;
+  id->device = 0;
   id->proto = 0;
 }
 
 #ifdef KLEE_VERIFICATION
 struct str_field_descr flow_descrs[] = {
-  { offsetof(struct Flow, device), sizeof(uint16_t), 0, "device" },
   { offsetof(struct Flow, src_addr), sizeof(uint32_t), 0, "src_addr" },
   { offsetof(struct Flow, dst_addr), sizeof(uint32_t), 0, "dst_addr" },
   { offsetof(struct Flow, src_port), sizeof(uint16_t), 0, "src_port" },
   { offsetof(struct Flow, dst_port), sizeof(uint16_t), 0, "dst_port" },
-  { offsetof(struct Flow, dst_port), sizeof(uint8_t), 0, "proto" },
+  { offsetof(struct Flow, device), sizeof(uint16_t), 0, "device" },
+  { offsetof(struct Flow, proto), sizeof(uint8_t), 0, "proto" },
 };
 
 struct nested_field_descr flow_nests[] = {};
@@ -53,11 +53,11 @@ unsigned flow_hash(void *obj) {
   struct Flow *id = (struct Flow *)obj;
 
   unsigned hash = 0;
-  hash = __builtin_ia32_crc32si(hash, id->device);
   hash = __builtin_ia32_crc32si(hash, id->src_addr);
   hash = __builtin_ia32_crc32si(hash, id->dst_addr);
   hash = __builtin_ia32_crc32si(hash, id->src_port);
   hash = __builtin_ia32_crc32si(hash, id->dst_port);
+  hash = __builtin_ia32_crc32si(hash, id->device);
   hash = __builtin_ia32_crc32si(hash, id->proto);
   return hash;
 }

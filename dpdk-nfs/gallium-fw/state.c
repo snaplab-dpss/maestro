@@ -36,10 +36,10 @@ struct State *alloc_state(uint32_t capacity) {
 #ifdef KLEE_VERIFICATION
   map_set_layout(ret->table, flow_descrs,
                  sizeof(flow_descrs) / sizeof(flow_descrs[0]), flow_nests,
-                 sizeof(flow_nests) / sizeof(flow_nests[0]), "flow");
+                 sizeof(flow_nests) / sizeof(flow_nests[0]), "Flow");
   vector_set_layout(ret->entries, flow_descrs,
                     sizeof(flow_descrs) / sizeof(flow_descrs[0]), flow_nests,
-                    sizeof(flow_nests) / sizeof(flow_nests[0]), "flow");
+                    sizeof(flow_nests) / sizeof(flow_nests[0]), "Flow");
 #endif // KLEE_VERIFICATION
 
   allocated_nf_state = ret;

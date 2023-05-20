@@ -43,11 +43,11 @@ int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
   }
 
   struct Flow flow = {
-    .device = device,
     .src_addr = ipv4_header->src_addr,
     .dst_addr = ipv4_header->dst_addr,
     .src_port = tcpudp_header->src_port,
     .dst_port = tcpudp_header->dst_port,
+    .device = device,
     .proto = ipv4_header->next_proto_id,
   };
 

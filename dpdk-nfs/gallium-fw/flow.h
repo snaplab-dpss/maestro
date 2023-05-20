@@ -7,11 +7,11 @@
 #include "lib/verified/boilerplate-util.h"
 
 struct Flow {
-  uint16_t device;
   uint32_t src_addr;
   uint32_t dst_addr;
   uint16_t src_port;
   uint16_t dst_port;
+  uint16_t device;
   uint8_t proto;
 };
 
