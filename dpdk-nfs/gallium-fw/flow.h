@@ -1,5 +1,5 @@
-#ifndef __ENTRY_H__
-#define __ENTRY_H__
+#ifndef __FLOW_H__
+#define __FLOW_H__
 
 #include <stdint.h>
 #include <stdbool.h>

@@ -2,7 +2,6 @@
 #define _STATE_H_INCLUDED_
 
 #include "loop.h"
-
 #include "flow.h"
 
 struct State {
