@@ -1,4 +1,5 @@
 #ifndef _SKETCH_H_INCLUDED_
+#define _SKETCH_H_INCLUDED_
 
 #include "sketch-util.h"
 

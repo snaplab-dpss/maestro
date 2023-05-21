@@ -7,7 +7,6 @@
 
 struct Backend {
   uint32_t ip;
-  uint16_t port;
 };
 
 unsigned backend_hash(void *obj);
@@ -18,6 +17,6 @@ void backend_allocate(void *obj);
 #include "lib/models/str-descr.h"
 #include <klee/klee.h>
 
-extern struct str_field_descr backend_descrs[2];
+extern struct str_field_descr backend_descrs[1];
 extern struct nested_field_descr backend_nests[0];
 #endif // KLEE_VERIFICATION

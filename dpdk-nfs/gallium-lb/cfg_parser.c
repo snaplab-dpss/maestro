@@ -9,7 +9,6 @@
 #include <stdlib.h>
 
 #define IP_STR_MAX_SIZE 16
-#define PORT_STR_MAX_SIZE 6
 
 // File parsing, is not really the kind of code we want to verify.
 #ifdef KLEE_VERIFICATION
@@ -46,65 +45,42 @@ void fill_table_from_file(struct State *state, struct nf_config *config) {
              config->table_fname);
   }
 
-  uint32_t n_entries = 0;
+  uint32_t n_backends = 0;
 
   while (!feof(file)) {
-    if (n_entries >= config->capacity) {
-      rte_exit(EXIT_FAILURE, "Too many static rules, max: %d",
-               config->capacity);
+    if (n_backends >= config->max_backends) {
+      rte_exit(EXIT_FAILURE, "Too many backends, max: %d",
+               config->max_backends);
     }
 
-    char dst_port[PORT_STR_MAX_SIZE];
     char backend_ip[IP_STR_MAX_SIZE];
-    char backend_port[PORT_STR_MAX_SIZE];
-
-    if (!consume_until_separator(file, dst_port, PORT_STR_MAX_SIZE)) {
-      NF_INFO("Cannot read destination port from file.");
-      goto finally;
-    }
 
     if (!consume_until_separator(file, backend_ip, IP_STR_MAX_SIZE)) {
       NF_INFO("Cannot read backend IP from file.");
       goto finally;
     }
 
-    if (!consume_until_separator(file, backend_port, PORT_STR_MAX_SIZE)) {
-      NF_INFO("Cannot read backend port from file.");
-      goto finally;
-    }
-
-    struct Entry *entry = 0;
     struct Backend *backend = 0;
+    struct Counter *counter = 0;
 
-    vector_borrow(state->entries, n_entries, (void **)&entry);
-    vector_borrow(state->values, n_entries, (void **)&backend);
-
-    if (!nf_parse_port(dst_port, &entry->port)) {
-      NF_INFO("Invalid destination port: %s, skip", dst_port);
-      continue;
-    }
+    vector_borrow(state->backends, n_backends, (void **)&backend);
+    vector_borrow(state->backends_counter, 0, (void **)&counter);
 
     if (!nf_parse_ipv4addr(backend_ip, &backend->ip)) {
       NF_INFO("Invalid backend IP: %s, skip", backend_ip);
       continue;
     }
 
-    if (!nf_parse_port(backend_port, &backend->port)) {
-      NF_INFO("Invalid backend port: %s, skip", backend_port);
-      continue;
-    }
+    counter->value = n_backends + 1;
 
-    map_put(state->table, entry, n_entries);
+    vector_return(state->backends, n_backends, backend);
+    vector_return(state->backends_counter, 0, counter);
 
-    vector_return(state->entries, n_entries, entry);
-    vector_return(state->values, n_entries, backend);
+    n_backends++;
 
-    n_entries++;
-
-    NF_DEBUG("Added proxy entry: %u => %u.%u.%u.%u:%u",
-             rte_be_to_cpu_16(entry->port), (backend->ip >> 0) & 0xff,
+    NF_DEBUG("Added lb backend: %u.%u.%u.%u", (backend->ip >> 0) & 0xff,
              (backend->ip >> 8) & 0xff, (backend->ip >> 16) & 0xff,
-             (backend->ip >> 24) & 0xff, rte_be_to_cpu_16(backend->port));
+             (backend->ip >> 24) & 0xff);
   }
 
 finally:

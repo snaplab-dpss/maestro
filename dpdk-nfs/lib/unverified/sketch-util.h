@@ -1,4 +1,5 @@
 #ifndef _SKETCH_UTIL_H_INCLUDED_
+#define _SKETCH_UTIL_H_INCLUDED_
 
 // Careful: SKETCH_HASHES needs to be <= SKETCH_SALTS_BANK_SIZE
 #define SKETCH_HASHES 4

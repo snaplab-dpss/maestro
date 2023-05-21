@@ -1,5 +1,4 @@
-#ifndef _STATE_H_INCLUDED_
-#define _STATE_H_INCLUDED_
+#pragma once
 
 #include "loop.h"
 
@@ -13,5 +12,3 @@ struct State {
 };
 
 struct State *alloc_state(uint32_t capacity);
-
-#endif //_STATE_H_INCLUDED_

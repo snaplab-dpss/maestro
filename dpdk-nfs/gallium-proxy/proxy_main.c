@@ -1,9 +1,9 @@
+#include "cfg_parser.h"
 #include "nf-log.h"
 #include "nf-util.h"
 #include "nf.h"
 #include "proxy_config.h"
 #include "state.h"
-#include "cfg_parser.h"
 
 struct nf_config config;
 struct State *state;
