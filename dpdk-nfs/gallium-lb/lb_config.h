@@ -12,10 +12,13 @@ struct nf_config {
   uint16_t wan_device;
 
   // LB flows capacity
-  uint32_t capacity;
+  uint32_t max_flows;
 
-  // LB backends capacity
-  uint32_t max_backends;
+  // Expiration time of flows in microseconds
+  uint32_t expiration_time;
+
+  // LB number of backends
+  uint32_t num_backends;
 
   // The file containing backends
   char table_fname[TABLE_FNAME_LEN];

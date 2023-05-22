@@ -10,7 +10,7 @@
 #include "nf.h"
 
 const uint32_t DEFAULT_FLOWS_CAPACITY = 65536;
-const uint32_t DEFAULT_BACKENDS_CAPACITY = 64;
+const uint32_t DEFAULT_EXPIRATION_TIME_US = 300000000; // 5 minutes
 
 #define PARSE_ERROR(format, ...)                                               \
   nf_config_usage();                                                           \
@@ -18,8 +18,8 @@ const uint32_t DEFAULT_BACKENDS_CAPACITY = 64;
   exit(EXIT_FAILURE);
 
 void nf_config_init(int argc, char **argv) {
-  config.capacity = DEFAULT_FLOWS_CAPACITY;
-  config.max_backends = DEFAULT_BACKENDS_CAPACITY;
+  config.max_flows = DEFAULT_FLOWS_CAPACITY;
+  config.expiration_time = DEFAULT_EXPIRATION_TIME_US;
   config.table_fname[0] = '\0'; // no static configuration
 
   uint16_t nb_devices = rte_eth_dev_count_avail();
@@ -27,12 +27,13 @@ void nf_config_init(int argc, char **argv) {
   struct option long_options[] = { { "lan", required_argument, NULL, 'l' },
                                    { "wan", required_argument, NULL, 'w' },
                                    { "capacity", required_argument, NULL, 'c' },
+                                   { "expire", required_argument, NULL, 't' },
                                    { "backends", required_argument, NULL, 'b' },
                                    { "config", required_argument, NULL, 'f' },
                                    { NULL, 0, NULL, 0 } };
 
   int opt;
-  while ((opt = getopt_long(argc, argv, "l:w:c:b:f:", long_options, NULL)) !=
+  while ((opt = getopt_long(argc, argv, "l:w:c:t:b:f:", long_options, NULL)) !=
          EOF) {
     unsigned device;
     switch (opt) {
@@ -51,17 +52,23 @@ void nf_config_init(int argc, char **argv) {
         break;
 
       case 'c':
-        config.capacity = nf_util_parse_int(optarg, "capacity", 10, '\0');
-        if (config.capacity <= 0) {
+        config.max_flows = nf_util_parse_int(optarg, "capacity", 10, '\0');
+        if (config.max_flows <= 0) {
           PARSE_ERROR("Capacity must be strictly positive.\n");
         }
         break;
 
+      case 't':
+        config.expiration_time = nf_util_parse_int(optarg, "expire", 10, '\0');
+        if (config.expiration_time == 0) {
+          PARSE_ERROR("Expiration time must be strictly positive.\n");
+        }
+        break;
+
       case 'b':
-        config.max_backends = nf_util_parse_int(optarg, "backends", 10, '\0');
-        if (config.max_backends <= 0) {
-          PARSE_ERROR(
-              "Number of maximum backends must be strictly positive.\n");
+        config.num_backends = nf_util_parse_int(optarg, "backends", 10, '\0');
+        if (config.num_backends <= 0) {
+          PARSE_ERROR("Number of backends must be strictly positive.\n");
         }
         break;
 
@@ -87,10 +94,11 @@ void nf_config_usage(void) {
           "\t--wan <device>: set device to be the external one.\n"
           "\t--capacity <n>: lb flows capacity"
           " (default: %" PRIu32 ")\n"
-          "\t--backends <n>: lb max number of backends"
+          "\t--expire <time>: flow expiration time (us)."
           " (default: %" PRIu32 ")\n"
+          "\t--backends <n>: lb number of backends\n"
           "\t--config <fname>: backends file.\n",
-          DEFAULT_FLOWS_CAPACITY, DEFAULT_BACKENDS_CAPACITY);
+          DEFAULT_FLOWS_CAPACITY, DEFAULT_EXPIRATION_TIME_US);
 }
 
 void nf_config_print(void) {
@@ -98,8 +106,9 @@ void nf_config_print(void) {
 
   NF_INFO("LAN device: %" PRIu16, config.lan_device);
   NF_INFO("WAN device: %" PRIu16, config.wan_device);
-  NF_INFO("Capacity: %" PRIu32, config.capacity);
-  NF_INFO("Max backends: %" PRIu32, config.max_backends);
+  NF_INFO("Capacity: %" PRIu32, config.max_flows);
+  NF_INFO("Expiration time (us): %" PRIu32, config.expiration_time);
+  NF_INFO("Backends: %" PRIu32, config.num_backends);
   NF_INFO("Backends file: %s", config.table_fname);
 
   NF_INFO("\n--- --- ------ ---\n");

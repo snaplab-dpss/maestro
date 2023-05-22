@@ -11,7 +11,8 @@
 
 struct State *allocated_nf_state = NULL;
 
-struct State *alloc_state(uint32_t capacity, uint32_t max_backends) {
+struct State *alloc_state(uint32_t max_flows, uint32_t expiration_time,
+                          uint32_t num_backends) {
   if (allocated_nf_state != NULL) {
     return allocated_nf_state;
   }
@@ -23,31 +24,30 @@ struct State *alloc_state(uint32_t capacity, uint32_t max_backends) {
   }
 
   ret->table = NULL;
-  if (map_allocate(flow_eq, flow_hash, capacity, &(ret->table)) == 0) {
+  if (map_allocate(flow_eq, flow_hash, max_flows, &(ret->table)) == 0) {
     return NULL;
   }
 
   ret->flows = NULL;
-  if (vector_allocate(sizeof(struct Flow), capacity, flow_allocate,
+  if (vector_allocate(sizeof(struct Flow), max_flows, flow_allocate,
                       &(ret->flows)) == 0) {
     return NULL;
   }
 
-  ret->flows_counter = NULL;
-  if (vector_allocate(sizeof(struct Counter), 1, counter_allocate,
-                      &(ret->flows_counter)) == 0) {
+  ret->allocator = NULL;
+  if (dchain_allocate(max_flows, &(ret->allocator)) == 0) {
+    return NULL;
+  }
+
+  ret->flows_backends = NULL;
+  if (vector_allocate(sizeof(struct Backend), max_flows, backend_allocate,
+                      &(ret->flows_backends)) == 0) {
     return NULL;
   }
 
   ret->backends = NULL;
-  if (vector_allocate(sizeof(struct Backend), max_backends, backend_allocate,
+  if (vector_allocate(sizeof(struct Backend), num_backends, backend_allocate,
                       &(ret->backends)) == 0) {
-    return NULL;
-  }
-
-  ret->backends_counter = NULL;
-  if (vector_allocate(sizeof(struct Counter), 1, counter_allocate,
-                      &(ret->backends_counter)) == 0) {
     return NULL;
   }
 
@@ -59,24 +59,18 @@ struct State *alloc_state(uint32_t capacity, uint32_t max_backends) {
                     sizeof(flow_descrs) / sizeof(flow_descrs[0]), flow_nests,
                     sizeof(flow_nests) / sizeof(flow_nests[0]), "flow");
   vector_set_layout(
-      ret->flows_counter, counter_descrs,
-      sizeof(counter_descrs) / sizeof(counter_descrs[0]), counter_nests,
-      sizeof(counter_nests) / sizeof(counter_nests[0]), "counter");
-  vector_set_entry_condition(ret->flows_counter, flows_counter_invariant, ret);
+      ret->flows_backends, backend_descrs,
+      sizeof(backend_descrs) / sizeof(backend_descrs[0]), backend_nests,
+      sizeof(backend_nests) / sizeof(backend_nests[0]), "flows_backends");
   vector_set_layout(
       ret->backends, backend_descrs,
       sizeof(backend_descrs) / sizeof(backend_descrs[0]), backend_nests,
       sizeof(backend_nests) / sizeof(backend_nests[0]), "backend");
-  vector_set_layout(
-      ret->backends_counter, counter_descrs,
-      sizeof(counter_descrs) / sizeof(counter_descrs[0]), counter_nests,
-      sizeof(counter_nests) / sizeof(counter_nests[0]), "counter");
-  vector_set_entry_condition(ret->backends_counter, backends_counter_invariant,
-                             ret);
 #endif // KLEE_VERIFICATION
 
-  ret->capacity = capacity;
-  ret->max_backends = max_backends;
+  ret->max_flows = max_flows;
+  ret->expiration_time = expiration_time;
+  ret->num_backends = num_backends;
 
   allocated_nf_state = ret;
   return ret;
@@ -85,9 +79,10 @@ struct State *alloc_state(uint32_t capacity, uint32_t max_backends) {
 #ifdef KLEE_VERIFICATION
 void nf_loop_iteration_border(unsigned lcore_id, vigor_time_t time) {
   loop_iteration_border(&allocated_nf_state->table, &allocated_nf_state->flows,
-                        &allocated_nf_state->flows_counter,
+                        &allocated_nf_state->allocator,
+                        &allocated_nf_state->flows_backends,
                         &allocated_nf_state->backends,
-                        &allocated_nf_state->backends_counter, lcore_id, time);
+                        allocated_nf_state->max_flows, lcore_id, time);
 }
 
 #endif // KLEE_VERIFICATION

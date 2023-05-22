@@ -48,9 +48,9 @@ void fill_table_from_file(struct State *state, struct nf_config *config) {
   uint32_t n_backends = 0;
 
   while (!feof(file)) {
-    if (n_backends >= config->max_backends) {
-      rte_exit(EXIT_FAILURE, "Too many backends, max: %d",
-               config->max_backends);
+    if (n_backends >= config->num_backends) {
+      rte_exit(EXIT_FAILURE, "Too many backends, expected: %d",
+               config->num_backends);
     }
 
     char backend_ip[IP_STR_MAX_SIZE];
@@ -61,21 +61,14 @@ void fill_table_from_file(struct State *state, struct nf_config *config) {
     }
 
     struct Backend *backend = 0;
-    struct Counter *counter = 0;
-
     vector_borrow(state->backends, n_backends, (void **)&backend);
-    vector_borrow(state->backends_counter, 0, (void **)&counter);
 
     if (!nf_parse_ipv4addr(backend_ip, &backend->ip)) {
       NF_INFO("Invalid backend IP: %s, skip", backend_ip);
       continue;
     }
 
-    counter->value = n_backends + 1;
-
     vector_return(state->backends, n_backends, backend);
-    vector_return(state->backends_counter, 0, counter);
-
     n_backends++;
 
     NF_DEBUG("Added lb backend: %u.%u.%u.%u", (backend->ip >> 0) & 0xff,
