@@ -46,6 +46,30 @@ void expire_flows(struct State *state, vigor_time_t now) {
                           last_time);
 }
 
+bool match_backend_and_expire_flow(struct State *state, struct Flow *flow,
+                                   uint32_t *new_dst_addr) {
+  int index;
+  int present = map_get(state->table, flow, &index);
+
+  if (!present) {
+    return false;
+  }
+
+  struct Backend *chosen;
+  vector_borrow(state->flows_backends, index, (void **)&chosen);
+  *new_dst_addr = chosen->ip;
+  vector_return(state->flows_backends, index, chosen);
+
+  dchain_free_index(state->allocator, index);
+
+  void *key = 0;
+  vector_borrow(state->flows, index, &key);
+  map_erase(state->table, key, &key);
+  vector_return(state->flows, index, key);
+
+  return true;
+}
+
 bool match_backend(struct State *state, struct Flow *flow,
                    uint32_t *new_dst_addr, vigor_time_t now) {
   int index;

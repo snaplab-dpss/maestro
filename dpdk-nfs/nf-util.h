@@ -10,6 +10,8 @@
 #include <rte_ethdev.h>
 #include <rte_ip.h>
 #include <rte_mbuf.h>
+#include <rte_tcp.h>
+#include <rte_udp.h>
 
 #include "lib/verified/packet-io.h"
 #include "lib/verified/tcpudp_hdr.h"
@@ -60,6 +62,24 @@ static struct str_field_descr tcpudp_fields[] = {
   { offsetof(struct tcpudp_hdr, src_port), sizeof(uint16_t), 0, "src_port" },
   { offsetof(struct tcpudp_hdr, dst_port), sizeof(uint16_t), 0, "dst_port" }
 };
+static struct str_field_descr tcp_fields[] = {
+  { offsetof(struct rte_tcp_hdr, src_port), sizeof(uint16_t), 0, "src_port" },
+  { offsetof(struct rte_tcp_hdr, dst_port), sizeof(uint16_t), 0, "dst_port" },
+  { offsetof(struct rte_tcp_hdr, sent_seq), sizeof(uint32_t), 0, "seq_no" },
+  { offsetof(struct rte_tcp_hdr, recv_ack), sizeof(uint32_t), 0, "ack_no" },
+  { offsetof(struct rte_tcp_hdr, data_off), sizeof(uint8_t), 0, "data_off" },
+  { offsetof(struct rte_tcp_hdr, tcp_flags), sizeof(uint8_t), 0, "flags" },
+  { offsetof(struct rte_tcp_hdr, rx_win), sizeof(uint16_t), 0, "window" },
+  { offsetof(struct rte_tcp_hdr, cksum), sizeof(uint16_t), 0, "checksum" },
+  { offsetof(struct rte_tcp_hdr, tcp_urp), sizeof(uint16_t), 0, "urgent_ptr" },
+};
+static struct str_field_descr udp_fields[] = {
+  { offsetof(struct rte_udp_hdr, src_port), sizeof(uint16_t), 0, "src_port" },
+  { offsetof(struct rte_udp_hdr, dst_port), sizeof(uint16_t), 0, "dst_port" },
+  { offsetof(struct rte_udp_hdr, dgram_len), sizeof(uint16_t), 0, "length" },
+  { offsetof(struct rte_udp_hdr, dgram_cksum), sizeof(uint16_t), 0,
+    "checksum" },
+};
 static struct nested_field_descr rte_ether_nested_fields[] = {
   { offsetof(struct rte_ether_hdr, d_addr), 0, sizeof(uint8_t), 6,
     "src_addr_bytes" },
@@ -73,12 +93,12 @@ void nf_log_pkt(struct rte_ether_hdr *rte_ether_header,
                 struct tcpudp_hdr *tcpudp_header);
 
 bool nf_has_rte_ipv4_header(struct rte_ether_hdr *header);
-
 bool nf_has_tcpudp_header(struct rte_ipv4_hdr *header);
+bool nf_has_tcp_header(struct rte_ipv4_hdr *header);
+bool nf_has_udp_header(struct rte_ipv4_hdr *header);
 
 void nf_set_rte_ipv4_udptcp_checksum(struct rte_ipv4_hdr *ip_header,
-                                     struct tcpudp_hdr *l4_header,
-                                     void *packet);
+                                     void *l4_header, void *packet);
 
 uintmax_t nf_util_parse_int(const char *str, const char *name, int base,
                             char next);
@@ -225,4 +245,26 @@ nf_then_get_tcpudp_header(struct rte_ipv4_hdr *ip_header, uint8_t **p) {
   CHUNK_LAYOUT(*p, tcpudp_hdr, tcpudp_fields);
   return (struct tcpudp_hdr *)nf_borrow_next_chunk(p,
                                                    sizeof(struct tcpudp_hdr));
+}
+
+static inline struct rte_tcp_hdr *
+nf_then_get_tcp_header(struct rte_ipv4_hdr *ip_header, uint8_t **p) {
+  if ((!nf_has_tcp_header(ip_header)) |
+      (packet_get_unread_length(p) < sizeof(struct rte_tcp_hdr))) {
+    return NULL;
+  }
+  CHUNK_LAYOUT(*p, rte_tcp_hdr, tcp_fields);
+  return (struct rte_tcp_hdr *)nf_borrow_next_chunk(p,
+                                                    sizeof(struct rte_tcp_hdr));
+}
+
+static inline struct rte_udp_hdr *
+nf_then_get_udp_header(struct rte_ipv4_hdr *ip_header, uint8_t **p) {
+  if ((!nf_has_udp_header(ip_header)) |
+      (packet_get_unread_length(p) < sizeof(struct rte_udp_hdr))) {
+    return NULL;
+  }
+  CHUNK_LAYOUT(*p, rte_udp_hdr, udp_fields);
+  return (struct rte_udp_hdr *)nf_borrow_next_chunk(p,
+                                                    sizeof(struct rte_udp_hdr));
 }
