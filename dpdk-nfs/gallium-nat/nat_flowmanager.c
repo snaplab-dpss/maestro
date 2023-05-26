@@ -21,15 +21,17 @@ bool allocate_flow(struct State *state, struct Flow *flow,
     return false;
   }
 
-  struct Flow *key = 0;
-  vector_borrow(state->flows, counter->value, (void **)&key);
-  memcpy((void *)key, (void *)flow, sizeof(struct Flow));
-  map_put(state->table, key, counter->value);
-  vector_return(state->flows, counter->value, key);
-
-  *external_port = rte_be_to_cpu_16(counter->value);
+  int current_counter = counter->value;
   counter->value++;
   vector_return(state->port_counter, 0, counter);
+
+  struct Flow *key = 0;
+  vector_borrow(state->flows, current_counter, (void **)&key);
+  memcpy((void *)key, (void *)flow, sizeof(struct Flow));
+  map_put(state->table, key, current_counter);
+  vector_return(state->flows, current_counter, key);
+
+  *external_port = rte_be_to_cpu_16(current_counter);
 
   return true;
 }
@@ -47,16 +49,6 @@ bool internal_get(struct State *state, struct Flow *flow,
 
 bool external_get(struct State *state, uint16_t external_port,
                   struct Flow *out_flow) {
-  struct Counter *counter = 0;
-  vector_borrow(state->port_counter, 0, (void **)&counter);
-
-  if (external_port >= counter->value) {
-    vector_return(state->port_counter, 0, counter);
-    return false;
-  }
-
-  vector_return(state->port_counter, 0, counter);
-
   struct Flow *key = 0;
   vector_borrow(state->flows, external_port, (void **)&key);
   memcpy((void *)out_flow, (void *)key, sizeof(struct Flow));
