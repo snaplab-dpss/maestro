@@ -219,7 +219,7 @@ source_install_z3() {
 	if  [ ! -f "build/z3" ] || [ ! "z3-$(build/z3 --version | cut -f3 -d' ')" = "$Z3_RELEASE" ];	then
 		python3 scripts/mk_make.py -p "$BUILD_DIR/z3/build"
 		cd build
-		make -kj || make
+		make -kj$(nproc) || make
 		make install
 	fi
 
@@ -307,7 +307,7 @@ source_install_klee_uclibc() {
     	cat "$f" >> "libc/stdio/$(basename "$f")"
     done		
 	
-	make -kj
+	make -kj$(nproc)
 	echo "Done."
 }
 
