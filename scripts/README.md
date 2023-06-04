@@ -33,3 +33,5 @@ $ docker run \
 	maestro \
 	sudo build/apps/nop-sn
 ```
+
+docker run --rm --privileged -v /mnt:/mnt -v /lib/firmware:/lib/firmware/ -v /sys/devices/system:/sys/devices/system -v /dev:/dev -it maestro /bin/bash

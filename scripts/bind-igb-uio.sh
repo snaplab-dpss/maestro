@@ -51,13 +51,8 @@ shutdown_iface() {
 bind_dpdk_drivers() {
 	pcie_dev=$1
 
-	# Make sure we have the kernel headers.
-	# The first 2 get us the uio kernel module, the last 
-	# allows us to compile the igb_uio kernel module in DPDK.
-	apt install -y \
-		linux-generic \
-		linux-headers-generic \
-		linux-headers-$KERNEL_VERSION
+	# Make sure we have the right kernel headers.
+	apt install -y linux-headers-$KERNEL_VERSION
 
 	if ! grep "igb_uio" -q <<< $(lsmod); then
 		echo "[$pcie_dev] Loading kernel module igb_uio"
