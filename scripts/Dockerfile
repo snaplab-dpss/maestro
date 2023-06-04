@@ -37,6 +37,13 @@ RUN pip3 install numpy scapy
 COPY generate-nf.sh /home/user/
 RUN /home/user/generate-nf.sh nop
 RUN /home/user/generate-nf.sh sbridge
+RUN /home/user/generate-nf.sh bridge
+RUN /home/user/generate-nf.sh pol
+RUN /home/user/generate-nf.sh fw
+RUN /home/user/generate-nf.sh nat
+RUN /home/user/generate-nf.sh lb
+RUN /home/user/generate-nf.sh psd
+RUN /home/user/generate-nf.sh cl
 
 COPY --chown=user:user bind-igb-uio.sh /home/user/
 COPY --chown=user:user allocate-hugepages.sh /home/user/
