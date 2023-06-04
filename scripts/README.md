@@ -10,6 +10,8 @@ $ docker run \
 	-v /dev:/dev \
 	--env DEV0={{PCIE DEVICE ID}} \
 	--env DEV1={{PCIE DEVICE ID}} \
+	--env HUGE=1 \
+	-it \
 	maestro \
 	sudo {{NF}}
 ```
@@ -26,6 +28,8 @@ $ docker run \
 	-v /dev:/dev \
 	--env DEV0=0000:d8:00.0 \
 	--env DEV1=0000:d8:00.1 \
+	--env HUGE=1 \
+	-it \
 	maestro \
 	sudo build/apps/nop-sn
 ```

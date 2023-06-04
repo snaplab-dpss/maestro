@@ -30,7 +30,7 @@ ENV MAESTRO_DIR=/home/user/maestro
 
 # Setting default python version
 RUN sudo update-alternatives --install /usr/bin/python python /usr/bin/python3.8 1
-RUN sudo apt-get -y install vim lshw kmod iproute2
+RUN sudo apt-get -y install vim lshw kmod iproute2 net-tools
 RUN pip3 install numpy scapy
 
 # Pre generate all parallel implementations

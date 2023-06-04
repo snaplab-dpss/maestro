@@ -49,6 +49,9 @@ shutdown_iface() {
 bind_dpdk_drivers() {
 	pcie_dev=$1
 
+	# make sure we have the kernel headers
+	apt install linux-headers-$(uname -r)
+
 	if ! grep "igb_uio" -q <<< $(lsmod); then
 		echo "[$pcie_dev] Loading kernel module igb_uio"
 		modprobe uio
@@ -56,7 +59,13 @@ bind_dpdk_drivers() {
 		if ! grep -q "$(uname -r)" <<< $(ls $RTE_SDK/lib/modules/); then
 			echo "[$pcie_dev] igb_uio kernel module not found. Recompiling DPDK."
 			pushd $RTE_SDK > /dev/null
-				make install -j$(nproc) T=x86_64-native-linuxapp-gcc DESTDIR=. MAKE_PAUSE=n
+				make install \
+					-j$(nproc) \
+					T=x86_64-native-linuxapp-gcc \
+					DESTDIR=. \
+					MAKE_PAUSE=n \
+					CONFIG_RTE_KNI_KMOD=y \
+					CONFIG_RTE_EAL_IGB_UIO=y
 			popd > /dev/null
 		fi
 
