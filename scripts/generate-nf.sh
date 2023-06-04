@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -euo pipefail
-
 NF=$1
 
 if [ $# -eq 0 ]; then
@@ -25,14 +23,13 @@ if [ ! -d "$NF_PATH" ]; then
 fi
 
 MAESTRO="$MAESTRO_DIR/dpdk-nfs/synthesized/tools/maestro.py"
-OUT_DIR="$MAESTRO_DIR/apps"
-
+OUT_DIR="$MAESTRO_DIR/build/apps"
 
 setup() {
 	mkdir -p $OUT_DIR
-	pushd "$MAESTRO_DIR/dpdk-nfs/synthesized" >/dev/null
+	pushd "$MAESTRO_DIR/dpdk-nfs/synthesized"
 		make maestro -j
-	popd >/dev/null
+	popd
 }
 
 generate() {
@@ -40,8 +37,12 @@ generate() {
 	nf_path=$2
 	target=$3
 
+	nf_out="$OUT_DIR/$nf_name-$target"
+
 	$MAESTRO $nf_path --target $target
-	cp "$MAESTRO_DIR/dpdk-nfs/synthesized/build/app/nf" "$OUT_DIR/$nf_name-$target"
+	cp "$MAESTRO_DIR/dpdk-nfs/synthesized/build/app/nf" "$nf_out"
+
+	echo "Generated $nf_out"
 }
 
 setup

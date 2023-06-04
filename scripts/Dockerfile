@@ -36,13 +36,16 @@ RUN pip3 install numpy scapy
 # Pre generate all parallel implementations
 COPY generate-nf.sh /home/user/
 RUN /home/user/generate-nf.sh nop
+RUN /home/user/generate-nf.sh sbridge
 
-COPY bind-igb_uio.sh /home/user/
+COPY --chown=user:user bind-igb-uio.sh /home/user/
+COPY --chown=user:user allocate-hugepages.sh /home/user/
+COPY --chown=user:user check-tsx.sh /home/user/
+COPY --chown=user:user entrypoint.sh /home/user/
 
-RUN echo '#!/bin/bash \n\
-. /home/user/maestro/build/paths.sh \n\
-sudo -E /home/user/bind-igb_uio.sh $DEV0 $DEV1 \n\
-exec "$@"' >> /home/user/entrypoint.sh
+RUN chmod +x /home/user/bind-igb-uio.sh
+RUN chmod +x /home/user/allocate-hugepages.sh
+RUN chmod +x /home/user/check-tsx.sh
 RUN chmod +x /home/user/entrypoint.sh
 
 SHELL [ "/bin/bash", "-c" ]

@@ -14,19 +14,23 @@ fi
 
 if [ $# -eq 0 ]; then
 	program="$(basename "$(test -L "$0" && readlink "$0" || echo "$0")")"
-	echo "Usage: $program [pcie devices...]"
+	echo "Usage: $program [pcie devices]"
 	exit 1
 fi
 
-HUGEPAGES="/mnt/hugepages2M"
-
 check_pcie_dev() {
 	pcie_dev=$1
+
+	if [ -z "$pcie_dev" ]; then
+		return 1
+	fi
 	
 	if ! lshw -class network -businfo -quiet | grep -q "$pcie_dev"; then
 		echo "[$pcie_dev] PCIe device not found in lshw"
-		exit 1
+		return 1
 	fi
+
+	return 0
 }
 
 shutdown_iface() {
@@ -39,27 +43,6 @@ shutdown_iface() {
 	else
 		echo "[$pcie_dev] Bringing interface $iface down"
 		sudo ifconfig $iface down
-	fi
-}
-
-allocate_hugepages() {
-	echo "Allocating hugepages..."
-
-	mkdir -p $HUGEPAGES
-	mount -t hugetlbfs -o pagesize=2M none $HUGEPAGES
-
-	# ~64 MB of hugepages
-	su -c "echo 4092 > /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugepages"
-	su -c "echo 4092 > /sys/devices/system/node/node1/hugepages/hugepages-2048kB/nr_hugepages"
-
-	allocated=$(grep "HugePages_Total" /proc/meminfo | awk '{print $2}')
-
-	if [ "$allocated" -eq 0 ]; then
-		echo "Hugepage allocation failed"
-		echo "/proc/meminfo content:"
-		echo ""
-		grep "Huge" /proc/meminfo
-		echo ""
 	fi
 }
 
@@ -84,17 +67,9 @@ bind_dpdk_drivers() {
 	$RTE_SDK/sbin/dpdk-devbind -b igb_uio $pcie_dev
 }
 
-setup_for_performance() {
-	echo "Setting up for performance mode..."
-	echo "performance" | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor >/dev/null
-}
-
-allocate_hugepages
-setup_for_performance
-
-echo "Binding $@ to igb_uio..."
 for pcie_dev in "$@"; do
-	check_pcie_dev "$pcie_dev"
-	shutdown_iface "$pcie_dev"
-	bind_dpdk_drivers "$pcie_dev"
+	if check_pcie_dev "$pcie_dev"; then
+		shutdown_iface "$pcie_dev"
+		bind_dpdk_drivers "$pcie_dev"
+	fi
 done
