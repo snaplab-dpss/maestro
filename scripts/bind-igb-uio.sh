@@ -18,6 +18,8 @@ if [ $# -eq 0 ]; then
 	exit 1
 fi
 
+KERNEL_VERSION=$(uname -r)
+
 check_pcie_dev() {
 	pcie_dev=$1
 
@@ -42,21 +44,27 @@ shutdown_iface() {
 		echo "[$pcie_dev] No kernel network interface"
 	else
 		echo "[$pcie_dev] Bringing interface $iface down"
-		sudo ifconfig $iface down
+		ifconfig $iface down || true
 	fi
 }
 
 bind_dpdk_drivers() {
 	pcie_dev=$1
 
-	# make sure we have the kernel headers
-	apt install linux-headers-$(uname -r)
+	# Make sure we have the kernel headers.
+	# The first 2 get us the uio kernel module, the last 
+	# allows us to compile the igb_uio kernel module in DPDK.
+	apt install -y \
+		linux-generic \
+		linux-headers-generic \
+		linux-headers-$KERNEL_VERSION
 
 	if ! grep "igb_uio" -q <<< $(lsmod); then
 		echo "[$pcie_dev] Loading kernel module igb_uio"
-		modprobe uio
 
-		if ! grep -q "$(uname -r)" <<< $(ls $RTE_SDK/lib/modules/); then
+		dpdk_mods="$$RTE_SDK/lib/modules/"
+
+		if [ ! -d $dpdk_mods ] || [ ! grep -q "$KERNEL_VERSION" <<< $(ls $dpdk_mods) ]; then
 			echo "[$pcie_dev] igb_uio kernel module not found. Recompiling DPDK."
 			pushd $RTE_SDK > /dev/null
 				make install \
@@ -69,7 +77,8 @@ bind_dpdk_drivers() {
 			popd > /dev/null
 		fi
 
-		insmod $RTE_SDK/lib/modules/$(uname -r)/extra/dpdk/igb_uio.ko
+		modprobe uio
+		insmod $RTE_SDK/lib/modules/$KERNEL_VERSION/extra/dpdk/igb_uio.ko
 	fi
 
 	echo "[$pcie_dev] Binding to igb_uio"
