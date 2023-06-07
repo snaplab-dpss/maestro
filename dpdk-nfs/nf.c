@@ -40,7 +40,8 @@
     /* concretize the device to avoid leaking symbols into DPDK */             \
     uint16_t VIGOR_DEVICE =                                                    \
         klee_range(0, VIGOR_DEVICES_COUNT, "VIGOR_DEVICE");                    \
-    concretize_devices(&VIGOR_DEVICE, VIGOR_DEVICES_COUNT);                    \
+    uint16_t CONCRETE_VIGOR_DEVICE = VIGOR_DEVICE;                             \
+    concretize_devices(&CONCRETE_VIGOR_DEVICE, VIGOR_DEVICES_COUNT);           \
     stub_hardware_receive_packet(VIGOR_DEVICE);
 #define VIGOR_LOOP_END                                                         \
   stub_hardware_reset_receive(VIGOR_DEVICE);                                   \
@@ -52,7 +53,8 @@
     vigor_time_t VIGOR_NOW = current_time();                                   \
     unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();                  \
     for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT;        \
-         VIGOR_DEVICE++) {
+         VIGOR_DEVICE++) {                                                     \
+      unsigned CONCRETE_VIGOR_DEVICE = VIGOR_DEVICE;
 #define VIGOR_LOOP_END                                                         \
   }                                                                            \
   }
@@ -146,12 +148,12 @@ static void worker_main(void) {
 #if VIGOR_BATCH_SIZE == 1
   VIGOR_LOOP_BEGIN
   struct rte_mbuf *mbuf;
-  if (rte_eth_rx_burst(VIGOR_DEVICE, 0, &mbuf, 1) != 0) {
+  if (rte_eth_rx_burst(CONCRETE_VIGOR_DEVICE, 0, &mbuf, 1) != 0) {
     uint8_t *data = rte_pktmbuf_mtod(mbuf, uint8_t *);
     packet_state_total_length(data, &(mbuf->pkt_len));
 
     uint16_t dst_device =
-        nf_process(mbuf->port, &data, mbuf->pkt_len, VIGOR_NOW, mbuf);
+        nf_process(VIGOR_DEVICE, &data, mbuf->pkt_len, VIGOR_NOW, mbuf);
     nf_return_all_chunks(data);
 
     if (dst_device == VIGOR_DEVICE) {

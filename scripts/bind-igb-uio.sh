@@ -57,7 +57,7 @@ bind_dpdk_drivers() {
 	if ! grep "igb_uio" -q <<< $(lsmod); then
 		echo "[$pcie_dev] Loading kernel module igb_uio"
 
-		dpdk_mods="$$RTE_SDK/lib/modules/"
+		dpdk_mods="$RTE_SDK/lib/modules/"
 
 		if [ ! -d $dpdk_mods ] || [ ! grep -q "$KERNEL_VERSION" <<< $(ls $dpdk_mods) ]; then
 			echo "[$pcie_dev] igb_uio kernel module not found. Recompiling DPDK."
