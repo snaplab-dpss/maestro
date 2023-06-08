@@ -425,6 +425,9 @@ package_install \
 	cloc \
 	time
 
+pip3 install numpy
+pip3 install scapy
+
 # Clean things
 clean_dpdk
 clean_z3
