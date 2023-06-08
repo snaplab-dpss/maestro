@@ -159,6 +159,7 @@ source_install_dpdk() {
 			;;
 		'linux')
 			package_install linux-headers-generic
+			package_install "linux-headers-$KERNEL_VERSION"
 			;;
 	esac
 
@@ -190,9 +191,14 @@ source_install_dpdk() {
 			patch -p 1 < "$p"
 		done
 
+
+
 		# Compile
 		make config T=x86_64-native-linuxapp-gcc MAKE_PAUSE=n
-		make install -j T=x86_64-native-linuxapp-gcc MAKE_PAUSE=n DESTDIR=.
+		make install -j T=x86_64-native-linuxapp-gcc MAKE_PAUSE=n DESTDIR=. \
+			CONFIG_RTE_KNI_KMOD=y \
+			CONFIG_RTE_EAL_IGB_UIO=y \
+			CONFIG_RTE_LIBRTE_MLX5_PMD=y
 
 		echo "$DPDK_RELEASE" > .version
 	fi
