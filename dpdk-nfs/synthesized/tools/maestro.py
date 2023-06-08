@@ -61,10 +61,10 @@ def error():
 	exit(1)
 
 def build_maestro():
-	subprocess.call([ "make", "maestro" ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+	subprocess.call([ "make", "maestro" ], cwd=SYNTHESIZED_DIR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def clean_maestro():
-	subprocess.call([ "make", "clean-maestro" ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+	subprocess.call([ "make", "clean-maestro" ], cwd=SYNTHESIZED_DIR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
   
 def symbex(nf):
 	subprocess.Popen("rm -rf klee-*", shell=True, cwd=os.path.abspath(nf), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
