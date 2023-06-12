@@ -159,7 +159,7 @@ source_install_dpdk() {
 			;;
 		'linux')
 			package_install linux-headers-generic
-			package_install "linux-headers-$KERNEL_VERSION"
+			package_install "linux-headers-$(uname -r)"
 			;;
 	esac
 
