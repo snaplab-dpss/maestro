@@ -167,7 +167,9 @@ source_install_dpdk() {
 	package_install \
 		gperf \
 		libgoogle-perftools-dev \
-		libpcap-dev
+		libpcap-dev \
+		rdma-core \
+		libibverbs-dev
 
 	# Ensure environment is correct.
 	add_var_to_paths_file 'RTE_TARGET' 'x86_64-native-linuxapp-gcc'
