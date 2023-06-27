@@ -17,8 +17,20 @@ NF_PROCESS_NAME := nf
 # Default value for arguments
 NF_DEVICES ?= 2
 
+# Output directory
+OUT_DIR=build
+
 # DPDK stuff
-include $(RTE_SDK)/mk/rte.vars.mk
+ifneq ($(shell pkg-config --exists libdpdk && echo 0),0)
+    @echo "Error: pkg-config could not find dpdk."
+    exit 1
+endif
+
+PKGCONF ?= pkg-config
+PC_FILE := $(shell $(PKGCONF) --path libdpdk 2>/dev/null)
+CFLAGS  += $(shell $(PKGCONF) --cflags libdpdk)
+LDFLAGS  = $(shell $(PKGCONF) --static --libs libdpdk)
+LDFLAGS += -L$(RTE_SDK)/$(RTE_TARGET)
 
 # Same name for everyone, makes it easier to run them all with the same script
 APP := nf
@@ -60,12 +72,16 @@ ifeq ($(CC),gcc)
 CFLAGS += -fno-if-conversion -fno-if-conversion2
 endif
 
-# It seems the DPDK makefiles really don't like being recursively invoked -
-# and benchmarking invokes make run;
-# so we just don't include the DPDK makefile if we're benchmarking
-ifeq (,$(findstring benchmark-,$(MAKECMDGOALS)))
-include $(RTE_SDK)/mk/rte.extapp.mk
-endif
+.PHONY: $(OUT_DIR)/$(APP)
+
+all: $(OUT_DIR)/$(APP)
+
+$(OUT_DIR)/$(APP): $(SRCS-y) $(PC_FILE)
+	@mkdir -p $(OUT_DIR)
+	@$(CC) $(CFLAGS) $(SRCS-y) -o $@ $(LDFLAGS)
+
+clean:
+	@$(CLEAN_ALL_COMMAND)
 
 # =========================================
 # Verification general commands and targets
@@ -73,7 +89,7 @@ endif
 
 # Cleanup
 CLEAN_BUILD_ARTIFACTS_COMMAND := rm -rf *.bc *.os *.ll
-CLEAN_ALL_COMMAND := $(CLEAN_BUILD_ARTIFACTS_COMMAND) && rm -rf *.bdd *.gv
+CLEAN_ALL_COMMAND := $(CLEAN_BUILD_ARTIFACTS_COMMAND) && rm -rf *.bdd *.gv $(OUT_DIR)
 # Compilation
 COMPILE_COMMAND := clang
 # Linking with klee-uclibc, but without some methods we are modeling
@@ -119,15 +135,6 @@ VERIF_COMMAND := /usr/bin/time -v \
                       -condone-undeclared-havocs \
                       --debug-report-symbdex \
                       nf.bc
-
-# Cleanup after ourselves, but don't shadow the existing DPDK target
-clean-vigor:
-	@$(CLEAN_ALL_COMMAND)
-clean: clean-vigor
-
-# Built-in DPDK default target,
-# make it clean every time because our dependency tracking is nonexistent...
-all: clean
 
 # =======================
 # Symbex with DPDK models
@@ -264,9 +271,7 @@ validate:
 # =======
 
 run: all
-	@sudo ./build/app/nf $(NF_ARGS) || true
-
-
+	@sudo ./$(OUT_DIR)/$(APP) $(NF_ARGS) || true
 
 # ======================
 # Counting lines of code
@@ -334,7 +339,7 @@ bdd: symbex
 		klee-last/*.call_path
 
 %.i: %.c
-	@mkdir -p build/app
-	gcc -E $(filter-out -O3 -c,$(CFLAGS)) $^ -o build/app/$@
+	@mkdir -p $(OUT_DIR)/
+	gcc -E $(filter-out -O3 -c,$(CFLAGS)) $^ -o $(OUT_DIR)/$@
 
 pre-processor: all $(NF_FILES:.c=.i)
