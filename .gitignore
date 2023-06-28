@@ -45,3 +45,4 @@ Makefile.nf
 *.bdd
 build
 *.vscode
+.vagrant

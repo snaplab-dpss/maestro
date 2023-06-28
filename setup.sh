@@ -22,6 +22,9 @@ LLVM_RELEASE='3.4.2'
 Z3_RELEASE='z3-4.5.0'
 OCAML_RELEASE='4.06.0'
 
+DPDK_REPO="https://github.com/fchamicapereira/dpdk.git"
+DPDK_BRANCH="synapse"
+
 # Detect the running operating system
 # stdout: 'windows', 'docker' or 'linux'
 detect_os() {
@@ -168,42 +171,34 @@ source_install_dpdk() {
 		gperf \
 		libgoogle-perftools-dev \
 		libpcap-dev \
-		rdma-core \
-		libibverbs-dev
+		meson \
+		pkg-config
+	
+	DPDK_DIR="$BUILD_DIR/dpdk/"
+	TARGET=x86_64-native-linuxapp-gcc
+	DPDK_BUILD_DIR="$DPDK_DIR/$TARGET"
 
 	# Ensure environment is correct.
-	add_var_to_paths_file 'RTE_TARGET' 'x86_64-native-linuxapp-gcc'
-	add_var_to_paths_file 'RTE_SDK' "$BUILD_DIR/dpdk"
+	add_var_to_paths_file 'RTE_TARGET' "$TARGET"
+	add_var_to_paths_file 'RTE_SDK' "$DPDK_DIR"
+	add_multiline_var_to_paths_file 'PKG_CONFIG_PATH' "$DPDK_BUILD_DIR/lib/x86_64-linux-gnu/pkgconfig/"
 
 	# shellcheck source=../paths.sh
 	. "$PATHSFILE"
 
-	# Get, Patch and Compile
-	if [ ! -f dpdk/.version ] || [ "$(cat dpdk/.version)" != "$DPDK_RELEASE" ]
-	then
-		# get sources
-		rm -rf dpdk
-		curl -s "https://fast.dpdk.org/rel/dpdk-$DPDK_RELEASE.tar.xz" | tar xJf -
-		mv "dpdk-$DPDK_RELEASE" dpdk
+	rm -rf $DPDK_DIR
+	git clone $DPDK_REPO -b $DPDK_BRANCH $DPDK_DIR
 
-		# patch
-		cd dpdk
-		for p in "$SCRIPT_DIR"/setup/dpdk.*.patch;
-		do
-			patch -p 1 < "$p"
-		done
-
-
-
+	pushd $DPDK_DIR
 		# Compile
-		make config T=x86_64-native-linuxapp-gcc MAKE_PAUSE=n
-		make install -j T=x86_64-native-linuxapp-gcc MAKE_PAUSE=n DESTDIR=. \
-			CONFIG_RTE_KNI_KMOD=y \
-			CONFIG_RTE_EAL_IGB_UIO=y \
-			CONFIG_RTE_LIBRTE_MLX5_PMD=y
+		meson setup "$TARGET" --prefix="$DPDK_BUILD_DIR"
 
-		echo "$DPDK_RELEASE" > .version
-	fi
+		pushd "$DPDK_BUILD_DIR"
+			ninja
+			ninja install
+		popd
+	popd
+
 	echo "Done."
 }
 
