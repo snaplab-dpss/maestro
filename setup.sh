@@ -21,6 +21,7 @@ KLEE_UCLIBC_RELEASE='klee_uclibc_v1.2'
 LLVM_RELEASE='3.4.2'
 Z3_RELEASE='z3-4.5.0'
 OCAML_RELEASE='4.06.0'
+GCC_VERSION=10
 
 DPDK_REPO="https://github.com/fchamicapereira/dpdk.git"
 DPDK_BRANCH="synapse"
@@ -95,9 +96,34 @@ package_install() {
 }
 
 # Update list of available packages.
-# XXX: Make the package manager depend on "$OS".
 package_sync() {
 	sudo apt-get update -qq
+
+	# Common dependencies
+	package_install \
+		build-essential \
+		curl \
+		wget \
+		git \
+		wget \
+		libgoogle-perftools-dev \
+		python2.7 \
+		python3 \
+		python3-pip \
+		parallel \
+		gcc-multilib \
+		graphviz \
+		libpcap-dev \
+		libnuma-dev \
+		cmake \
+		ca-certificates \
+		software-properties-common \
+		patch \
+		cloc \
+		time
+	
+	pip3 install numpy
+	pip3 install scapy
 }
 
 source_paths_in_profile() {
@@ -116,10 +142,24 @@ create_build_dir() {
 	mkdir -p $BUILD_DIR
 }
 
+set_gcc_version() {
+	package_install gcc-$GCC_VERSION g++-$GCC_VERSION
+	
+	sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-$GCC_VERSION 100
+	sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-$GCC_VERSION 100
+
+	sudo update-alternatives --set gcc /usr/bin/gcc-$GCC_VERSION
+	sudo update-alternatives --set g++ /usr/bin/g++-$GCC_VERSION
+
+	sudo update-alternatives --auto gcc
+	sudo update-alternatives --auto g++
+}
+
 installation_setup() {
 	create_build_dir
 	create_paths_file
 	source_paths_in_profile
+	set_gcc_version
 }
 
 # Checks if a variable is set in a file. If it is not in the file, add it with
@@ -404,32 +444,6 @@ clean_rs3() {
 # Environment
 package_sync
 installation_setup
-
-# Common dependencies
-package_install \
-	build-essential \
-	curl \
-	wget \
-	git \
-	wget \
-	libgoogle-perftools-dev \
-	python2.7 \
-	python3 \
-	python3-pip \
-	parallel \
-	gcc-multilib \
-	graphviz \
-	libpcap-dev \
-	libnuma-dev \
-	cmake \
-	ca-certificates \
-	software-properties-common \
-	patch \
-	cloc \
-	time
-
-pip3 install numpy
-pip3 install scapy
 
 # Clean things
 clean_dpdk

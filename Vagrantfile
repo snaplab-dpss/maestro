@@ -6,7 +6,8 @@ VAGRANTFILE_API_VERSION = "2"
 
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   # config.vm.box = "ubuntu/lunar64"
-  config.vm.box = "ubuntu/focal64"
+  config.vm.box = "ubuntu/jammy64"
+  # config.vm.box = "ubuntu/focal64"
   
   # If true, then any SSH connections made will enable agent forwarding.
   # Default value: false

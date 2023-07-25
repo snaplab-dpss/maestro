@@ -1,0 +1,21 @@
+version: "3.2"
+services:
+    maestro:
+        build: .
+        image: maestro
+        volumes:
+            - type: bind
+              source: ~/.gitconfig
+              target: /home/docker/.gitconfig
+              read_only: true
+            - type: bind
+              source: ~/.ssh
+              target: /home/docker/.ssh
+              read_only: true
+            - ~/.Xauthority:/home/docker/.Xauthority
+        environment:
+            DISPLAY: $DISPLAY
+        network_mode: "host"
+        stdin_open: true
+        tty: true
+        privileged: true
