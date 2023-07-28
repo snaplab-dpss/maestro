@@ -1,6 +1,8 @@
 #ifndef _STATE_H_INCLUDED_
 #define _STATE_H_INCLUDED_
+
 #include "loop.h"
+
 struct State {
   struct Map* fm;
   struct Vector* fv;
@@ -11,4 +13,4 @@ struct State {
 };
 
 struct State* alloc_state(int max_flows, uint32_t fw_device);
-#endif//_STATE_H_INCLUDED_
+#endif  //_STATE_H_INCLUDED_

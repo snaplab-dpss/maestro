@@ -17,14 +17,12 @@
 void nf_config_init(int argc, char **argv) {
   uint16_t nb_devices = rte_eth_dev_count_avail();
 
-  struct option long_options[] = {
-      {"lan", required_argument, NULL, 'l'},
-      {"wan", required_argument, NULL, 'w'},
-      {NULL, 0, NULL, 0}};
+  struct option long_options[] = {{"lan", required_argument, NULL, 'l'},
+                                  {"wan", required_argument, NULL, 'w'},
+                                  {NULL, 0, NULL, 0}};
 
   int opt;
-  while ((opt = getopt_long(argc, argv, "pl:", long_options,
-                            NULL)) != EOF) {
+  while ((opt = getopt_long(argc, argv, "pl:", long_options, NULL)) != EOF) {
     unsigned device;
     switch (opt) {
       case 'l':

@@ -16,11 +16,11 @@ unsigned DynamicValue_hash(void *obj);
 bool DynamicValue_eq(void *a, void *b);
 void DynamicValue_allocate(void *obj);
 
-#define LOG_DYNAMICVALUE(obj, p)                                               \
-  ;                                                                            \
-  p("{");                                                                      \
-  p("bucket_size: %d", obj->bucket_size);                                      \
-  p("bucket_time: %d", obj->bucket_time);                                      \
+#define LOG_DYNAMICVALUE(obj, p)          \
+  ;                                       \
+  p("{");                                 \
+  p("bucket_size: %d", obj->bucket_size); \
+  p("bucket_time: %d", obj->bucket_time); \
   p("}");
 
 #ifdef KLEE_VERIFICATION
@@ -29,6 +29,6 @@ void DynamicValue_allocate(void *obj);
 
 extern struct str_field_descr DynamicValue_descrs[2];
 extern struct nested_field_descr DynamicValue_nests[0];
-#endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION
 
-#endif //_DynamicValue_GEN_H_INCLUDED_
+#endif  //_DynamicValue_GEN_H_INCLUDED_

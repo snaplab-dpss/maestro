@@ -31,4 +31,4 @@ void loop_iteration_border(struct Map **flows, struct Vector **flows_keys,
                            uint32_t dev_count, unsigned int lcore_id,
                            vigor_time_t time);
 
-#endif //_PSD_LOOP_H_INCLUDED_
+#endif  //_PSD_LOOP_H_INCLUDED_

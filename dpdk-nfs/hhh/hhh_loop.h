@@ -33,4 +33,4 @@ void loop_iteration_border(struct Map ***subnet_indexers,
                            uint32_t capacity, uint32_t dev_count,
                            unsigned int lcore_id, vigor_time_t time);
 
-#endif //_HHH_LOOP_H_INCLUDED_
+#endif  //_HHH_LOOP_H_INCLUDED_

@@ -1,4 +1,4 @@
-NF_FILES := nat_main.c nat_config.c nat_flowmanager.c flow.h.gen.c loop.c state.c
+NF_FILES := nat_main.c nat_config.c nat_flowmanager.c flow.c loop.c state.c
 
 NF_AUTOGEN_SRCS := flow.h
 

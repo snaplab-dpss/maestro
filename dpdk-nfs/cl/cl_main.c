@@ -127,11 +127,13 @@ int nf_process(uint16_t device, uint8_t **buffer, uint16_t packet_length,
     NF_DEBUG("Outgoing packet. Not limiting clients.");
     return config.wan_device;
   } else if (device == config.wan_device) {
-    struct flow flow = {.src_port = tcpudp_header->src_port,
-                        .dst_port = tcpudp_header->dst_port,
-                        .src_ip = rte_ipv4_header->src_addr,
-                        .dst_ip = rte_ipv4_header->dst_addr,
-                        .protocol = rte_ipv4_header->next_proto_id, };
+    struct flow flow = {
+        .src_port = tcpudp_header->src_port,
+        .dst_port = tcpudp_header->dst_port,
+        .src_ip = rte_ipv4_header->src_addr,
+        .dst_ip = rte_ipv4_header->dst_addr,
+        .protocol = rte_ipv4_header->next_proto_id,
+    };
 
     int fwd = limit_clients(&flow, now);
 

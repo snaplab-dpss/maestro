@@ -1,7 +1,7 @@
 #include <stdlib.h>
 
 #include "nf.h"
-#include "flow.h.gen.h"
+#include "flow.h"
 #include "nat_flowmanager.h"
 #include "nat_config.h"
 #include "nf-log.h"

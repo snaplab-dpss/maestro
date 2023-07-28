@@ -1,6 +1,6 @@
 #ifdef KLEE_VERIFICATION
 #include "lib/models/verified/map-control.h"  //for map_reset
-#endif                                           // KLEE_VERIFICATION
+#endif                                        // KLEE_VERIFICATION
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
@@ -162,7 +162,9 @@ struct {
   const char mac_addr[18];
   const int device_from;
   const int device_to;
-} static_rules[] = {{"00:00:00:00:00:00", 0, 0}, };
+} static_rules[] = {
+    {"00:00:00:00:00:00", 0, 0},
+};
 
 static void read_static_ft_from_array(struct Map *stat_map,
                                       struct Vector *stat_keys,

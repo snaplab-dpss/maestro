@@ -13,7 +13,8 @@ void counter_allocate(void *obj) { (uintptr_t) obj; }
 
 #ifdef KLEE_VERIFICATION
 struct str_field_descr counter_descrs[] = {
-    {offsetof(struct counter, value), sizeof(uint32_t), 0, "value"}, };
+    {offsetof(struct counter, value), sizeof(uint32_t), 0, "value"},
+};
 struct nested_field_descr counter_nests[] = {};
 unsigned counter_hash(void *obj) {
   klee_trace_ret();

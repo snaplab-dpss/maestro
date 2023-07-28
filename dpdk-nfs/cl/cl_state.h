@@ -16,4 +16,4 @@ struct State {
 
 struct State *alloc_state(uint32_t max_flows, uint32_t sketch_capacity,
                           uint16_t max_clients, uint32_t dev_count);
-#endif //_STATE_H_INCLUDED_
+#endif  //_STATE_H_INCLUDED_

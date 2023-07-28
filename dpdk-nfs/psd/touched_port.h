@@ -23,6 +23,6 @@ unsigned touched_port_hash(void *obj);
 
 extern struct str_field_descr touched_port_descrs[2];
 extern struct nested_field_descr touched_port_nests[0];
-#endif // KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION
 
-#endif //_TOUCHED_PORT_GEN_H_INCLUDED_
+#endif  //_TOUCHED_PORT_GEN_H_INCLUDED_

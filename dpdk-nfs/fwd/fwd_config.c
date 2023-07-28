@@ -17,11 +17,10 @@
 void nf_config_init(int argc, char **argv) {
   uint16_t nb_devices = rte_eth_dev_count_avail();
 
-  struct option long_options[] = {
-      {"eth-dest", required_argument, NULL, 'm'},
-      {"lan", required_argument, NULL, 'l'},
-      {"wan", required_argument, NULL, 'w'},
-      {NULL, 0, NULL, 0}};
+  struct option long_options[] = {{"eth-dest", required_argument, NULL, 'm'},
+                                  {"lan", required_argument, NULL, 'l'},
+                                  {"wan", required_argument, NULL, 'w'},
+                                  {NULL, 0, NULL, 0}};
 
   config.device_macs = (struct rte_ether_addr *)calloc(
       nb_devices, sizeof(struct rte_ether_addr));
@@ -88,7 +87,6 @@ void nf_config_print(void) {
 
   NF_INFO("LAN device: %" PRIu16, config.lan_device);
   NF_INFO("WAN device: %" PRIu16, config.wan_device);
-
 
   uint16_t nb_devices = rte_eth_dev_count_avail();
   for (uint16_t dev = 0; dev < nb_devices; dev++) {

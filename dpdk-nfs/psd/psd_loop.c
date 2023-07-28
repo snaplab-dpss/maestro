@@ -86,4 +86,4 @@ void loop_iteration_border(struct Map **srcs, struct Vector **srcs_keys,
                          ports, ports_key, capacity, max_ports, dev_count,
                          &lcore_id, &time);
 }
-#endif//KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION

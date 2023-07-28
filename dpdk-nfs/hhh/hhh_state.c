@@ -12,7 +12,7 @@
 
 bool dyn_val_condition(void *value, int index, void *state) {
   struct DynamicValue *v = value;
-  return (0 <= v->bucket_time)AND(v->bucket_time <= recent_time())
+  return (0 <= v->bucket_time) AND(v->bucket_time <= recent_time())
       AND(v->bucket_size <= 3750000000);
 }
 

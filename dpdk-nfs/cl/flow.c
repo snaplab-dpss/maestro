@@ -6,9 +6,9 @@ bool flow_eq(void *a, void *b) {
   struct flow *id1 = (struct flow *)a;
   struct flow *id2 = (struct flow *)b;
 
-  return (id1->src_port == id2->src_port)AND(id1->dst_port == id2->dst_port)
+  return (id1->src_port == id2->src_port) AND(id1->dst_port == id2->dst_port)
       AND(id1->src_ip == id2->src_ip) AND(id1->dst_ip == id2->dst_ip)
-      AND(id1->protocol == id2->protocol);
+          AND(id1->protocol == id2->protocol);
 }
 
 void flow_allocate(void *obj) {
@@ -26,7 +26,8 @@ struct str_field_descr flow_descrs[] = {
     {offsetof(struct flow, dst_port), sizeof(uint16_t), 0, "dst_port"},
     {offsetof(struct flow, src_ip), sizeof(uint32_t), 0, "src_ip"},
     {offsetof(struct flow, dst_ip), sizeof(uint32_t), 0, "dst_ip"},
-    {offsetof(struct flow, protocol), sizeof(uint8_t), 0, "protocol"}, };
+    {offsetof(struct flow, protocol), sizeof(uint8_t), 0, "protocol"},
+};
 struct nested_field_descr flow_nests[] = {};
 unsigned flow_hash(void *obj) {
   klee_trace_ret();

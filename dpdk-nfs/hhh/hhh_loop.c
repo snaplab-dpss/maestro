@@ -85,4 +85,4 @@ void loop_iteration_border(struct Map ***subnet_indexers,
   loop_invariant_produce(subnet_indexers, allocators, subnet_buckets, subnets,
                          n_subnets, capacity, dev_count, &lcore_id, &time);
 }
-#endif//KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION

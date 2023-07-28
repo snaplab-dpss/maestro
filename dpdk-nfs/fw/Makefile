@@ -1,4 +1,4 @@
-NF_FILES := fw_main.c fw_config.c fw_flowmanager.c flow.h.gen.c loop.c state.c
+NF_FILES := fw_main.c fw_config.c fw_flowmanager.c flow.c loop.c state.c
 
 NF_AUTOGEN_SRCS := flow.h
 

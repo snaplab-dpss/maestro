@@ -47,13 +47,6 @@ RUN sudo apt-get -y install \
 
 RUN sudo dpkg-reconfigure --frontend noninteractive tzdata
 
-# Setting up for tmux
-RUN echo "set -g default-terminal \"screen-256color\"" >> /home/docker/.tmux.conf
-RUN echo "set-option -g default-shell /bin/bash" >> /home/docker/.tmux.conf
-
-# Source the profile on open
-RUN echo "source ~/.profile" >> /home/docker/.bashrc
-
 ###########################
 #  Building dependencies  #
 ###########################
@@ -61,7 +54,8 @@ RUN echo "source ~/.profile" >> /home/docker/.bashrc
 COPY --chown=docker:docker . maestro
 WORKDIR /home/docker/maestro
 
-RUN ./setup.sh
+RUN git submodule update --init --recursive
+RUN ./build.sh
 
 ###########################
 #     Additional tools    #
@@ -69,6 +63,12 @@ RUN ./setup.sh
 
 # If you want to install additional packages or augment the container in any other way,
 # do it here so that you don't have to rebuild everything from scratch.
+
+# Setting up for tmux
+RUN echo "set -g default-terminal \"screen-256color\"" >> /home/docker/.tmux.conf
+RUN echo "set-option -g default-shell /bin/bash" >> /home/docker/.tmux.conf
+
+RUN pip3 install scapy
 
 # Run bash on open
 SHELL ["/bin/bash", "-c"]

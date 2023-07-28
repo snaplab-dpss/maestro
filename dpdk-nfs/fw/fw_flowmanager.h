@@ -1,7 +1,7 @@
 #ifndef _FLOWMANAGER_H_INCLUDED_
 #define _FLOWMANAGER_H_INCLUDED_
 
-#include "flow.h.gen.h"
+#include "flow.h"
 #include "lib/verified/vigor-time.h"
 
 #include <stdbool.h>
@@ -22,4 +22,4 @@ bool flow_manager_get_refresh_flow(struct FlowManager *manager,
                                    struct FlowId *id, vigor_time_t time,
                                    uint32_t *internal_device);
 
-#endif //_FLOWMANAGER_H_INCLUDED_
+#endif  //_FLOWMANAGER_H_INCLUDED_

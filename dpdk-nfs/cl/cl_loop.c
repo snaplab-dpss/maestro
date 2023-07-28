@@ -71,4 +71,4 @@ void loop_iteration_border(struct Map **flows, struct Vector **flows_keys,
   loop_invariant_produce(flows, flows_keys, flow_allocator, sketch, max_flows,
                          dev_count, &lcore_id, &time);
 }
-#endif//KLEE_VERIFICATION
+#endif  // KLEE_VERIFICATION

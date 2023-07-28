@@ -1,4 +1,4 @@
-NF_FILES := policer_main.c policer_config.c dynamic_value.h.gen.c ip_addr.h.gen.c state.c
+NF_FILES := policer_main.c policer_config.c dynamic_value.c ip_addr.c state.c
 
 NF_ARGS := --wan 0 \
            --lan 1 \

@@ -1,8 +1,20 @@
 # get current dir, see https://stackoverflow.com/a/8080530
 SELF_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
+# Output directory
+OUT_DIR=build
+
 # DPDK stuff
-include $(RTE_SDK)/mk/rte.vars.mk
+ifneq ($(shell pkg-config --exists libdpdk && echo 0),0)
+    @echo "Error: pkg-config could not find dpdk."
+    exit 1
+endif
+
+PKGCONF ?= pkg-config
+PC_FILE := $(shell $(PKGCONF) --path libdpdk 2>/dev/null)
+CFLAGS  += $(shell $(PKGCONF) --cflags libdpdk)
+LDFLAGS  = $(shell $(PKGCONF) --static --libs libdpdk)
+LDFLAGS += -L$(RTE_SDK)/$(RTE_TARGET)
 
 # Same name for everyone, makes it easier to run them all with the same script
 APP := nf
@@ -26,4 +38,10 @@ ifeq ($(CC),gcc)
 CFLAGS += -fno-if-conversion -fno-if-conversion2
 endif
 
-include $(RTE_SDK)/mk/rte.extapp.mk
+.PHONY: $(OUT_DIR)/$(APP)
+
+all: $(OUT_DIR)/$(APP)
+
+$(OUT_DIR)/$(APP): $(SRCS-y) $(PC_FILE)
+	@mkdir -p $(OUT_DIR)
+	@$(CC) $(CFLAGS) $(SRCS-y) -o $@ $(LDFLAGS)
