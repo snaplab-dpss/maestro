@@ -46,6 +46,8 @@ Makefile.nf
 build
 *.vscode
 .vagrant
+env
+paths.sh
 
 # Don't ignore anything inside the deps folder
 !deps/*
