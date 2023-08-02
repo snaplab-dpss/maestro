@@ -1,0 +1,4 @@
+.vagrant
+paths.sh
+env
+Vagrantfile

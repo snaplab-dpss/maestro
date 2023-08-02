@@ -1,3 +1,4 @@
+#ifdef KLEE_VERIFICATION
 #include <klee/klee.h>
 
 #include "loop.h"
@@ -61,3 +62,4 @@ void loop_iteration_border(struct Map** fm, struct Vector** fv,
   loop_invariant_produce(fm, fv, int_devices, heap, max_flows, fw_device,
                          &lcore_id, &time);
 }
+#endif  // KLEE_VERIFICATION
