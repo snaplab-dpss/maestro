@@ -29,6 +29,7 @@ PenaltyExcessCharacter: 1000000
 PenaltyReturnTypeOnItsOwnLine: 60
 PointerBindsToType: false
 SpacesBeforeTrailingComments: 1
+SortIncludes: false
 Cpp11BracedListStyle: false
 Standard:        Cpp03
 IndentWidth:     2

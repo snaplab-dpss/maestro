@@ -20,7 +20,7 @@ function test_hhh {
 
   python3 hhh.py --output hhh.pcap --sz $TARGET_SUBNET_SZ
 
-  sudo ./build/app/nf \
+  sudo ./build/nf \
         --vdev "net_tap0,iface=test_wan" \
         --vdev "net_tap1,iface=test_lan" \
         --lcores 0 \
@@ -48,10 +48,11 @@ function test_hhh {
 }
 
 make clean
-make EXTRA_CFLAGS="-O0 -g -DENABLE_LOG"
+make DEBUG=1 -j$(nproc)
 
 link=1000000
 subnets=0x808080 # /8 /16 /24
+# subnets=0x20000000 # /30
 threshold=70
 burst=500000
 

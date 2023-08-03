@@ -16,7 +16,7 @@ function test_cl {
 
   python3 cl.py --output cl.pcap
 
-  sudo ./build/app/nf \
+  sudo ./build/nf \
         --vdev "net_tap0,iface=test_wan" \
         --vdev "net_tap1,iface=test_lan" \
         --lcores 0 \
@@ -44,7 +44,7 @@ function test_cl {
 }
 
 make clean
-make EXTRA_CFLAGS="-O0 -g -DENABLE_LOG"
+make DEBUG=1 -j$(nproc)
 
 max_clients=64
 test_cl $max_clients

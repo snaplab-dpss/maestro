@@ -131,12 +131,12 @@ void DependencyManager::process_packet_dependency(
       return;
     } else if (offset >= 12 && offset <= 15) {
       auto processed = PacketDependencyProcessed(
-          dependency, RS3::R3S_PF_IPV4_SRC, 15 - offset);
+          dependency, RS3::RS3_PF_IPV4_SRC, 15 - offset);
       add_dependency(processed.clone().get());
       return;
     } else if (offset >= 16 && offset <= 19) {
       auto processed = PacketDependencyProcessed(
-          dependency, RS3::R3S_PF_IPV4_DST, 19 - offset);
+          dependency, RS3::RS3_PF_IPV4_DST, 19 - offset);
       add_dependency(processed.clone().get());
       return;
     } else if (offset >= 20) {
@@ -165,12 +165,12 @@ void DependencyManager::process_packet_dependency(
   else if (layer == 4 && protocol == 0x06) {
     if (offset <= 1) {
       auto processed =
-          PacketDependencyProcessed(dependency, RS3::R3S_PF_TCP_SRC, offset);
+          PacketDependencyProcessed(dependency, RS3::RS3_PF_TCP_SRC, offset);
       add_dependency(processed.clone().get());
       return;
     } else if (offset >= 2 && offset <= 3) {
       auto processed = PacketDependencyProcessed(
-          dependency, RS3::R3S_PF_TCP_DST, offset - 2);
+          dependency, RS3::RS3_PF_TCP_DST, offset - 2);
       add_dependency(processed.clone().get());
       return;
     } else {
@@ -185,12 +185,12 @@ void DependencyManager::process_packet_dependency(
   else if (layer == 4 && protocol == 0x11) {
     if (offset <= 1) {
       auto processed =
-          PacketDependencyProcessed(dependency, RS3::R3S_PF_UDP_SRC, offset);
+          PacketDependencyProcessed(dependency, RS3::RS3_PF_UDP_SRC, offset);
       add_dependency(processed.clone().get());
       return;
     } else if (offset >= 2 && offset <= 3) {
       auto processed = PacketDependencyProcessed(
-          dependency, RS3::R3S_PF_UDP_DST, offset - 2);
+          dependency, RS3::RS3_PF_UDP_DST, offset - 2);
       add_dependency(processed.clone().get());
       return;
     } else {

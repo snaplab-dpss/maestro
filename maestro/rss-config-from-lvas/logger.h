@@ -20,17 +20,12 @@ const Color MAGENTA = "\033[35m";
 const Color CYAN = "\033[36m";
 const Color WHITE = "\033[37m";
 const Color BOLD = "\033[1m";
-}
+} // namespace Colors
 
 class Logger {
 
 public:
-  enum Level {
-    DEBUG,
-    LOG,
-    WARNING,
-    ERROR
-  };
+  enum Level { DEBUG, LOG, WARNING, ERROR };
 
   std::ostream stream;
 
@@ -81,9 +76,9 @@ template <typename T> Logger &operator<<(Logger &logger, T &&t) {
   if (logger.level < Logger::MINIMUM_LOG_LEVEL)
     return logger;
 
-  //logger.stream << logger.color;
+  // logger.stream << logger.color;
   logger.stream << std::forward<T>(t);
-  //logger.stream << Colors::RESET;
+  // logger.stream << Colors::RESET;
   logger.stream.flush();
 
   return logger;
@@ -92,4 +87,4 @@ template <typename T> Logger &operator<<(Logger &logger, T &&t) {
 template <typename T> Logger &operator<<(Logger &&logger, T &&t) {
   return logger << std::forward<T>(t);
 }
-}
+} // namespace ParallelSynthesizer

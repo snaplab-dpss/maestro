@@ -17,7 +17,7 @@ function test_policer {
   RATE=$1
   BURST=$2
 
-  sudo ./build/app/nf \
+  sudo ./build/nf \
         --vdev "net_tap0,iface=test_wan" \
         --vdev "net_tap1,iface=test_lan" \
         --no-huge \
@@ -66,7 +66,7 @@ function test_policer {
 }
 
 make clean
-make ADDITIONAL_FLAGS="-DSTOP_ON_RX_0 -g"
+make DEBUG=1
 
 test_policer 12500 500000
 

@@ -73,8 +73,8 @@ public:
     return dependencies;
   }
 
-  std::vector<RS3::R3S_pf_t> get_associated_dependencies_packet_fields() const {
-    std::vector<RS3::R3S_pf_t> packet_fields;
+  std::vector<RS3::RS3_pf_t> get_associated_dependencies_packet_fields() const {
+    std::vector<RS3::RS3_pf_t> packet_fields;
 
     for (auto dependency : dependencies) {
       if (dependency->should_ignore()) {
@@ -105,8 +105,8 @@ public:
   }
 
   const std::shared_ptr<PacketDependency>
-  get_dependency_compatible_with_packet(RS3::R3S_cfg_t cfg,
-                                        RS3::R3S_packet_ast_t packet) const {
+  get_dependency_compatible_with_packet(RS3::RS3_cfg_t cfg,
+                                        RS3::RS3_packet_ast_t packet) const {
     std::shared_ptr<PacketDependency> compatible_dependency;
     RS3::Z3_ast pf_ast;
 
@@ -127,12 +127,12 @@ public:
           dynamic_cast<PacketDependencyProcessed *>(dependency.get());
       const auto packet_field = processed->get_packet_field();
 
-      RS3::R3S_status_t status =
-          R3S_packet_extract_pf(cfg, packet, packet_field, &pf_ast);
+      RS3::RS3_status_t status =
+          RS3_packet_extract_pf(cfg, packet, packet_field, &pf_ast);
 
-      assert(status != RS3::R3S_STATUS_SUCCESS || !compatible_dependency);
+      assert(status != RS3::RS3_STATUS_SUCCESS || !compatible_dependency);
 
-      if (status == RS3::R3S_STATUS_SUCCESS) {
+      if (status == RS3::RS3_STATUS_SUCCESS) {
         compatible_dependency = dependency;
         break;
       }
@@ -228,10 +228,10 @@ public:
     return non_packet_dependencies_expressions;
   }
 
-  std::vector<RS3::R3S_pf_t> get_packet_fields(unsigned int device) const {
+  std::vector<RS3::RS3_pf_t> get_packet_fields(unsigned int device) const {
     assert(device == devices.first || device == devices.second);
 
-    std::vector<RS3::R3S_pf_t> packet_fields;
+    std::vector<RS3::RS3_pf_t> packet_fields;
     auto packet_chunk_id = devices.first == device ? packet_chunks_ids.first
                                                    : packet_chunks_ids.second;
 
@@ -254,7 +254,7 @@ public:
     return packet_fields;
   }
 
-  bool has_packet_field(RS3::R3S_pf_t packet_field) const {
+  bool has_packet_field(RS3::RS3_pf_t packet_field) const {
     return has_packet_field(packet_field, devices.first) ||
            has_packet_field(packet_field, devices.second);
   }
@@ -272,7 +272,7 @@ public:
     return false;
   }
 
-  bool has_packet_field(RS3::R3S_pf_t packet_field, unsigned int device) const {
+  bool has_packet_field(RS3::RS3_pf_t packet_field, unsigned int device) const {
     return get_packet_dependency_expression(device, packet_field) != nullptr;
   }
 
@@ -297,7 +297,7 @@ public:
 
   const PacketDependenciesExpression *
   get_packet_dependency_expression(unsigned int device,
-                                   RS3::R3S_pf_t packet_field) const {
+                                   RS3::RS3_pf_t packet_field) const {
     int target_packet_chunk_id;
 
     if (device == devices.first) {
@@ -398,7 +398,7 @@ public:
                          const RS3::Z3_context &_ctx)
       : Constraint(LibvigAccessType, _ctx),
 
-        // This is an optimization for the solver (libR3S).
+        // This is an optimization for the solver (libRS3).
         // It comes up with a solution faster if the inter-devices constraints
         // have the bigger device first.
         first(_first.get_src_device() >= _second.get_src_device() ? _first

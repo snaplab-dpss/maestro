@@ -6,39 +6,46 @@ import glob
 import re
 import argparse
 import subprocess
+import sys
 
 from time import perf_counter
 from datetime import timedelta 
 
+from colorama import Fore, Style
+
 from tools import get_balanced_lut
 from tools import build
 
-def run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **pargs):
-	process = subprocess.run(args, stdout=stdout, stderr=stderr, **pargs)
+def __print(nf, msg, color):
+	print(color, end="")
+	print(f"[{pathlib.Path(nf).stem}] ", end="")
+	print(msg, end="")
+	print(Style.RESET_ALL)
 
-	if process.returncode != 0:
-		print(process.stderr)
-	
+def log(nf, msg=""):
+	__print(nf, msg, Fore.LIGHTBLUE_EX)
+
+def error(nf, msg=""):
+	__print(nf, msg, Fore.RED)
+
+def run(args, stdout=sys.stdout, stderr=sys.stderr, **pargs):
+	if stdout is None: stdout = subprocess.DEVNULL
+	if stderr is None: stderr = subprocess.DEVNULL
+
+	process = subprocess.run(args, stdout=stdout, stderr=stderr, **pargs)
 	return process.returncode
 
 # env vars
 KLEE_DIR = os.getenv("KLEE_DIR")
-
-if not KLEE_DIR and os.getenv("KLEE_INCLUDE"):
-	KLEE_DIR = f"{os.getenv('KLEE_INCLUDE')}/../"
-
-elif not KLEE_DIR:
-	print("Missing KLEE_DIR env var. Exiting.")
-	exit(1)
 
 MAESTRO_DIR = pathlib.Path(__file__).parent.absolute()
 
 BUILD_DIR = f"{MAESTRO_DIR}/build/maestro"
 BUILD_SYNTHESIZED_DIR = f"{MAESTRO_DIR}/build/synthesized"
 
-run([ "rm", "-rf", BUILD_SYNTHESIZED_DIR ])
-run([ "mkdir", "-p", BUILD_DIR ])
-run([ "mkdir", "-p", BUILD_SYNTHESIZED_DIR ])
+KLEE_CALL_PATH_ANALYZER = f"{KLEE_DIR}/Release/bin/analyze-call-paths"
+KLEE_BDD_TO_C           = f"{KLEE_DIR}/Release/bin/bdd-to-c"
+RSS_CONFIG_FROM_LVA     = f"{BUILD_DIR}/rss-config-from-lvas"
 
 CHOICE_SEQUENTIAL     = "seq"
 CHOICE_SHARED_NOTHING = "sn"
@@ -61,61 +68,59 @@ RSS_KEY_LEN       = 52
 
 COMPATIBLE_OPTS = [ "ETH_RSS_NONFRAG_IPV4_TCP", "ETH_RSS_NONFRAG_IPV4_UDP" ]
 
-def error(msg=None):
-	if msg:
-		print(msg)
-	print("Exiting...")
-	exit(1)
-
-def build_maestro():
-	run([ "make", "maestro" ], cwd=MAESTRO_DIR)
+def build_maestro(nf):
+	retcode = run([ "make" ], cwd=MAESTRO_DIR, stdout=None)
+	if retcode != 0:
+		error(nf, "Failed Maestro compilation")
+		exit(1)
 
 def clean_maestro():
-	run([ "make", "clean-maestro" ], cwd=MAESTRO_DIR)
+	run([ "make", "clean" ], cwd=MAESTRO_DIR)
 
 def symbex(nf, rerun=False):
 	call_paths_dir = f"{nf}/klee-last"
+	skipped = True
 
 	if not os.path.exists(call_paths_dir) or rerun:
-		print("[*] Running symbolic execution")
+		log(nf, "Running symbolic execution")
 		run("rm -rf klee-*", shell=True, cwd=os.path.abspath(nf))
 		code = run([ "make", "symbex" ], cwd=os.path.abspath(nf))
-		if code != 0: error()
+		skipped = False
+		
+		if code != 0:
+			exit(1)
 
 	assert os.path.exists(call_paths_dir)
 	call_paths = glob.glob(f"{call_paths_dir}/*.call_path")
 	call_paths.sort(key=lambda f: int(re.sub('\D', '', f)))
 
-	return call_paths
+	return call_paths, skipped
 
 def analyze_call_paths(nf, call_paths):
-	print("[*] Analyzing call paths")
+	log(nf, "Analyzing call paths")
 
-	analyze 		= f"{KLEE_DIR}/Release/bin/analyse-libvig-call-paths"
-	analyze_args	= [ os.path.abspath(cp) for cp in call_paths ]
+	analyzer_args = [ os.path.abspath(cp) for cp in call_paths ]
 
 	lva = open(LVA, mode="w")
-	code = run([ analyze ] + analyze_args, stdout=lva)
+	code = run([ KLEE_CALL_PATH_ANALYZER ] + analyzer_args, stdout=lva)
 	
-	if code != 0: error()
+	if code != 0:
+		exit(1)
+
 	lva.close()
 
-def rss_conf_from_lvas():
-	print("[*] Finding RSS configuration")
-
-	rss_conf_from_lva = f"{BUILD_DIR}/rss-config-from-lvas"
+def rss_conf_from_lvas(nf):
+	log(nf, "Finding RSS configuration")
 
 	rss_conf = open(RSS_CONF, mode='w')
-	code = run([ rss_conf_from_lva, LVA ], stdout=rss_conf)
+	code = run([ RSS_CONFIG_FROM_LVA, LVA ], stdout=rss_conf)
 	rss_conf.close()
 
 	return code == 0
 
 def rss_conf_random(devices):
-	rss_conf_from_lva = f"{BUILD_DIR}/rss-config-from-lvas"
-	
 	rss_conf = open(RSS_CONF, mode='w')
-	code = run([ rss_conf_from_lva, "--rand", str(devices) ], stdout=rss_conf)
+	code = run([ RSS_CONFIG_FROM_LVA, "--rand", str(devices) ], stdout=rss_conf)
 	rss_conf.close()
 
 	return code == 0
@@ -179,12 +184,12 @@ def synthesize_rss_conf(target):
 def synthesize_nf(nf, call_paths, target):
 	assert(call_paths)
 
-	bdd_to_c      = f"{KLEE_DIR}/Release/bin/bdd-to-c"
 	bdd_to_c_args = f"-out={SYNTHESIZED} -xml={SYNTHESIZED_XML} -target={target} {' '.join(call_paths)}"
 
-	code = run([ bdd_to_c ] + bdd_to_c_args.split(' '))
+	code = run([ KLEE_BDD_TO_C ] + bdd_to_c_args.split(' '))
 	
-	if code != 0: error()
+	if code != 0:
+		exit(1)
 
 	synthesized_file    = open(SYNTHESIZED, mode='r')
 	synthesized_content = synthesized_file.read()
@@ -256,6 +261,19 @@ def bundle_everything(nf):
 	makefile.write(MAKEFILE)
 	makefile.close()
 
+def setup(nf):
+	global KLEE_DIR
+
+	if not KLEE_DIR and os.getenv("KLEE_INCLUDE"):
+		KLEE_DIR = f"{os.getenv('KLEE_INCLUDE')}/../"
+	elif not KLEE_DIR:
+		error(nf, "Missing KLEE_DIR env var. Exiting.")
+		exit(1)
+
+	run([ "rm", "-rf", BUILD_SYNTHESIZED_DIR ])
+	run([ "mkdir", "-p", BUILD_DIR ])
+	run([ "mkdir", "-p", BUILD_SYNTHESIZED_DIR ])
+
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description='Parallelize a Vigor NF.')
 	
@@ -298,13 +316,14 @@ if __name__ == "__main__":
 	args.nf = os.path.abspath(args.nf)
 
 	if args.balance and not os.path.exists(args.balance):
-		error(f"Error: no such file or directory \"{args.balance}\"")
+		error(args.nf, f"Error: no such file or directory \"{args.balance}\"")
 
-	build_maestro()
+	setup(args.nf)
+	build_maestro(args.nf)
 
 	t_start = perf_counter()
 
-	call_paths = symbex(args.nf, rerun=args.symbex)
+	call_paths, skipped_symbex = symbex(args.nf, rerun=args.symbex)
 	t_symbex = perf_counter()
 
 	if args.target != CHOICE_SEQUENTIAL:
@@ -312,7 +331,7 @@ if __name__ == "__main__":
 		t_analyze_call_paths = perf_counter()
 
 		if args.target == CHOICE_SHARED_NOTHING:
-			success = rss_conf_from_lvas()
+			success = rss_conf_from_lvas(args.nf)
 			if not success:
 				error("Unable to synthesize a parallel implementation using a shared nothing model.")
 		else:
@@ -321,7 +340,7 @@ if __name__ == "__main__":
 
 		t_rss_conf = perf_counter()
 
-	print("[*] Synthesizing")
+	log(args.nf, "Synthesizing")
 	synthesized_content = []
 
 	rss_conf_code, keys = synthesize_rss_conf(args.target)
@@ -341,15 +360,15 @@ if __name__ == "__main__":
 	t_synthesize = perf_counter()
 	t_end = t_synthesize
 
-	print()
-	print("================ REPORT ================")
-	print(f"Symbolic execution  {timedelta(seconds=(t_symbex - t_start))}")
+	log(args.nf, "================ REPORT ================")
+	if not skipped_symbex:
+		log(args.nf, f"Symbolic execution  {timedelta(seconds=(t_symbex - t_start))}")
 	if args.target != CHOICE_SEQUENTIAL:
-		print(f"Call path analysis  {timedelta(seconds=(t_analyze_call_paths - t_symbex))}")
-		print(f"Solver              {timedelta(seconds=(t_rss_conf - t_analyze_call_paths))}")
-		print(f"Synthesize          {timedelta(seconds=(t_synthesize - t_rss_conf))}")
+		log(args.nf, f"Call path analysis  {timedelta(seconds=(t_analyze_call_paths - t_symbex))}")
+		log(args.nf, f"Solver              {timedelta(seconds=(t_rss_conf - t_analyze_call_paths))}")
+		log(args.nf, f"Synthesize          {timedelta(seconds=(t_synthesize - t_rss_conf))}")
 	else:
-		print(f"Synthesize          {timedelta(seconds=(t_synthesize - t_symbex))}")
-	print(f"Total               {timedelta(seconds=(t_end - t_start))}")
-	print("========================================")
+		log(args.nf, f"Synthesize          {timedelta(seconds=(t_synthesize - t_symbex))}")
+	log(args.nf, f"Total               {timedelta(seconds=(t_end - t_start))}")
+	log(args.nf, "========================================")
 

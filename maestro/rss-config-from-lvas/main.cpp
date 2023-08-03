@@ -17,7 +17,7 @@ int main(int argc, char *argv[]) {
   Logger::MINIMUM_LOG_LEVEL = Logger::Level::DEBUG;
 
   if (argc < 2) {
-    Logger::error() << "[ERROR] Missing arguments.";
+    Logger::error() << "[ERROR] Missing arguments. ";
     Logger::error()
         << "Please provide an LVA file location, or \"--rand [devices]\".\n";
     return 1;
@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
 
   if (arg == "--rand") {
     if (argc < 3) {
-      Logger::error() << "[ERROR] Missing arguments.";
+      Logger::error() << "[ERROR] Missing arguments. ";
       Logger::error() << "Please provide an number of devices to go with the "
                          "--rand flag.\n";
       return 1;
@@ -45,7 +45,7 @@ int main(int argc, char *argv[]) {
       Logger::debug() << "Device ";
       Logger::debug() << i;
       Logger::debug() << ": \n";
-      Logger::debug() << RS3::R3S_key_to_string(keys[i]);
+      Logger::debug() << RS3::RS3_key_to_string(keys[i]);
       Logger::debug() << "\n";
     }
 
@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
       Logger::debug() << "Device ";
       Logger::debug() << i;
       Logger::debug() << ": \n";
-      Logger::debug() << RS3::R3S_key_to_string(keys[i]);
+      Logger::debug() << RS3::RS3_key_to_string(keys[i]);
       Logger::debug() << "\n";
     }
 

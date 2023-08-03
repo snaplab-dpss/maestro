@@ -17,7 +17,7 @@ function test_bridge {
   RATE=$1
   BURST=$2
 
-  sudo ./build/app/bridge \
+  sudo ./build/bridge \
         --vdev "net_tap0,iface=test_wan" \
         --vdev "net_tap1,iface=test_lan" \
         --no-huge \
@@ -65,7 +65,7 @@ function test_bridge {
 
 
 make clean
-make ADDITIONAL_FLAGS="-DSTOP_ON_RX_0 -g" -j$(nproc)
+make DEBUG=1 -j$(nproc)
 
 test_bridge 12500 500000
 

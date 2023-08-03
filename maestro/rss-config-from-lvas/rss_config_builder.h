@@ -16,7 +16,7 @@ namespace ParallelSynthesizer {
 class RSSConfigBuilder {
 
 private:
-  RS3::R3S_cfg_t cfg;
+  RS3::RS3_cfg_t cfg;
   std::vector<std::shared_ptr<Constraint> > constraints;
 
   std::vector<LibvigAccessConstraint> lib_access_constraints;
@@ -25,8 +25,8 @@ private:
   std::map<std::string, unsigned int> device_per_call_path;
   std::vector<unsigned int> unique_devices;
   std::vector<std::pair<LibvigAccess, LibvigAccess> > unique_access_pairs;
-  std::vector<RS3::R3S_pf_t> unique_packet_fields_dependencies;
-  std::vector<RS3::R3S_cnstrs_func> solver_constraints_generators;
+  std::vector<RS3::RS3_pf_t> unique_packet_fields_dependencies;
+  std::vector<RS3::RS3_cnstrs_func> solver_constraints_generators;
 
   RSSConfig rss_config;
 
@@ -36,7 +36,7 @@ private:
   int get_device_index(unsigned int device) const;
 
   void merge_unique_packet_field_dependencies(
-      const std::vector<RS3::R3S_pf_t> &packet_fields);
+      const std::vector<RS3::RS3_pf_t> &packet_fields);
 
   bool is_access_pair_already_stored(
       const std::pair<LibvigAccess, LibvigAccess> &pair);
@@ -49,10 +49,10 @@ private:
   void remove_constraints_from_object(unsigned int obj);
   void remove_constraints_with_access(unsigned int access_id);
   void remove_constraints_with_pfs(unsigned int device,
-                                   std::vector<RS3::R3S_pf_t> pfs,
+                                   std::vector<RS3::RS3_pf_t> pfs,
                                    std::string call_path);
   void remove_equivalent_index_dchain_constraints(
-      unsigned int device, const std::vector<RS3::R3S_pf_t> packet_fields);
+      unsigned int device, const std::vector<RS3::RS3_pf_t> packet_fields);
   void
   analyse_dchain_interpretations(const std::vector<LibvigAccess> &accesses);
   bool is_write_modifying(const std::vector<LibvigAccess> &cp,
@@ -63,8 +63,7 @@ private:
                                  const LibvigAccess &dchain_verify);
 
   void filter_constraints();
-  void
-  fill_lib_access_constraints(const std::vector<LibvigAccess> &accesses);
+  void fill_lib_access_constraints(const std::vector<LibvigAccess> &accesses);
   void generate_solver_constraints();
 
   static std::vector<std::shared_ptr<Constraint> >
@@ -73,13 +72,13 @@ private:
       unsigned int p1_device, unsigned int p2_device);
 
   static RS3::Z3_ast
-  constraint_to_solver_input(RS3::R3S_cfg_t cfg, RS3::R3S_packet_ast_t p1,
-                             RS3::R3S_packet_ast_t p2,
+  constraint_to_solver_input(RS3::RS3_cfg_t cfg, RS3::RS3_packet_ast_t p1,
+                             RS3::RS3_packet_ast_t p2,
                              std::shared_ptr<Constraint> constraint);
 
-  static RS3::Z3_ast make_solver_constraints(RS3::R3S_cfg_t cfg,
-                                             RS3::R3S_packet_ast_t p1,
-                                             RS3::R3S_packet_ast_t p2);
+  static RS3::Z3_ast make_solver_constraints(RS3::RS3_cfg_t cfg,
+                                             RS3::RS3_packet_ast_t p1,
+                                             RS3::RS3_packet_ast_t p2);
 
 public:
   RSSConfigBuilder(
@@ -87,8 +86,8 @@ public:
       const std::vector<CallPathsConstraint> &_call_paths_constraints)
       : call_paths_constraints(_call_paths_constraints) {
 
-    RS3::R3S_cfg_init(&cfg);
-    RS3::R3S_cfg_set_skew_analysis(cfg, true);
+    RS3::RS3_cfg_init(&cfg);
+    RS3::RS3_cfg_set_skew_analysis(cfg, true);
 
     fill_unique_devices(accesses);
 
@@ -101,7 +100,7 @@ public:
     Logger::debug() << "Packet field dependencies:";
     Logger::debug() << "\n";
     for (auto &pf : unique_packet_fields_dependencies) {
-      Logger::debug() << "  " << RS3::R3S_pf_to_string(pf);
+      Logger::debug() << "  " << RS3::RS3_pf_to_string(pf);
       Logger::debug() << "\n";
     }
 
@@ -118,11 +117,11 @@ public:
     filter_constraints();
     optimize_constraints();
 
-    Logger::debug() << "\nR3S configuration:\n" << RS3::R3S_cfg_to_string(cfg)
-                    << "\n";
+    Logger::debug() << "\nRS3 configuration:\n"
+                    << RS3::RS3_cfg_to_string(cfg) << "\n";
   }
 
-  const RS3::R3S_cfg_t &get_cfg() const { return cfg; }
+  const RS3::RS3_cfg_t &get_cfg() const { return cfg; }
   const std::vector<LibvigAccessConstraint> &
   get_lib_access_constraints() const {
     return lib_access_constraints;
@@ -138,9 +137,9 @@ public:
 
   void build_rss_config();
 
-  std::pair<RS3::R3S_packet_t, RS3::R3S_packet_t>
+  std::pair<RS3::RS3_packet_t, RS3::RS3_packet_t>
   generate_packets(unsigned device1, unsigned device2);
 
-  ~RSSConfigBuilder() { RS3::R3S_cfg_delete(cfg); }
+  ~RSSConfigBuilder() { RS3::RS3_cfg_delete(cfg); }
 };
 } // namespace ParallelSynthesizer

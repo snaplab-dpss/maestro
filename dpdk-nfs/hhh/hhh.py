@@ -1,21 +1,12 @@
 #!/usr/bin/python3
 
 import argparse
-import csv
-import sys
-import os
-import glob
-import itertools
 
 from random import randint
+from pathlib import Path
 
 from scapy.all import *
 from scapy.utils import PcapWriter
-
-from multiprocessing import Pool, cpu_count, current_process
-from subprocess import call
-from pathlib import Path
-from math import ceil, floor
 
 N_PACKETS = 10000
 

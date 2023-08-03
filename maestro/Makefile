@@ -1,20 +1,17 @@
 SYNTHESIZED_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-MAESTRO_CC=g++ -std=c++11
+MAESTRO_CC=c++ -std=c++11
 MAESTRO_SRCS_DIR := $(SYNTHESIZED_DIR)/rss-config-from-lvas
 
 Z3_INCLUDE := -I$(Z3_DIR)/build/include
 RS3_INCLUDE := -I$(RS3_DIR)/include
 
 Z3_LIB_FLAGS := -lz3 -Wl,-rpath,$(Z3_DIR)/build/lib -L$(Z3_DIR)/build/lib
-RS3_LIB_FLAGS := -lrs3 -Wl,-rpath,$(RS3_DIR)/build/builds/release/lib -L$(RS3_DIR)/build/builds/release/lib
+RS3_LIB_FLAGS := -lrs3 -Wl,-rpath,$(RS3_DIR)/build/libs -L$(RS3_DIR)/build/libs
+# RS3_LIB_FLAGS := -lrs3d -Wl,-rpath,$(RS3_DIR)/build/libs -L$(RS3_DIR)/build/libs
 
-KLEE_DIR := $(VIGOR_DIR)/klee
 BUILD := $(SYNTHESIZED_DIR)/build/maestro
 
-before-maestro:
-	@mkdir -p $(BUILD)
-
-maestro: before-maestro $(BUILD)/dependency.o $(BUILD)/lib_access.o $(BUILD)/rss_config_builder.o $(BUILD)/constraint.o \
+all: before-maestro $(BUILD)/dependency.o $(BUILD)/lib_access.o $(BUILD)/rss_config_builder.o $(BUILD)/constraint.o \
 	$(BUILD)/parser.o $(BUILD)/logger.o
 	$(MAESTRO_CC) $(MAESTRO_SRCS_DIR)/main.cpp \
 	-o $(BUILD)/rss-config-from-lvas           \
@@ -46,5 +43,8 @@ $(BUILD)/parser.o: $(MAESTRO_SRCS_DIR)/parser.cpp $(MAESTRO_SRCS_DIR)/parser.h
 $(BUILD)/logger.o: $(MAESTRO_SRCS_DIR)/logger.cpp $(MAESTRO_SRCS_DIR)/logger.h
 	$(MAESTRO_CC) -c $(MAESTRO_SRCS_DIR)/logger.cpp -o $(BUILD)/logger.o
 
-clean-maestro:
+before-maestro:
+	@mkdir -p $(BUILD)
+
+clean:
 	rm -rf $(BUILD)/*.o $(BUILD)/rss-config-from-lvas

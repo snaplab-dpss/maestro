@@ -169,12 +169,12 @@ public:
 class PacketDependencyProcessed : public PacketDependency {
 
 private:
-  RS3::R3S_pf_t packet_field;
+  RS3::RS3_pf_t packet_field;
   unsigned int bytes;
 
 public:
   PacketDependencyProcessed(const PacketDependency &_pd,
-                            const RS3::R3S_pf_t &_packet_field,
+                            const RS3::RS3_pf_t &_packet_field,
                             const unsigned int &_bytes)
       : PacketDependency(_pd) {
     packet_field = _packet_field;
@@ -190,7 +190,7 @@ public:
     assert(!_pdp.should_ignore());
   }
 
-  const RS3::R3S_pf_t &get_packet_field() const {
+  const RS3::RS3_pf_t &get_packet_field() const {
     assert(!ignore && "This packet field dependency should be ignored");
     return packet_field;
   }
@@ -210,7 +210,7 @@ public:
 
     if (!ignore) {
       os << " (";
-      os << RS3::R3S_pf_to_string(packet_field);
+      os << RS3::RS3_pf_to_string(packet_field);
       os << " byte ";
       os << bytes;
       os << ")";
@@ -287,8 +287,8 @@ public:
     are_dependencies_sorted = true;
   }
 
-  std::vector<RS3::R3S_pf_t> get_unique_packet_fields() const {
-    std::vector<RS3::R3S_pf_t> packet_fields;
+  std::vector<RS3::RS3_pf_t> get_unique_packet_fields() const {
+    std::vector<RS3::RS3_pf_t> packet_fields;
 
     for (const auto &dependency : dependencies) {
       if (dependency->should_ignore())

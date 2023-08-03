@@ -121,6 +121,7 @@ setup_python_venv() {
 	pushd "$SCRIPT_DIR"
 		python3 -m venv env
 		add_expr_to_paths_file ". $SCRIPT_DIR/env/bin/activate"
+		pip3 install -r requirements.txt
 	popd
 }
 
@@ -383,10 +384,6 @@ package_install \
 
 # Environment after packages are installed
 installation_setup
-
-pip3 install numpy
-pip3 install scapy
-pip3 install wheel
 
 # Clean dependencies
 clean_dpdk
