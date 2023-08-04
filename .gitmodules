@@ -1,18 +1,18 @@
 [submodule "deps/z3"]
 	path = deps/z3
-	url = git@github.com:snaplab-dpss/maestro-z3.git
+	url = https://github.com/snaplab-dpss/maestro-z3.git
 [submodule "deps/dpdk"]
 	path = deps/dpdk
-	url = git@github.com:snaplab-dpss/maestro-dpdk.git
+	url = https://github.com/snaplab-dpss/maestro-dpdk.git
 [submodule "deps/llvm"]
 	path = deps/llvm
-	url = git@github.com:snaplab-dpss/maestro-llvm.git
+	url = https://github.com/snaplab-dpss/maestro-llvm.git
 [submodule "deps/klee"]
 	path = deps/klee
-	url = git@github.com:snaplab-dpss/maestro-klee.git
+	url = https://github.com/snaplab-dpss/maestro-klee.git
 [submodule "deps/klee-uclibc"]
 	path = deps/klee-uclibc
-	url = git@github.com:snaplab-dpss/maestro-klee-uclibc.git
+	url = https://github.com/snaplab-dpss/maestro-klee-uclibc.git
 [submodule "deps/librs3"]
 	path = deps/librs3
-	url = git@github.com:snaplab-dpss/librs3.git
+	url = https://github.com/snaplab-dpss/librs3.git
