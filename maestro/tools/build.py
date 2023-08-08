@@ -218,11 +218,6 @@ def compile(makefile):
 	stderr = proc.stderr.read().decode()
 	return proc.returncode == 0, stderr
 
-def final_compilation(makefile):
-	subprocess.call([ "cp", makefile, f"{SYNTHESIZED_CODE}/Makefile" ])
-	subprocess.call([ "make" ], cwd=SYNTHESIZED_CODE)
-	subprocess.call([ "cp", f"{SYNTHESIZED_CODE}/build/nf", f"{SYNTHESIZED_APP}/nf" ])
-
 # I know, I know... this is absolutely horrible. But a deadline approaches...
 def get_user_defined_functions(nf, impl, missing_defs):
 	user_def_func = []
@@ -277,8 +272,6 @@ def build(boilerplate, impl, nf):
 			print('Getting the same report after trying to fix it.')
 			exit(1)
 	
-	final_compilation(MAKEFILE)
-
 	return impl_fname
 
 if __name__ == "__main__":
