@@ -1247,25 +1247,6 @@ struct client {
   uint32_t src_ip;
   uint32_t dst_ip;
 };
-uint32_t flow_hash(void* obj) {
-  struct flow *id = (struct flow *)obj;
-
-  unsigned hash = 0;
-  hash = __builtin_ia32_crc32si(hash, id->src_port);
-  hash = __builtin_ia32_crc32si(hash, id->dst_port);
-  hash = __builtin_ia32_crc32si(hash, id->src_ip);
-  hash = __builtin_ia32_crc32si(hash, id->dst_ip);
-  hash = __builtin_ia32_crc32si(hash, id->protocol);
-  return hash;
-}
-bool flow_eq(void* a, void* b) {
-  struct flow *id1 = (struct flow *)a;
-  struct flow *id2 = (struct flow *)b;
-
-  return (id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
-      &&(id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
-          &&(id1->protocol == id2->protocol);
-}
 uint32_t client_hash(void* obj) {
   struct client *id = (struct client *)obj;
   unsigned hash = 0;
@@ -1280,6 +1261,25 @@ void flow_allocate(void* obj) {
   id->src_ip = 0;
   id->dst_ip = 0;
   id->protocol = 0;
+}
+bool flow_eq(void* a, void* b) {
+  struct flow *id1 = (struct flow *)a;
+  struct flow *id2 = (struct flow *)b;
+
+  return (id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
+      &&(id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
+          &&(id1->protocol == id2->protocol);
+}
+uint32_t flow_hash(void* obj) {
+  struct flow *id = (struct flow *)obj;
+
+  unsigned hash = 0;
+  hash = __builtin_ia32_crc32si(hash, id->src_port);
+  hash = __builtin_ia32_crc32si(hash, id->dst_port);
+  hash = __builtin_ia32_crc32si(hash, id->src_ip);
+  hash = __builtin_ia32_crc32si(hash, id->dst_ip);
+  hash = __builtin_ia32_crc32si(hash, id->protocol);
+  return hash;
 }
 struct tcpudp_hdr {
   uint16_t src_port;

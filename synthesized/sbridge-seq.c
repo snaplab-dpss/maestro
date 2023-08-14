@@ -20,6 +20,7 @@
 #include <rte_malloc.h>
 #include <rte_mbuf.h>
 
+
 /**********************************************
  *
  *                   LIBVIG
@@ -1235,13 +1236,22 @@ int main(int argc, char **argv) {
   return 0;
 }
 
-struct DynamicValue {
-  uint16_t device;
-};
 struct StaticKey {
   struct rte_ether_addr addr;
   uint16_t device;
 };
+struct DynamicValue {
+  uint16_t device;
+};
+uint32_t StaticKey_hash(void* obj) {
+  struct StaticKey *id = (struct StaticKey *)obj;
+
+  unsigned hash = 0;
+  unsigned addr_hash = rte_ether_addr_hash(&id->addr);
+  hash = __builtin_ia32_crc32si(hash, addr_hash);
+  hash = __builtin_ia32_crc32si(hash, id->device);
+  return hash;
+}
 void StaticKey_allocate(void* obj) {
   struct StaticKey *id = (struct StaticKey *)obj;
 
@@ -1254,19 +1264,6 @@ void StaticKey_allocate(void* obj) {
 
   id->device = 0;
 }
-void DynamicValue_allocate(void* obj) {
-  struct DynamicValue *id = (struct DynamicValue *)obj;
-  id->device = 0;
-}
-uint32_t StaticKey_hash(void* obj) {
-  struct StaticKey *id = (struct StaticKey *)obj;
-
-  unsigned hash = 0;
-  unsigned addr_hash = rte_ether_addr_hash(&id->addr);
-  hash = __builtin_ia32_crc32si(hash, addr_hash);
-  hash = __builtin_ia32_crc32si(hash, id->device);
-  return hash;
-}
 bool StaticKey_eq(void* a, void* b) {
   struct StaticKey *id1 = (struct StaticKey *)a;
   struct StaticKey *id2 = (struct StaticKey *)b;
@@ -1277,6 +1274,10 @@ bool StaticKey_eq(void* a, void* b) {
 
       addr_eq = rte_ether_addr_eq(&id1->addr, &id2->addr);
   return addr_eq &&(id1->device == id2->device);
+}
+void DynamicValue_allocate(void* obj) {
+  struct DynamicValue *id = (struct DynamicValue *)obj;
+  id->device = 0;
 }
 
 

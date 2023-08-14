@@ -1251,15 +1251,26 @@ struct LoadBalancedFlow {
   uint16_t dst_port;
   uint8_t protocol;
 };
-uint32_t ip_addr_hash(void* obj) {
-  struct ip_addr* id = (struct ip_addr*)obj;
+bool ip_addr_eq(void* a, void* b) {
+  struct ip_addr* id1 = (struct ip_addr*)a;
+  struct ip_addr* id2 = (struct ip_addr*)b;
 
-  unsigned hash = 0;
-  hash = __builtin_ia32_crc32si(hash, id->addr);
-  return hash;
+  return (id1->addr == id2->addr);
+}
+bool LoadBalancedFlow_eq(void* a, void* b) {
+  struct LoadBalancedFlow* id1 = (struct LoadBalancedFlow*)a;
+  struct LoadBalancedFlow* id2 = (struct LoadBalancedFlow*)b;
+
+  return (id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
+      &&(id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
+          &&(id1->protocol == id2->protocol);
 }
 void null_init(void* obj) {
   *(uint32_t *)obj = 0;
+}
+void ip_addr_allocate(void* obj) {
+  struct ip_addr* id = (struct ip_addr*)obj;
+  id->addr = 0;
 }
 uint32_t LoadBalancedFlow_hash(void* obj) {
   struct LoadBalancedFlow* id = (struct LoadBalancedFlow*)obj;
@@ -1272,17 +1283,12 @@ uint32_t LoadBalancedFlow_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, id->protocol);
   return hash;
 }
-void LoadBalancedFlow_allocate(void* obj) {
-  struct LoadBalancedFlow* id = (struct LoadBalancedFlow*)obj;
-  id->src_ip = 0;
-  id->dst_ip = 0;
-  id->src_port = 0;
-  id->dst_port = 0;
-  id->protocol = 0;
-}
-void ip_addr_allocate(void* obj) {
+uint32_t ip_addr_hash(void* obj) {
   struct ip_addr* id = (struct ip_addr*)obj;
-  id->addr = 0;
+
+  unsigned hash = 0;
+  hash = __builtin_ia32_crc32si(hash, id->addr);
+  return hash;
 }
 void LoadBalancedBackend_allocate(void* obj) {
   struct LoadBalancedBackend* id = (struct LoadBalancedBackend*)obj;
@@ -1297,19 +1303,13 @@ void LoadBalancedBackend_allocate(void* obj) {
 
   id->ip = 0;
 }
-bool ip_addr_eq(void* a, void* b) {
-  struct ip_addr* id1 = (struct ip_addr*)a;
-  struct ip_addr* id2 = (struct ip_addr*)b;
-
-  return (id1->addr == id2->addr);
-}
-bool LoadBalancedFlow_eq(void* a, void* b) {
-  struct LoadBalancedFlow* id1 = (struct LoadBalancedFlow*)a;
-  struct LoadBalancedFlow* id2 = (struct LoadBalancedFlow*)b;
-
-  return (id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
-      &&(id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
-          &&(id1->protocol == id2->protocol);
+void LoadBalancedFlow_allocate(void* obj) {
+  struct LoadBalancedFlow* id = (struct LoadBalancedFlow*)obj;
+  id->src_ip = 0;
+  id->dst_ip = 0;
+  id->src_port = 0;
+  id->dst_port = 0;
+  id->protocol = 0;
 }
 struct tcpudp_hdr {
   uint16_t src_port;

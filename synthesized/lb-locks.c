@@ -1787,14 +1787,6 @@ int main(int argc, char **argv) {
   return 0;
 }
 
-struct ip_addr {
-  uint32_t addr;
-};
-struct LoadBalancedBackend {
-  uint16_t nic;
-  struct rte_ether_addr mac;
-  uint32_t ip;
-};
 struct LoadBalancedFlow {
   uint32_t src_ip;
   uint32_t dst_ip;
@@ -1802,17 +1794,32 @@ struct LoadBalancedFlow {
   uint16_t dst_port;
   uint8_t protocol;
 };
-bool LoadBalancedFlow_eq(void* a, void* b) {
-  struct LoadBalancedFlow* id1 = (struct LoadBalancedFlow*)a;
-  struct LoadBalancedFlow* id2 = (struct LoadBalancedFlow*)b;
-
-  return (id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
-      &&(id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
-          &&(id1->protocol == id2->protocol);
+struct LoadBalancedBackend {
+  uint16_t nic;
+  struct rte_ether_addr mac;
+  uint32_t ip;
+};
+struct ip_addr {
+  uint32_t addr;
+};
+void LoadBalancedFlow_allocate(void* obj) {
+  struct LoadBalancedFlow* id = (struct LoadBalancedFlow*)obj;
+  id->src_ip = 0;
+  id->dst_ip = 0;
+  id->src_port = 0;
+  id->dst_port = 0;
+  id->protocol = 0;
 }
-void ip_addr_allocate(void* obj) {
-  struct ip_addr* id = (struct ip_addr*)obj;
-  id->addr = 0;
+uint32_t LoadBalancedFlow_hash(void* obj) {
+  struct LoadBalancedFlow* id = (struct LoadBalancedFlow*)obj;
+
+  unsigned hash = 0;
+  hash = __builtin_ia32_crc32si(hash, id->src_ip);
+  hash = __builtin_ia32_crc32si(hash, id->dst_ip);
+  hash = __builtin_ia32_crc32si(hash, id->src_port);
+  hash = __builtin_ia32_crc32si(hash, id->dst_port);
+  hash = __builtin_ia32_crc32si(hash, id->protocol);
+  return hash;
 }
 void LoadBalancedBackend_allocate(void* obj) {
   struct LoadBalancedBackend* id = (struct LoadBalancedBackend*)obj;
@@ -1827,17 +1834,6 @@ void LoadBalancedBackend_allocate(void* obj) {
 
   id->ip = 0;
 }
-uint32_t LoadBalancedFlow_hash(void* obj) {
-  struct LoadBalancedFlow* id = (struct LoadBalancedFlow*)obj;
-
-  unsigned hash = 0;
-  hash = __builtin_ia32_crc32si(hash, id->src_ip);
-  hash = __builtin_ia32_crc32si(hash, id->dst_ip);
-  hash = __builtin_ia32_crc32si(hash, id->src_port);
-  hash = __builtin_ia32_crc32si(hash, id->dst_port);
-  hash = __builtin_ia32_crc32si(hash, id->protocol);
-  return hash;
-}
 uint32_t ip_addr_hash(void* obj) {
   struct ip_addr* id = (struct ip_addr*)obj;
 
@@ -1845,41 +1841,45 @@ uint32_t ip_addr_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, id->addr);
   return hash;
 }
+void null_init(void* obj) {
+  *(uint32_t *)obj = 0;
+}
+bool LoadBalancedFlow_eq(void* a, void* b) {
+  struct LoadBalancedFlow* id1 = (struct LoadBalancedFlow*)a;
+  struct LoadBalancedFlow* id2 = (struct LoadBalancedFlow*)b;
+
+  return (id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
+      &&(id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
+          &&(id1->protocol == id2->protocol);
+}
 bool ip_addr_eq(void* a, void* b) {
   struct ip_addr* id1 = (struct ip_addr*)a;
   struct ip_addr* id2 = (struct ip_addr*)b;
 
   return (id1->addr == id2->addr);
 }
-void null_init(void* obj) {
-  *(uint32_t *)obj = 0;
-}
-void LoadBalancedFlow_allocate(void* obj) {
-  struct LoadBalancedFlow* id = (struct LoadBalancedFlow*)obj;
-  id->src_ip = 0;
-  id->dst_ip = 0;
-  id->src_port = 0;
-  id->dst_port = 0;
-  id->protocol = 0;
+void ip_addr_allocate(void* obj) {
+  struct ip_addr* id = (struct ip_addr*)obj;
+  id->addr = 0;
 }
 
 uint8_t hash_key_0[RSS_HASH_KEY_LENGTH] = {
-  0xab, 0x13, 0x5c, 0xde, 0x8d, 0x1d, 0x23, 0x85, 
-  0xcf, 0xa1, 0xdd, 0x3f, 0x9c, 0xe8, 0xed, 0x8e, 
-  0x9f, 0xe4, 0x4, 0x9b, 0x8d, 0xc0, 0x4e, 0x73, 
-  0x87, 0xb7, 0x2d, 0x3a, 0x16, 0x2c, 0x74, 0xc2, 
-  0x3f, 0xd0, 0xa0, 0xcc, 0xee, 0xc3, 0x51, 0xbd, 
-  0x64, 0x2f, 0xfd, 0x0, 0x17, 0xea, 0x8e, 0xb6, 
-  0xce, 0x93, 0x51, 0x5b
+  0x63, 0x71, 0x79, 0x69, 0xc8, 0x59, 0x20, 0xbd, 
+  0x93, 0xa8, 0x64, 0xa1, 0xd7, 0x9a, 0x65, 0x1e, 
+  0xfd, 0x8c, 0xf8, 0x3f, 0x6a, 0xa5, 0xcd, 0x50, 
+  0xc5, 0x16, 0xc3, 0xbf, 0xb, 0x1a, 0xa5, 0x6f, 
+  0x8b, 0x1e, 0xd8, 0x53, 0x77, 0xf8, 0x10, 0xa, 
+  0xa0, 0x74, 0xac, 0x78, 0xf, 0x11, 0x96, 0xc, 
+  0x9d, 0x8e, 0x4c, 0x7
 };
 uint8_t hash_key_1[RSS_HASH_KEY_LENGTH] = {
-  0xe5, 0x2a, 0x17, 0x53, 0xce, 0xa6, 0xe7, 0x71, 
-  0x23, 0x9e, 0x9e, 0x9b, 0xe9, 0xcc, 0xab, 0x74, 
-  0x8, 0x51, 0x2, 0xdd, 0x1d, 0xf8, 0x85, 0x7e, 
-  0x13, 0xdf, 0x10, 0xe4, 0x5e, 0x1e, 0xbc, 0x43, 
-  0x48, 0xd4, 0x96, 0x17, 0x7a, 0x7d, 0x88, 0x9e, 
-  0x1b, 0x26, 0x39, 0x4, 0xf2, 0xe4, 0x78, 0xfb, 
-  0x36, 0x7a, 0xd8, 0x53
+  0x3b, 0x77, 0x92, 0x4f, 0x92, 0x1f, 0xaa, 0x12, 
+  0x52, 0x21, 0x9, 0xb3, 0x82, 0xa6, 0xee, 0xb, 
+  0x89, 0xa1, 0x4e, 0x7e, 0x3f, 0x0, 0x50, 0x37, 
+  0xf7, 0x27, 0xfb, 0xcc, 0x38, 0x8a, 0xb6, 0x74, 
+  0x1, 0x48, 0xc3, 0x93, 0x67, 0x6e, 0xa6, 0xb9, 
+  0x8f, 0xaf, 0x6c, 0x12, 0x55, 0x5a, 0x1d, 0xdf, 
+  0xfc, 0x6b, 0x5d, 0x3b
 };
 
 struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {

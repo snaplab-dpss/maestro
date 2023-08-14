@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include <rte_atomic.h>
+#include <rte_build_config.h>
 #include <rte_byteorder.h>
 #include <rte_common.h>
 #include <rte_eal.h>
@@ -19,13 +21,21 @@
 #include <rte_lcore.h>
 #include <rte_malloc.h>
 #include <rte_mbuf.h>
-
+#include <rte_per_lcore.h>
 
 /**********************************************
  *
  *                   LIBVIG
  *
  **********************************************/
+
+RTE_DEFINE_PER_LCORE(bool, write_attempt);
+RTE_DEFINE_PER_LCORE(bool, write_state);
+
+struct tcpudp_hdr {
+  uint16_t src_port;
+  uint16_t dst_port;
+} __attribute__((__packed__));
 
 #define AND &&
 #define vigor_time_t int64_t
@@ -36,20 +46,10 @@ vigor_time_t current_time(void) {
   return tp.tv_sec * 1000000000ul + tp.tv_nsec;
 }
 
+#define CAPACITY_UPPER_LIMIT 140000
+
 typedef unsigned map_key_hash(void *k1);
 typedef bool map_keys_equality(void *k1, void *k2);
-
-struct Map {
-  int *busybits;
-  void **keyps;
-  unsigned *khs;
-  int *chns;
-  int *vals;
-  unsigned capacity;
-  unsigned size;
-  map_keys_equality *keys_eq;
-  map_key_hash *khash;
-};
 
 static unsigned loop(unsigned k, unsigned capacity) {
   return k & (capacity - 1);
@@ -112,7 +112,6 @@ static unsigned find_empty(int *busybits, int *chns, unsigned start,
   unsigned i = 0;
   for (; i < capacity; ++i) {
     unsigned index = loop(start + i, capacity);
-
     int bb = busybits[index];
     if (0 == bb) {
       return index;
@@ -144,13 +143,11 @@ int map_impl_get(int *busybits, void **keyps, unsigned *k_hashes, int *chns,
                  int *value, unsigned capacity) {
   int index =
       find_key(busybits, keyps, k_hashes, chns, keyp, eq, hash, capacity);
-
   if (-1 == index) {
     return 0;
   }
 
   *value = values[index];
-
   return 1;
 }
 
@@ -185,119 +182,172 @@ unsigned map_impl_size(int *busybits, unsigned capacity) {
   return s;
 }
 
-int map_allocate(map_keys_equality *keq, map_key_hash *khash, unsigned capacity,
-                 struct Map **map_out) {
-  struct Map *old_map_val = *map_out;
-  struct Map *map_alloc =
-      (struct Map *)rte_malloc(NULL, sizeof(struct Map), 64);
-  if (map_alloc == NULL)
-    return 0;
-  *map_out = (struct Map *)map_alloc;
-  int *bbs_alloc = (int *)rte_malloc(NULL, sizeof(int) * (int)capacity, 64);
-  if (bbs_alloc == NULL) {
-    rte_free(map_alloc);
-    *map_out = old_map_val;
+struct MapLocks {
+  int *busybits;
+  void **keyps;
+  unsigned *khs;
+  int *chns;
+  int *vals;
+  unsigned capacity;
+  unsigned size;
+  map_keys_equality *keys_eq;
+  map_key_hash *khash;
+};
+
+int map_locks_allocate(map_keys_equality *keq, map_key_hash *khash,
+                       unsigned capacity, struct MapLocks **map_locks_out) {
+#ifdef CAPACITY_POW2
+  if (capacity == 0 || (capacity & (capacity - 1)) != 0) {
     return 0;
   }
-  (*map_out)->busybits = bbs_alloc;
+#else
+#endif
+  struct MapLocks *old_map_locks_val = *map_locks_out;
+  struct MapLocks *map_locks_alloc =
+      (struct MapLocks *)rte_malloc(NULL, sizeof(struct MapLocks), 64);
+  if (map_locks_alloc == NULL)
+    return 0;
+  *map_locks_out = (struct MapLocks *)map_locks_alloc;
+  int *bbs_alloc = (int *)rte_malloc(NULL, sizeof(int) * (int)capacity, 64);
+  if (bbs_alloc == NULL) {
+    rte_free(map_locks_alloc);
+    *map_locks_out = old_map_locks_val;
+    return 0;
+  }
+  (*map_locks_out)->busybits = bbs_alloc;
   void **keyps_alloc =
       (void **)rte_malloc(NULL, sizeof(void *) * (int)capacity, 64);
   if (keyps_alloc == NULL) {
     rte_free(bbs_alloc);
-    rte_free(map_alloc);
-    *map_out = old_map_val;
+    rte_free(map_locks_alloc);
+    *map_locks_out = old_map_locks_val;
     return 0;
   }
-  (*map_out)->keyps = keyps_alloc;
+  (*map_locks_out)->keyps = keyps_alloc;
   unsigned *khs_alloc =
       (unsigned *)rte_malloc(NULL, sizeof(unsigned) * (int)capacity, 64);
   if (khs_alloc == NULL) {
     rte_free(keyps_alloc);
     rte_free(bbs_alloc);
-    rte_free(map_alloc);
-    *map_out = old_map_val;
+    rte_free(map_locks_alloc);
+    *map_locks_out = old_map_locks_val;
     return 0;
   }
-  (*map_out)->khs = khs_alloc;
+  (*map_locks_out)->khs = khs_alloc;
   int *chns_alloc = (int *)rte_malloc(NULL, sizeof(int) * (int)capacity, 64);
   if (chns_alloc == NULL) {
     rte_free(khs_alloc);
     rte_free(keyps_alloc);
     rte_free(bbs_alloc);
-    rte_free(map_alloc);
-    *map_out = old_map_val;
+    rte_free(map_locks_alloc);
+    *map_locks_out = old_map_locks_val;
     return 0;
   }
-  (*map_out)->chns = chns_alloc;
+  (*map_locks_out)->chns = chns_alloc;
   int *vals_alloc = (int *)rte_malloc(NULL, sizeof(int) * (int)capacity, 64);
-
   if (vals_alloc == NULL) {
     rte_free(chns_alloc);
     rte_free(khs_alloc);
     rte_free(keyps_alloc);
     rte_free(bbs_alloc);
-    rte_free(map_alloc);
-    *map_out = old_map_val;
+    rte_free(map_locks_alloc);
+    *map_locks_out = old_map_locks_val;
     return 0;
   }
-
-  (*map_out)->vals = vals_alloc;
-  (*map_out)->capacity = capacity;
-  (*map_out)->size = 0;
-  (*map_out)->keys_eq = keq;
-  (*map_out)->khash = khash;
-
-  map_impl_init((*map_out)->busybits, keq, (*map_out)->keyps, (*map_out)->khs,
-                (*map_out)->chns, (*map_out)->vals, capacity);
+  (*map_locks_out)->vals = vals_alloc;
+  (*map_locks_out)->capacity = capacity;
+  (*map_locks_out)->size = 0;
+  (*map_locks_out)->keys_eq = keq;
+  (*map_locks_out)->khash = khash;
+  map_impl_init((*map_locks_out)->busybits, keq, (*map_locks_out)->keyps,
+                (*map_locks_out)->khs, (*map_locks_out)->chns,
+                (*map_locks_out)->vals, capacity);
   return 1;
 }
-
-int map_get(struct Map *map, void *key, int *value_out) {
+int map_locks_get(struct MapLocks *map, void *key, int *value_out) {
   map_key_hash *khash = map->khash;
   unsigned hash = khash(key);
   return map_impl_get(map->busybits, map->keyps, map->khs, map->chns, map->vals,
                       key, map->keys_eq, hash, value_out, map->capacity);
 }
+void map_locks_put(struct MapLocks *map, void *key, int value) {
+  bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool *write_state_ptr = &RTE_PER_LCORE(write_state);
 
-void map_put(struct Map *map, void *key, int value) {
+  if (!*write_state_ptr) {
+    *write_attempt_ptr = true;
+    return;
+  }
+
   map_key_hash *khash = map->khash;
   unsigned hash = khash(key);
   map_impl_put(map->busybits, map->keyps, map->khs, map->chns, map->vals, key,
                hash, value, map->capacity);
   ++map->size;
 }
+void map_locks_erase(struct MapLocks *map, void *key, void **trash) {
+  bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool *write_state_ptr = &RTE_PER_LCORE(write_state);
 
-void map_erase(struct Map *map, void *key, void **trash) {
+  if (!*write_state_ptr) {
+    *write_attempt_ptr = true;
+    return;
+  }
+
   map_key_hash *khash = map->khash;
   unsigned hash = khash(key);
   map_impl_erase(map->busybits, map->keyps, map->khs, map->chns, key,
                  map->keys_eq, hash, map->capacity, trash);
-
   --map->size;
 }
+unsigned map_locks_size(struct MapLocks *map) { return map->size; }
 
-unsigned map_size(struct Map *map) { return map->size; }
+struct VectorLocks;
 
-// Makes sure the allocator structur fits into memory, and particularly into
-// 32 bit address space.
-#define IRANG_LIMIT (1048576)
+typedef void vector_init_elem(void *elem);
 
-// kinda hacky, but makes the proof independent of vigor_time_t... sort of
-#define malloc_block_time malloc_block_llongs
-#define time_integer llong_integer
-#define times llongs
+struct VectorLocks {
+  char *data;
+  int elem_size;
+  unsigned capacity;
+};
 
-#define DCHAIN_RESERVED (2)
+int vector_locks_allocate(int elem_size, unsigned capacity,
+                          vector_init_elem *init_elem,
+                          struct VectorLocks **vector_out) {
+  struct VectorLocks *old_vector_val = *vector_out;
+  struct VectorLocks *vector_alloc =
+      (struct VectorLocks *)rte_malloc(NULL, sizeof(struct VectorLocks), 64);
+  if (vector_alloc == 0)
+    return 0;
+  *vector_out = (struct VectorLocks *)vector_alloc;
+  char *data_alloc =
+      (char *)rte_malloc(NULL, (uint32_t)elem_size * capacity, 64);
+  if (data_alloc == 0) {
+    rte_free(vector_alloc);
+    *vector_out = old_vector_val;
+    return 0;
+  }
+  (*vector_out)->data = data_alloc;
+  (*vector_out)->elem_size = elem_size;
+  (*vector_out)->capacity = capacity;
+  for (unsigned i = 0; i < capacity; ++i) {
+    init_elem((*vector_out)->data + elem_size * (int)i);
+  }
+  return 1;
+}
+void vector_locks_borrow(struct VectorLocks *vector, int index,
+                         void **val_out) {
+  *val_out = vector->data + index * vector->elem_size;
+}
+void vector_locks_return(struct VectorLocks *vector, int index, void *value) {}
 
-struct dchain_cell {
+struct dchain_locks_cell {
   int prev;
   int next;
 };
 
-struct DoubleChain {
-  struct dchain_cell *cells;
-  vigor_time_t *timestamps;
-};
+#define DCHAIN_RESERVED (2)
 
 enum DCHAIN_ENUM {
   ALLOC_LIST_HEAD = 0,
@@ -305,39 +355,128 @@ enum DCHAIN_ENUM {
   INDEX_SHIFT = DCHAIN_RESERVED
 };
 
-void dchain_impl_init(struct dchain_cell *cells, int size) {
-  struct dchain_cell *al_head = cells + ALLOC_LIST_HEAD;
+void dchain_locks_impl_activity_init(struct dchain_locks_cell *cells,
+                                     int size) {
+  struct dchain_locks_cell *al_head = cells + ALLOC_LIST_HEAD;
+  al_head->prev = ALLOC_LIST_HEAD;
+  al_head->next = ALLOC_LIST_HEAD;
+  int i = INDEX_SHIFT;
+
+  while (i < (size + INDEX_SHIFT)) {
+    struct dchain_locks_cell *current = cells + i;
+    current->next = FREE_LIST_HEAD;
+    current->prev = current->next;
+    ++i;
+  }
+}
+
+int dchain_locks_impl_activate_index(struct dchain_locks_cell *cells,
+                                     int index) {
+  int lifted = index + INDEX_SHIFT;
+
+  struct dchain_locks_cell *liftedp = cells + lifted;
+  int lifted_next = liftedp->next;
+  int lifted_prev = liftedp->prev;
+
+  // The index is already active.
+  if (lifted_next != FREE_LIST_HEAD) {
+    // There is only one element allocated - no point in changing anything
+    if (lifted_next == ALLOC_LIST_HEAD) {
+      return 0;
+    }
+
+    // Unlink it from the middle of the "alloc" chain.
+    struct dchain_locks_cell *lifted_prevp = cells + lifted_prev;
+    lifted_prevp->next = lifted_next;
+
+    struct dchain_locks_cell *lifted_nextp = cells + lifted_next;
+    lifted_nextp->prev = lifted_prev;
+
+    struct dchain_locks_cell *al_head = cells + ALLOC_LIST_HEAD;
+    int al_head_prev = al_head->prev;
+  }
+
+  struct dchain_locks_cell *al_head = cells + ALLOC_LIST_HEAD;
+  int al_head_prev = al_head->prev;
+
+  // Link it at the very end - right before the special link.
+  liftedp->next = ALLOC_LIST_HEAD;
+  liftedp->prev = al_head_prev;
+
+  struct dchain_locks_cell *al_head_prevp = cells + al_head_prev;
+  al_head_prevp->next = lifted;
+
+  al_head->prev = lifted;
+
+  return 1;
+}
+
+int dchain_locks_impl_deactivate_index(struct dchain_locks_cell *cells,
+                                       int index) {
+  int freed = index + INDEX_SHIFT;
+
+  struct dchain_locks_cell *freedp = cells + freed;
+  int freed_prev = freedp->prev;
+  int freed_next = freedp->next;
+
+  // The index is already free.
+  if (freed_next == FREE_LIST_HEAD) {
+    return 0;
+  }
+
+  struct dchain_locks_cell *freed_prevp = cells + freed_prev;
+  freed_prevp->next = freed_next;
+
+  struct dchain_locks_cell *freed_nextp = cells + freed_next;
+  freed_nextp->prev = freed_prev;
+
+  freedp->next = FREE_LIST_HEAD;
+  freedp->prev = freedp->next;
+
+  return 1;
+}
+
+int dchain_locks_impl_is_index_active(struct dchain_locks_cell *cells,
+                                      int index) {
+  struct dchain_locks_cell *cell = cells + index + INDEX_SHIFT;
+  return cell->next != FREE_LIST_HEAD;
+}
+
+void dchain_locks_impl_init(struct dchain_locks_cell *cells, int size) {
+
+  struct dchain_locks_cell *al_head = cells + ALLOC_LIST_HEAD;
   al_head->prev = 0;
   al_head->next = 0;
   int i = INDEX_SHIFT;
 
-  struct dchain_cell *fl_head = cells + FREE_LIST_HEAD;
+  struct dchain_locks_cell *fl_head = cells + FREE_LIST_HEAD;
   fl_head->next = i;
   fl_head->prev = fl_head->next;
 
   while (i < (size + INDEX_SHIFT - 1)) {
-    struct dchain_cell *current = cells + i;
+    struct dchain_locks_cell *current = cells + i;
     current->next = i + 1;
     current->prev = current->next;
 
     ++i;
   }
 
-  struct dchain_cell *last = cells + i;
+  struct dchain_locks_cell *last = cells + i;
   last->next = FREE_LIST_HEAD;
   last->prev = last->next;
 }
 
-int dchain_impl_allocate_new_index(struct dchain_cell *cells, int *index) {
-  struct dchain_cell *fl_head = cells + FREE_LIST_HEAD;
-  struct dchain_cell *al_head = cells + ALLOC_LIST_HEAD;
+int dchain_locks_impl_allocate_new_index(struct dchain_locks_cell *cells,
+                                         int *index) {
+  struct dchain_locks_cell *fl_head = cells + FREE_LIST_HEAD;
+  struct dchain_locks_cell *al_head = cells + ALLOC_LIST_HEAD;
   int allocated = fl_head->next;
   if (allocated == FREE_LIST_HEAD) {
     return 0;
   }
 
-  struct dchain_cell *allocp = cells + allocated;
-  // Extract the link from the "empty" chain.
+  struct dchain_locks_cell *allocp = cells + allocated;
+
   fl_head->next = allocp->next;
   fl_head->prev = fl_head->next;
 
@@ -345,19 +484,18 @@ int dchain_impl_allocate_new_index(struct dchain_cell *cells, int *index) {
   allocp->next = ALLOC_LIST_HEAD;
   allocp->prev = al_head->prev;
 
-  struct dchain_cell *alloc_head_prevp = cells + al_head->prev;
+  struct dchain_locks_cell *alloc_head_prevp = cells + al_head->prev;
   alloc_head_prevp->next = allocated;
   al_head->prev = allocated;
 
   *index = allocated - INDEX_SHIFT;
-
   return 1;
 }
 
-int dchain_impl_free_index(struct dchain_cell *cells, int index) {
+int dchain_locks_impl_free_index(struct dchain_locks_cell *cells, int index) {
   int freed = index + INDEX_SHIFT;
 
-  struct dchain_cell *freedp = cells + freed;
+  struct dchain_locks_cell *freedp = cells + freed;
   int freed_prev = freedp->prev;
   int freed_next = freedp->next;
 
@@ -367,29 +505,43 @@ int dchain_impl_free_index(struct dchain_cell *cells, int index) {
       return 0;
     }
   }
+  struct dchain_locks_cell *fr_head = cells + FREE_LIST_HEAD;
 
-  struct dchain_cell *fr_head = cells + FREE_LIST_HEAD;
-  struct dchain_cell *freed_prevp = cells + freed_prev;
+  struct dchain_locks_cell *freed_prevp = cells + freed_prev;
   freed_prevp->next = freed_next;
 
-  struct dchain_cell *freed_nextp = cells + freed_next;
+  struct dchain_locks_cell *freed_nextp = cells + freed_next;
   freed_nextp->prev = freed_prev;
 
+  // Add the link to the "free" chain.
   freedp->next = fr_head->next;
   freedp->prev = freedp->next;
 
   fr_head->next = freed;
   fr_head->prev = fr_head->next;
-
   return 1;
 }
 
-int dchain_impl_get_oldest_index(struct dchain_cell *cells, int *index) {
-  struct dchain_cell *al_head = cells + ALLOC_LIST_HEAD;
+int dchain_locks_impl_next(struct dchain_locks_cell *cells, int index,
+                           int *next) {
+  struct dchain_locks_cell *cell = cells + index + INDEX_SHIFT;
 
-  // No allocated indexes.
-  if (al_head->next == ALLOC_LIST_HEAD) {
+  if (cell->next == ALLOC_LIST_HEAD) {
     return 0;
+  }
+
+  *next = cell->next - INDEX_SHIFT;
+  return 1;
+}
+
+int dchain_locks_impl_get_oldest_index(struct dchain_locks_cell *cells,
+                                       int *index) {
+  struct dchain_locks_cell *al_head = cells + ALLOC_LIST_HEAD;
+  // No allocated indexes.
+  if (al_head->next == al_head->prev) {
+    if (al_head->next == ALLOC_LIST_HEAD) {
+      return 0;
+    }
   }
 
   *index = al_head->next - INDEX_SHIFT;
@@ -397,44 +549,84 @@ int dchain_impl_get_oldest_index(struct dchain_cell *cells, int *index) {
   return 1;
 }
 
-int dchain_impl_rejuvenate_index(struct dchain_cell *cells, int index) {
+int dchain_locks_impl_reposition_index(struct dchain_locks_cell *cells,
+                                       int index, int new_prev_index) {
   int lifted = index + INDEX_SHIFT;
 
-  struct dchain_cell *liftedp = cells + lifted;
+  struct dchain_locks_cell *liftedp = cells + lifted;
+
   int lifted_next = liftedp->next;
   int lifted_prev = liftedp->prev;
 
+  // The index is not allocated.
+  if (lifted_next == lifted_prev && lifted_next != ALLOC_LIST_HEAD) {
+    return 0;
+  }
+
+  struct dchain_locks_cell *lifted_prevp = cells + lifted_prev;
+  lifted_prevp->next = lifted_next;
+
+  struct dchain_locks_cell *lifted_nextp = cells + lifted_next;
+  lifted_nextp->prev = lifted_prev;
+
+  int new_prev = new_prev_index + INDEX_SHIFT;
+  struct dchain_locks_cell *new_prevp = cells + new_prev;
+  int new_prev_next = new_prevp->next;
+
+  liftedp->prev = new_prev;
+  liftedp->next = new_prev_next;
+
+  struct dchain_locks_cell *new_prev_nextp = cells + new_prev_next;
+
+  new_prev_nextp->prev = lifted;
+  new_prevp->next = lifted;
+
+  return 1;
+}
+
+int dchain_locks_impl_rejuvenate_index(struct dchain_locks_cell *cells,
+                                       int index) {
+  int lifted = index + INDEX_SHIFT;
+
+  struct dchain_locks_cell *liftedp = cells + lifted;
+  int lifted_next = liftedp->next;
+  int lifted_prev = liftedp->prev;
+
+  // The index is not allocated.
   if (lifted_next == lifted_prev) {
     if (lifted_next != ALLOC_LIST_HEAD) {
       return 0;
     } else {
+      // There is only one element allocated - no point in changing anything
       return 1;
     }
   }
 
-  struct dchain_cell *lifted_prevp = cells + lifted_prev;
+  struct dchain_locks_cell *lifted_prevp = cells + lifted_prev;
   lifted_prevp->next = lifted_next;
 
-  struct dchain_cell *lifted_nextp = cells + lifted_next;
+  struct dchain_locks_cell *lifted_nextp = cells + lifted_next;
   lifted_nextp->prev = lifted_prev;
 
-  struct dchain_cell *al_head = cells + ALLOC_LIST_HEAD;
+  struct dchain_locks_cell *al_head = cells + ALLOC_LIST_HEAD;
   int al_head_prev = al_head->prev;
 
+  // Link it at the very end - right before the special link.
   liftedp->next = ALLOC_LIST_HEAD;
   liftedp->prev = al_head_prev;
 
-  struct dchain_cell *al_head_prevp = cells + al_head_prev;
+  struct dchain_locks_cell *al_head_prevp = cells + al_head_prev;
   al_head_prevp->next = lifted;
 
   al_head->prev = lifted;
   return 1;
 }
 
-int dchain_impl_is_index_allocated(struct dchain_cell *cells, int index) {
+int dchain_locks_impl_is_index_allocated(struct dchain_locks_cell *cells,
+                                         int index) {
   int lifted = index + INDEX_SHIFT;
 
-  struct dchain_cell *liftedp = cells + lifted;
+  struct dchain_locks_cell *liftedp = cells + lifted;
   int lifted_next = liftedp->next;
   int lifted_prev = liftedp->prev;
 
@@ -450,164 +642,253 @@ int dchain_impl_is_index_allocated(struct dchain_cell *cells, int index) {
   }
 }
 
-int dchain_allocate(int index_range, struct DoubleChain **chain_out) {
+struct DoubleChainLocks;
+// Makes sure the allocator structur fits into memory, and particularly into
+// 32 bit address space.
+#define IRANG_LIMIT (1048576)
 
-  struct DoubleChain *old_chain_out = *chain_out;
-  struct DoubleChain *chain_alloc =
-      (struct DoubleChain *)rte_malloc(NULL, sizeof(struct DoubleChain), 64);
+// kinda hacky, but makes the proof independent of vigor_time_t... sort of
+#define malloc_block_time malloc_block_llongs
+#define time_integer llong_integer
+#define times llongs
+
+struct DoubleChainLocks {
+  struct dchain_locks_cell *cells[RTE_MAX_LCORE];
+  struct dchain_locks_cell *active_cells[RTE_MAX_LCORE];
+  vigor_time_t *timestamps[RTE_MAX_LCORE];
+  int range;
+};
+
+int dchain_locks_allocate(int index_range,
+                          struct DoubleChainLocks **chain_out) {
+
+  struct DoubleChainLocks *old_chain_out = *chain_out;
+  struct DoubleChainLocks *chain_alloc = (struct DoubleChainLocks *)rte_malloc(
+      NULL, sizeof(struct DoubleChainLocks), 0);
   if (chain_alloc == NULL)
     return 0;
-  *chain_out = (struct DoubleChain *)chain_alloc;
+  *chain_out = (struct DoubleChainLocks *)chain_alloc;
 
-  struct dchain_cell *cells_alloc = (struct dchain_cell *)rte_malloc(
-      NULL, sizeof(struct dchain_cell) * (index_range + DCHAIN_RESERVED), 64);
-  if (cells_alloc == NULL) {
-    rte_free(chain_alloc);
-    *chain_out = old_chain_out;
-    return 0;
+  unsigned lcore_id;
+  RTE_LCORE_FOREACH(lcore_id) {
+    struct dchain_locks_cell *cells_alloc =
+        (struct dchain_locks_cell *)rte_malloc(
+            NULL,
+            sizeof(struct dchain_locks_cell) * (index_range + DCHAIN_RESERVED),
+            0);
+    if (cells_alloc == NULL) {
+      rte_free(chain_alloc);
+      *chain_out = old_chain_out;
+      return 0;
+    }
+    (*chain_out)->cells[lcore_id] = cells_alloc;
+
+    struct dchain_locks_cell *active_cells_alloc =
+        (struct dchain_locks_cell *)rte_malloc(
+            NULL,
+            sizeof(struct dchain_locks_cell) * (index_range + DCHAIN_RESERVED),
+            0);
+    if (active_cells_alloc == NULL) {
+      rte_free((void *)cells_alloc);
+      rte_free(chain_alloc);
+      *chain_out = old_chain_out;
+      return 0;
+    }
+    (*chain_out)->active_cells[lcore_id] = active_cells_alloc;
+    dchain_locks_impl_activity_init((*chain_out)->active_cells[lcore_id],
+                                    index_range);
+
+    vigor_time_t *timestamps_alloc = (vigor_time_t *)rte_zmalloc(
+        NULL, sizeof(vigor_time_t) * (index_range), 0);
+    if (timestamps_alloc == NULL) {
+      rte_free((void *)cells_alloc);
+      rte_free((void *)active_cells_alloc);
+      rte_free(chain_alloc);
+      *chain_out = old_chain_out;
+      return 0;
+    }
+    for (int i = 0; i < index_range; i++) {
+      timestamps_alloc[i] = -1;
+    }
+    (*chain_out)->range = index_range;
+    (*chain_out)->timestamps[lcore_id] = timestamps_alloc;
+
+    dchain_locks_impl_init((*chain_out)->cells[lcore_id], index_range);
   }
-  (*chain_out)->cells = cells_alloc;
-
-  vigor_time_t *timestamps_alloc = (vigor_time_t *)rte_malloc(
-      NULL, sizeof(vigor_time_t) * (index_range), 64);
-  if (timestamps_alloc == NULL) {
-    rte_free((void *)cells_alloc);
-    rte_free(chain_alloc);
-    *chain_out = old_chain_out;
-    return 0;
-  }
-  (*chain_out)->timestamps = timestamps_alloc;
-
-  dchain_impl_init((*chain_out)->cells, index_range);
 
   return 1;
 }
 
-int dchain_allocate_new_index(struct DoubleChain *chain, int *index_out,
-                              vigor_time_t time) {
-  int ret = dchain_impl_allocate_new_index(chain->cells, index_out);
+int dchain_locks_allocate_new_index(struct DoubleChainLocks *chain,
+                                    int *index_out, vigor_time_t time) {
+  bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool *write_state_ptr = &RTE_PER_LCORE(write_state);
 
-  if (ret) {
-    chain->timestamps[*index_out] = time;
+  if (!*write_state_ptr) {
+    *write_attempt_ptr = true;
+    return 1;
   }
 
-  return ret;
-}
-
-int dchain_rejuvenate_index(struct DoubleChain *chain, int index,
-                            vigor_time_t time) {
-  int ret = dchain_impl_rejuvenate_index(chain->cells, index);
-
-  if (ret) {
-    chain->timestamps[index] = time;
-  }
-
-  return ret;
-}
-
-int dchain_expire_one_index(struct DoubleChain *chain, int *index_out,
-                            vigor_time_t time) {
-  int has_ind = dchain_impl_get_oldest_index(chain->cells, index_out);
-
-  if (has_ind) {
-    if (chain->timestamps[*index_out] < time) {
-      int rez = dchain_impl_free_index(chain->cells, *index_out);
-      return rez;
+  int ret = -1;
+  unsigned lcore_id;
+  RTE_LCORE_FOREACH(lcore_id) {
+    int new_ret =
+        dchain_locks_impl_allocate_new_index(chain->cells[lcore_id], index_out);
+    ret = new_ret;
+    if (new_ret) {
+      chain->timestamps[lcore_id][*index_out] = time;
     }
+  }
+
+  if (ret) {
+    lcore_id = rte_lcore_id();
+    dchain_locks_impl_activate_index(chain->active_cells[lcore_id], *index_out);
+  }
+
+  return ret;
+}
+
+int dchain_locks_rejuvenate_index(struct DoubleChainLocks *chain, int index,
+                                  vigor_time_t time) {
+  unsigned int lcore_id = rte_lcore_id();
+  int ret = dchain_locks_impl_rejuvenate_index(chain->cells[lcore_id], index);
+
+  if (ret) {
+    chain->timestamps[lcore_id][index] = time;
+    dchain_locks_impl_activate_index(chain->active_cells[lcore_id], index);
+  }
+
+  return ret;
+}
+
+int dchain_locks_update_timestamp(struct DoubleChainLocks *chain, int index,
+                                  vigor_time_t time) {
+  unsigned int lcore_id = rte_lcore_id();
+
+  int new_prev = -1;
+  int prev = index;
+  int next;
+
+  vigor_time_t prev_time = chain->timestamps[lcore_id][prev];
+  vigor_time_t next_time;
+
+  while (dchain_locks_impl_next(chain->cells[lcore_id], prev, &next)) {
+    next_time = chain->timestamps[lcore_id][next];
+
+    if (prev_time <= time && time <= next_time && index != prev) {
+      new_prev = prev;
+      break;
+    }
+
+    prev = next;
+    prev_time = next_time;
+  }
+
+  int ret;
+
+  if (new_prev == -1) {
+    ret = dchain_locks_impl_rejuvenate_index(chain->cells[lcore_id], index);
+  } else {
+    ret = dchain_locks_impl_reposition_index(chain->cells[lcore_id], index,
+                                             new_prev);
+  }
+
+  return ret;
+}
+
+int dchain_locks_free_index(struct DoubleChainLocks *chain, int index) {
+  bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool *write_state_ptr = &RTE_PER_LCORE(write_state);
+
+  if (!*write_state_ptr) {
+    *write_attempt_ptr = true;
+    return 1;
+  }
+
+  int rez = -1;
+  unsigned lcore_id;
+
+  RTE_LCORE_FOREACH(lcore_id) {
+    int new_rez = dchain_locks_impl_free_index(chain->cells[lcore_id], index);
+    dchain_locks_impl_deactivate_index(chain->active_cells[lcore_id], index);
+    rez = new_rez;
+    chain->timestamps[lcore_id][index] = -1;
+  }
+
+  return rez;
+}
+
+int dchain_locks_expire_one_index(struct DoubleChainLocks *chain,
+                                  int *index_out, vigor_time_t time) {
+  bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool *write_state_ptr = &RTE_PER_LCORE(write_state);
+
+  unsigned int this_lcore_id = rte_lcore_id();
+
+  int has_ind = dchain_locks_impl_get_oldest_index(
+      chain->active_cells[this_lcore_id], index_out);
+
+  if (has_ind && chain->timestamps[this_lcore_id][*index_out] > -1 &&
+      chain->timestamps[this_lcore_id][*index_out] < time) {
+    if (!*write_state_ptr) {
+      *write_attempt_ptr = true;
+      return 1;
+    }
+
+    unsigned int lcore_id;
+    vigor_time_t most_recent = -1;
+    RTE_LCORE_FOREACH(lcore_id) {
+      if (chain->timestamps[lcore_id][*index_out] > most_recent) {
+        most_recent = chain->timestamps[lcore_id][*index_out];
+      }
+    }
+
+    if (most_recent >= time) {
+      return dchain_locks_update_timestamp(chain, *index_out, most_recent);
+    }
+
+    return dchain_locks_free_index(chain, *index_out);
   }
 
   return 0;
 }
 
-int dchain_is_index_allocated(struct DoubleChain *chain, int index) {
-  return dchain_impl_is_index_allocated(chain->cells, index);
+int dchain_locks_is_index_allocated(struct DoubleChainLocks *chain, int index) {
+  return dchain_locks_impl_is_index_allocated(chain->cells[rte_lcore_id()],
+                                              index);
 }
 
-int dchain_free_index(struct DoubleChain *chain, int index) {
-  return dchain_impl_free_index(chain->cells, index);
-}
+typedef void entry_extract_key(void *entry, void **key);
+typedef void entry_pack_key(void *entry, void *key);
 
-#define VECTOR_CAPACITY_UPPER_LIMIT 140000
+int expire_items_single_map_locks(struct DoubleChainLocks *chain,
+                                  struct VectorLocks *vector,
+                                  struct MapLocks *map, vigor_time_t time) {
+  bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool *write_state_ptr = &RTE_PER_LCORE(write_state);
 
-typedef void vector_init_elem(void *elem);
-
-struct Vector {
-  char *data;
-  int elem_size;
-  unsigned capacity;
-};
-
-int vector_allocate(int elem_size, unsigned capacity,
-                    vector_init_elem *init_elem, struct Vector **vector_out) {
-  struct Vector *old_vector_val = *vector_out;
-  struct Vector *vector_alloc =
-      (struct Vector *)rte_malloc(NULL, sizeof(struct Vector), 64);
-  if (vector_alloc == 0)
-    return 0;
-  *vector_out = (struct Vector *)vector_alloc;
-
-  char *data_alloc =
-      (char *)rte_malloc(NULL, (uint32_t)elem_size * capacity, 64);
-  if (data_alloc == 0) {
-    rte_free(vector_alloc);
-    *vector_out = old_vector_val;
-    return 0;
-  }
-  (*vector_out)->data = data_alloc;
-  (*vector_out)->elem_size = elem_size;
-  (*vector_out)->capacity = capacity;
-
-  for (unsigned i = 0; i < capacity; ++i) {
-    init_elem((*vector_out)->data + elem_size * (int)i);
-  }
-
-  return 1;
-}
-
-void vector_borrow(struct Vector *vector, int index, void **val_out) {
-  *val_out = vector->data + index * vector->elem_size;
-}
-
-void vector_return(struct Vector *vector, int index, void *value) {}
-
-int expire_items_single_map(struct DoubleChain *chain, struct Vector *vector,
-                            struct Map *map, vigor_time_t time) {
   int count = 0;
   int index = -1;
 
-  while (dchain_expire_one_index(chain, &index, time)) {
-    void *key;
-    vector_borrow(vector, index, &key);
-    map_erase(map, key, &key);
-    vector_return(vector, index, key);
+  while (dchain_locks_expire_one_index(chain, &index, time)) {
+    if (!*write_state_ptr) {
+      *write_attempt_ptr = true;
+      return 1;
+    }
 
+    void *key;
+    vector_locks_borrow(vector, index, &key);
+    map_locks_erase(map, key, &key);
+    vector_locks_return(vector, index, key);
     ++count;
   }
 
   return count;
 }
 
-int expire_items_single_map_iteratively(struct Vector *vector, struct Map *map,
-                                        int start, int n_elems) {
-  assert(start >= 0);
-  assert(n_elems >= 0);
-  void *key;
-  for (int i = start; i < n_elems; i++) {
-    vector_borrow(vector, i, (void **)&key);
-    map_erase(map, key, (void **)&key);
-    vector_return(vector, i, key);
-  }
-}
-
 // Careful: SKETCH_HASHES needs to be <= SKETCH_SALTS_BANK_SIZE
 #define SKETCH_HASHES 4
 #define SKETCH_SALTS_BANK_SIZE 64
-
-struct internal_data {
-  unsigned hashes[SKETCH_HASHES];
-  int present[SKETCH_HASHES];
-  int buckets_indexes[SKETCH_HASHES];
-};
 
 static const uint32_t SKETCH_SALTS[SKETCH_SALTS_BANK_SIZE] = {
   0x9b78350f, 0x9bcf144c, 0x8ab29a3e, 0x34d48bf5, 0x78e47449, 0xd6e4af1d,
@@ -623,17 +904,24 @@ static const uint32_t SKETCH_SALTS[SKETCH_SALTS_BANK_SIZE] = {
   0xceee91e5, 0x1d4c6b18, 0x2a80e6df, 0x396f4d23,
 };
 
-struct Sketch {
-  struct Map *clients;
-  struct Vector *keys;
-  struct Vector *buckets;
-  struct DoubleChain *allocators[SKETCH_HASHES];
+struct internal_data {
+  unsigned hashes[SKETCH_HASHES];
+  int present[SKETCH_HASHES];
+  int buckets_indexes[SKETCH_HASHES];
+} __attribute__((aligned(64)));
+
+struct SketchLocks {
+  struct MapLocks *clients;
+  struct VectorLocks *keys;
+  struct VectorLocks *buckets;
+  struct DoubleChainLocks *allocators[SKETCH_HASHES];
 
   uint32_t capacity;
   uint16_t threshold;
 
   map_key_hash *kh;
-  struct internal_data internal;
+
+  struct internal_data internal[RTE_MAX_LCORE];
 };
 
 struct hash {
@@ -642,12 +930,6 @@ struct hash {
 
 struct bucket {
   uint32_t value;
-};
-
-struct sketch_data {
-  unsigned hashes[SKETCH_HASHES];
-  int present[SKETCH_HASHES];
-  int buckets_indexes[SKETCH_HASHES];
 };
 
 unsigned find_next_power_of_2_bigger_than(uint32_t d) {
@@ -683,11 +965,12 @@ unsigned hash_hash(void *obj) {
 
 void bucket_allocate(void *obj) { (uintptr_t) obj; }
 
-int sketch_allocate(map_key_hash *kh, uint32_t capacity, uint16_t threshold,
-                    struct Sketch **sketch_out) {
+int sketch_locks_allocate(map_key_hash *kh, uint32_t capacity,
+                          uint16_t threshold, struct SketchLocks **sketch_out) {
   assert(SKETCH_HASHES <= SKETCH_SALTS_BANK_SIZE);
 
-  struct Sketch *sketch_alloc = (struct Sketch *)malloc(sizeof(struct Sketch));
+  struct SketchLocks *sketch_alloc =
+      (struct SketchLocks *)rte_malloc(NULL, sizeof(struct SketchLocks), 0);
   if (sketch_alloc == NULL) {
     return 0;
   }
@@ -702,26 +985,26 @@ int sketch_allocate(map_key_hash *kh, uint32_t capacity, uint16_t threshold,
       find_next_power_of_2_bigger_than(capacity * SKETCH_HASHES);
 
   (*sketch_out)->clients = NULL;
-  if (map_allocate(hash_eq, hash_hash, total_sketch_capacity,
-                   &((*sketch_out)->clients)) == 0) {
+  if (map_locks_allocate(hash_eq, hash_hash, total_sketch_capacity,
+                         &((*sketch_out)->clients)) == 0) {
     return 0;
   }
 
   (*sketch_out)->keys = NULL;
-  if (vector_allocate(sizeof(struct hash), total_sketch_capacity, hash_allocate,
-                      &((*sketch_out)->keys)) == 0) {
+  if (vector_locks_allocate(sizeof(struct hash), total_sketch_capacity,
+                            hash_allocate, &((*sketch_out)->keys)) == 0) {
     return 0;
   }
 
   (*sketch_out)->buckets = NULL;
-  if (vector_allocate(sizeof(struct bucket), total_sketch_capacity,
-                      bucket_allocate, &((*sketch_out)->buckets)) == 0) {
+  if (vector_locks_allocate(sizeof(struct bucket), total_sketch_capacity,
+                            bucket_allocate, &((*sketch_out)->buckets)) == 0) {
     return 0;
   }
 
   for (int i = 0; i < SKETCH_HASHES; i++) {
     (*sketch_out)->allocators[i] = NULL;
-    if (dchain_allocate(capacity, &((*sketch_out)->allocators[i])) == 0) {
+    if (dchain_locks_allocate(capacity, &((*sketch_out)->allocators[i])) == 0) {
       return 0;
     }
   }
@@ -729,66 +1012,84 @@ int sketch_allocate(map_key_hash *kh, uint32_t capacity, uint16_t threshold,
   return 1;
 }
 
-void sketch_compute_hashes(struct Sketch *sketch, void *key) {
-  for (int i = 0; i < SKETCH_HASHES; i++) {
-    sketch->internal.buckets_indexes[i] = -1;
-    sketch->internal.present[i] = 0;
-    sketch->internal.hashes[i] = 0;
+void sketch_locks_compute_hashes(struct SketchLocks *sketch, void *key) {
+  unsigned int lcore_id = rte_lcore_id();
 
-    sketch->internal.hashes[i] =
-        __builtin_ia32_crc32si(sketch->internal.hashes[i], SKETCH_SALTS[i]);
-    sketch->internal.hashes[i] =
-        __builtin_ia32_crc32si(sketch->internal.hashes[i], sketch->kh(key));
-    sketch->internal.hashes[i] %= sketch->capacity;
+  for (int i = 0; i < SKETCH_HASHES; i++) {
+    sketch->internal[lcore_id].buckets_indexes[i] = -1;
+    sketch->internal[lcore_id].present[i] = 0;
+    sketch->internal[lcore_id].hashes[i] = 0;
+
+    sketch->internal[lcore_id].hashes[i] = __builtin_ia32_crc32si(
+        sketch->internal[lcore_id].hashes[i], SKETCH_SALTS[i]);
+    sketch->internal[lcore_id].hashes[i] = __builtin_ia32_crc32si(
+        sketch->internal[lcore_id].hashes[i], sketch->kh(key));
+    sketch->internal[lcore_id].hashes[i] %= sketch->capacity;
   }
 }
 
-void sketch_refresh(struct Sketch *sketch, vigor_time_t now) {
+void sketch_locks_refresh(struct SketchLocks *sketch, vigor_time_t now) {
+  unsigned int lcore_id = rte_lcore_id();
+
   for (int i = 0; i < SKETCH_HASHES; i++) {
-    map_get(sketch->clients, &sketch->internal.hashes[i],
-            &sketch->internal.buckets_indexes[i]);
-    dchain_rejuvenate_index(sketch->allocators[i],
-                            sketch->internal.buckets_indexes[i], now);
+    map_locks_get(sketch->clients, &sketch->internal[lcore_id].hashes[i],
+                  &sketch->internal[lcore_id].buckets_indexes[i]);
+    dchain_locks_rejuvenate_index(sketch->allocators[i],
+                                  sketch->internal[lcore_id].buckets_indexes[i],
+                                  now);
   }
 }
 
-int sketch_fetch(struct Sketch *sketch) {
+int sketch_locks_fetch(struct SketchLocks *sketch) {
+  unsigned int lcore_id = rte_lcore_id();
+
   int bucket_min_set = false;
   uint32_t *buckets_values[SKETCH_HASHES];
   uint32_t bucket_min = 0;
 
   for (int i = 0; i < SKETCH_HASHES; i++) {
-    sketch->internal.present[i] =
-        map_get(sketch->clients, &sketch->internal.hashes[i],
-                &sketch->internal.buckets_indexes[i]);
+    sketch->internal[lcore_id].present[i] =
+        map_locks_get(sketch->clients, &sketch->internal[lcore_id].hashes[i],
+                      &sketch->internal[lcore_id].buckets_indexes[i]);
 
-    if (!sketch->internal.present[i]) {
+    if (!sketch->internal[lcore_id].present[i]) {
       continue;
     }
 
-    int offseted = sketch->internal.buckets_indexes[i] + sketch->capacity * i;
-    vector_borrow(sketch->buckets, offseted, (void **)&buckets_values[i]);
+    int offseted =
+        sketch->internal[lcore_id].buckets_indexes[i] + sketch->capacity * i;
+    vector_locks_borrow(sketch->buckets, offseted, (void **)&buckets_values[i]);
 
     if (!bucket_min_set || bucket_min > *buckets_values[i]) {
       bucket_min = *buckets_values[i];
       bucket_min_set = true;
     }
 
-    vector_return(sketch->buckets, offseted, buckets_values[i]);
+    vector_locks_return(sketch->buckets, offseted, buckets_values[i]);
   }
 
   return bucket_min_set && bucket_min > sketch->threshold;
 }
 
-int sketch_touch_buckets(struct Sketch *sketch, vigor_time_t now) {
+int sketch_locks_touch_buckets(struct SketchLocks *sketch, vigor_time_t now) {
+  unsigned int lcore_id = rte_lcore_id();
+
+  bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool *write_state_ptr = &RTE_PER_LCORE(write_state);
+
+  if (!*write_state_ptr) {
+    *write_attempt_ptr = true;
+    return false;
+  }
+
   for (int i = 0; i < SKETCH_HASHES; i++) {
     int bucket_index = -1;
-    int present =
-        map_get(sketch->clients, &sketch->internal.hashes[i], &bucket_index);
+    int present = map_locks_get(
+        sketch->clients, &sketch->internal[lcore_id].hashes[i], &bucket_index);
 
     if (!present) {
-      int allocated_client =
-          dchain_allocate_new_index(sketch->allocators[i], &bucket_index, now);
+      int allocated_client = dchain_locks_allocate_new_index(
+          sketch->allocators[i], &bucket_index, now);
 
       if (!allocated_client) {
         // Sketch size limit reached.
@@ -800,43 +1101,253 @@ int sketch_touch_buckets(struct Sketch *sketch, vigor_time_t now) {
       uint32_t *saved_hash = 0;
       uint32_t *saved_bucket = 0;
 
-      vector_borrow(sketch->keys, offseted, (void **)&saved_hash);
-      vector_borrow(sketch->buckets, offseted, (void **)&saved_bucket);
+      vector_locks_borrow(sketch->keys, offseted, (void **)&saved_hash);
+      vector_locks_borrow(sketch->buckets, offseted, (void **)&saved_bucket);
 
-      (*saved_hash) = sketch->internal.hashes[i];
+      (*saved_hash) = sketch->internal[lcore_id].hashes[i];
       (*saved_bucket) = 0;
-      map_put(sketch->clients, saved_hash, bucket_index);
+      map_locks_put(sketch->clients, saved_hash, bucket_index);
 
-      vector_return(sketch->keys, offseted, saved_hash);
-      vector_return(sketch->buckets, offseted, saved_bucket);
+      vector_locks_return(sketch->keys, offseted, saved_hash);
+      vector_locks_return(sketch->buckets, offseted, saved_bucket);
     } else {
-      dchain_rejuvenate_index(sketch->allocators[i], bucket_index, now);
+      dchain_locks_rejuvenate_index(sketch->allocators[i], bucket_index, now);
       uint32_t *bucket;
       int offseted = bucket_index + sketch->capacity * i;
-      vector_borrow(sketch->buckets, offseted, (void **)&bucket);
+      vector_locks_borrow(sketch->buckets, offseted, (void **)&bucket);
       (*bucket)++;
-      vector_return(sketch->buckets, offseted, bucket);
+      vector_locks_return(sketch->buckets, offseted, bucket);
     }
   }
 
   return true;
 }
 
-void sketch_expire(struct Sketch *sketch, vigor_time_t time) {
+void sketch_locks_expire(struct SketchLocks *sketch, vigor_time_t time) {
+  bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool *write_state_ptr = &RTE_PER_LCORE(write_state);
+
   int offset = 0;
   int index = -1;
 
   for (int i = 0; i < SKETCH_HASHES; i++) {
     offset = i * sketch->capacity;
 
-    while (dchain_expire_one_index(sketch->allocators[i], &index, time)) {
+    while (dchain_locks_expire_one_index(sketch->allocators[i], &index, time)) {
+      if (!*write_state_ptr) {
+        *write_attempt_ptr = true;
+        return;
+      }
+
       void *key;
-      vector_borrow(sketch->keys, index + offset, &key);
-      map_erase(sketch->clients, key, &key);
-      vector_return(sketch->keys, index + offset, key);
+      vector_locks_borrow(sketch->keys, index + offset, &key);
+      map_locks_erase(sketch->clients, key, &key);
+      vector_locks_return(sketch->keys, index + offset, key);
     }
   }
 }
+
+#define MAX_CHT_HEIGHT 40000
+
+uint64_t cht_loop(uint64_t k, uint64_t capacity) {
+  uint64_t g = k % capacity;
+  return g;
+}
+
+int cht_locks_fill_cht(struct VectorLocks *cht, uint32_t cht_height,
+                       uint32_t backend_capacity) {
+  // Generate the permutations of 0..(cht_height - 1) for each backend
+  int *permutations =
+      (int *)malloc(sizeof(int) * (int)(cht_height * backend_capacity));
+  if (permutations == 0) {
+    return 0;
+  }
+
+  for (uint32_t i = 0; i < backend_capacity; ++i) {
+    uint32_t offset_absolut = i * 31;
+    uint64_t offset = cht_loop(offset_absolut, cht_height);
+    uint64_t base_shift = cht_loop(i, cht_height - 1);
+    uint64_t shift = base_shift + 1;
+
+    for (uint32_t j = 0; j < cht_height; ++j) {
+      uint64_t permut = cht_loop(offset + shift * j, cht_height);
+      permutations[i * cht_height + j] = (int)permut;
+    }
+  }
+
+  int *next = (int *)malloc(sizeof(int) * (int)(cht_height));
+  if (next == 0) {
+    free(permutations);
+    return 0;
+  }
+
+  for (uint32_t i = 0; i < cht_height; ++i) {
+    next[i] = 0;
+  }
+
+  // Fill the priority lists for each hash in [0, cht_height)
+  for (uint32_t i = 0; i < cht_height; ++i) {
+    for (uint32_t j = 0; j < backend_capacity; ++j) {
+      uint32_t *value;
+
+      uint32_t index = j * cht_height + i;
+      int bucket_id = permutations[index];
+
+      int priority = next[bucket_id];
+      next[bucket_id] += 1;
+
+      // Update the CHT
+      vector_locks_borrow(cht,
+                          (int)(backend_capacity * ((uint32_t)bucket_id) +
+                                ((uint32_t)priority)),
+                          (void **)&value);
+      *value = j;
+      vector_locks_return(cht,
+                          (int)(backend_capacity * ((uint32_t)bucket_id) +
+                                ((uint32_t)priority)),
+                          (void *)value);
+    }
+  }
+
+  // Free memory
+  free(next);
+  free(permutations);
+  return 1;
+}
+
+int cht_locks_find_preferred_available_backend(
+    uint64_t hash, struct VectorLocks *cht,
+    struct DoubleChainLocks *active_backends, uint32_t cht_height,
+    uint32_t backend_capacity, int *chosen_backend) {
+  uint64_t start = cht_loop(hash, cht_height);
+  for (uint32_t i = 0; i < backend_capacity; ++i) {
+    uint64_t candidate_idx =
+        start * backend_capacity +
+        i; // There was a bug, right here, untill I tried to prove this.
+
+    uint32_t *candidate;
+    vector_locks_borrow(cht, (int)candidate_idx, (void **)&candidate);
+
+    if (dchain_locks_is_index_allocated(active_backends, (int)*candidate)) {
+      *chosen_backend = (int)*candidate;
+      vector_locks_return(cht, (int)candidate_idx, candidate);
+      return 1;
+    }
+
+    vector_locks_return(cht, (int)candidate_idx, candidate);
+  }
+
+  return 0;
+}
+
+int expire_items_single_map_offseted_locks(struct DoubleChainLocks *chain,
+                                           struct VectorLocks *vector,
+                                           struct MapLocks *map,
+                                           vigor_time_t time, int offset) {
+  assert(offset >= 0);
+
+  int count = 0;
+  int index = -1;
+
+  while (dchain_locks_expire_one_index(chain, &index, time)) {
+    void *key;
+    vector_locks_borrow(vector, index + offset, &key);
+    map_locks_erase(map, key, &key);
+    vector_locks_return(vector, index + offset, key);
+    ++count;
+  }
+
+  return count;
+}
+
+int expire_items_single_map_iteratively_locks(struct VectorLocks *vector,
+                                              struct MapLocks *map, int start,
+                                              int n_elems) {
+  bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool *write_state_ptr = &RTE_PER_LCORE(write_state);
+
+  if (n_elems != 0 && !*write_state_ptr) {
+    *write_attempt_ptr = true;
+    return 1;
+  }
+
+  assert(start >= 0);
+  assert(n_elems >= 0);
+  void *key;
+  for (int i = start; i < n_elems; i++) {
+    vector_locks_borrow(vector, i, (void **)&key);
+    map_locks_erase(map, key, (void **)&key);
+    vector_locks_return(vector, i, key);
+  }
+}
+
+/**********************************************
+ *
+ *                  NF-LOCKS
+ *
+ **********************************************/
+
+typedef struct {
+  rte_atomic32_t atom;
+} __attribute__((aligned(64))) atom_t;
+
+typedef struct {
+  atom_t *tokens;
+  atom_t write_token;
+} nf_lock_t;
+
+static inline void nf_lock_init(nf_lock_t *nfl) {
+  nfl->tokens = (atom_t *)rte_malloc(NULL, sizeof(atom_t) * RTE_MAX_LCORE, 64);
+
+  unsigned lcore_id;
+  RTE_LCORE_FOREACH(lcore_id) {
+    rte_atomic32_init(&nfl->tokens[lcore_id].atom);
+  }
+
+  rte_atomic32_init(&nfl->write_token.atom);
+}
+
+static inline void nf_lock_allow_writes(nf_lock_t *nfl) {
+  unsigned lcore_id = rte_lcore_id();
+  rte_atomic32_clear(&nfl->tokens[lcore_id].atom);
+}
+
+static inline void nf_lock_block_writes(nf_lock_t *nfl) {
+  unsigned lcore_id = rte_lcore_id();
+  while (!rte_atomic32_test_and_set(&nfl->tokens[lcore_id].atom)) {
+    // prevent the compiler from removing this loop
+    __asm__ __volatile__("");
+  }
+}
+
+static inline void nf_lock_write_lock(nf_lock_t *nfl) {
+  unsigned lcore_id = rte_lcore_id();
+  rte_atomic32_clear(&nfl->tokens[lcore_id].atom);
+
+  while (!rte_atomic32_test_and_set(&nfl->write_token.atom)) {
+    // prevent the compiler from removing this loop
+    __asm__ __volatile__("");
+  }
+
+  RTE_LCORE_FOREACH(lcore_id) {
+    while (!rte_atomic32_test_and_set(&nfl->tokens[lcore_id].atom)) {
+      __asm__ __volatile__("");
+    }
+  }
+}
+
+static inline void nf_lock_write_unlock(nf_lock_t *nfl) {
+  unsigned lcore_id;
+  RTE_LCORE_FOREACH(lcore_id) {
+    rte_atomic32_clear(&nfl->tokens[lcore_id].atom);
+  }
+
+  rte_atomic32_clear(&nfl->write_token.atom);
+}
+
+static nf_lock_t nf_lock;
+
+static void nf_util_init_locks() { nf_lock_init(&nf_lock); }
 
 /**********************************************
  *
@@ -920,98 +1431,6 @@ uint16_t ipv4_udptcp_cksum(const struct rte_ipv4_hdr *ipv4_hdr,
   return (uint16_t)cksum;
 }
 
-#define MAX_CHT_HEIGHT 40000
-
-static uint64_t cht_loop(uint64_t k, uint64_t capacity) {
-  uint64_t g = k % capacity;
-  return g;
-}
-
-int cht_fill_cht(struct Vector *cht, uint32_t cht_height,
-                 uint32_t backend_capacity) {
-  // Generate the permutations of 0..(cht_height - 1) for each backend
-  int *permutations =
-      (int *)malloc(sizeof(int) * (int)(cht_height * backend_capacity));
-  if (permutations == 0) {
-    return 0;
-  }
-
-  for (uint32_t i = 0; i < backend_capacity; ++i) {
-    uint32_t offset_absolut = i * 31;
-    uint64_t offset = cht_loop(offset_absolut, cht_height);
-    uint64_t base_shift = cht_loop(i, cht_height - 1);
-    uint64_t shift = base_shift + 1;
-
-    for (uint32_t j = 0; j < cht_height; ++j) {
-      uint64_t permut = cht_loop(offset + shift * j, cht_height);
-      permutations[i * cht_height + j] = (int)permut;
-    }
-  }
-
-  int *next = (int *)malloc(sizeof(int) * (int)(cht_height));
-  if (next == 0) {
-    free(permutations);
-    return 0;
-  }
-
-  for (uint32_t i = 0; i < cht_height; ++i) {
-    next[i] = 0;
-  }
-
-  for (uint32_t i = 0; i < cht_height; ++i) {
-    for (uint32_t j = 0; j < backend_capacity; ++j) {
-      uint32_t *value;
-
-      uint32_t index = j * cht_height + i;
-      int bucket_id = permutations[index];
-      int priority = next[bucket_id];
-
-      next[bucket_id] += 1;
-
-      vector_borrow(cht,
-                    (int)(backend_capacity * ((uint32_t)bucket_id) +
-                          ((uint32_t)priority)),
-                    (void **)&value);
-      *value = j;
-      vector_return(cht,
-                    (int)(backend_capacity * ((uint32_t)bucket_id) +
-                          ((uint32_t)priority)),
-                    (void *)value);
-    }
-  }
-
-  // Free memory
-  free(next);
-  free(permutations);
-  return 1;
-}
-
-int cht_find_preferred_available_backend(uint64_t hash, struct Vector *cht,
-                                         struct DoubleChain *active_backends,
-                                         uint32_t cht_height,
-                                         uint32_t backend_capacity,
-                                         int *chosen_backend) {
-  uint64_t start = cht_loop(hash, cht_height);
-  for (uint32_t i = 0; i < backend_capacity; ++i) {
-    uint64_t candidate_idx =
-        start * backend_capacity +
-        i; // There was a bug, right here, untill I tried to prove this.
-
-    uint32_t *candidate;
-    vector_borrow(cht, (int)candidate_idx, (void **)&candidate);
-
-    if (dchain_is_index_allocated(active_backends, (int)*candidate)) {
-      *chosen_backend = (int)*candidate;
-      vector_return(cht, (int)candidate_idx, candidate);
-      return 1;
-    }
-
-    vector_return(cht, (int)candidate_idx, candidate);
-  }
-
-  return 0;
-}
-
 /**********************************************
  *
  *                  ETHER
@@ -1064,6 +1483,79 @@ unsigned rte_ether_addr_hash(void *obj) {
 
 /**********************************************
  *
+ *                  NF-RSS
+ *
+ **********************************************/
+
+#define MBUF_CACHE_SIZE 256
+#define RSS_HASH_KEY_LENGTH 52
+#define MAX_NUM_DEVICES 32 // this is quite arbitrary...
+
+struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES];
+
+struct lcore_conf {
+  struct rte_mempool *mbuf_pool;
+  uint16_t queue_id;
+};
+
+struct lcore_conf lcores_conf[RTE_MAX_LCORE];
+
+/**********************************************
+ *
+ *                  NF-UTIL
+ *
+ **********************************************/
+
+// rte_ether
+struct rte_ether_addr;
+struct rte_ether_hdr;
+
+#define IP_MIN_SIZE_WORDS 5
+#define WORD_SIZE 4
+
+#define RETA_CONF_SIZE (ETH_RSS_RETA_SIZE_512 / RTE_RETA_GROUP_SIZE)
+
+typedef struct {
+  uint16_t tables[RTE_MAX_LCORE][ETH_RSS_RETA_SIZE_512];
+  bool set;
+} retas_t;
+
+retas_t retas_per_device[MAX_NUM_DEVICES];
+
+void init_retas();
+
+void set_reta(uint16_t device) {
+  unsigned lcores = rte_lcore_count();
+
+  if (lcores <= 1 || !retas_per_device[device].set) {
+    return;
+  }
+
+  struct rte_eth_rss_reta_entry64 reta_conf[RETA_CONF_SIZE];
+
+  struct rte_eth_dev_info dev_info;
+  rte_eth_dev_info_get(device, &dev_info);
+
+  /* RETA setting */
+  memset(reta_conf, 0, sizeof(reta_conf));
+
+  for (uint16_t bucket = 0; bucket < dev_info.reta_size; bucket++) {
+    reta_conf[bucket / RTE_RETA_GROUP_SIZE].mask = UINT64_MAX;
+  }
+
+  for (uint16_t bucket = 0; bucket < dev_info.reta_size; bucket++) {
+    uint32_t reta_id = bucket / RTE_RETA_GROUP_SIZE;
+    uint32_t reta_pos = bucket % RTE_RETA_GROUP_SIZE;
+    reta_conf[reta_id].reta[reta_pos] =
+        retas_per_device[device].tables[lcores - 2][bucket];
+  }
+
+  /* RETA update */
+  rte_eth_dev_rss_reta_update(device, reta_conf, dev_info.reta_size);
+}
+
+/**********************************************
+ *
  *                  NF
  *
  **********************************************/
@@ -1078,20 +1570,20 @@ int nf_process(uint16_t device, uint8_t *buffer, uint16_t packet_length,
 #define VIGOR_BATCH_SIZE 32
 
 // Do the opposite: we want batching!
-static const uint16_t RX_QUEUE_SIZE = 256;
-static const uint16_t TX_QUEUE_SIZE = 256;
+static const uint16_t RX_QUEUE_SIZE = 1024;
+static const uint16_t TX_QUEUE_SIZE = 1024;
 
 // Buffer count for mempools
-static const unsigned MEMPOOL_BUFFER_COUNT = 512;
+static const unsigned MEMPOOL_BUFFER_COUNT = 2048;
 
 // Send the given packet to all devices except the packet's own
-void flood(struct rte_mbuf *packet, uint16_t nb_devices) {
+void flood(struct rte_mbuf *packet, uint16_t nb_devices, uint16_t queue_id) {
   rte_mbuf_refcnt_set(packet, nb_devices - 1);
   int total_sent = 0;
   uint16_t skip_device = packet->port;
   for (uint16_t device = 0; device < nb_devices; device++) {
     if (device != skip_device) {
-      total_sent += rte_eth_tx_burst(device, 0, &packet, 1);
+      total_sent += rte_eth_tx_burst(device, queue_id, &packet, 1);
     }
   }
   // should not happen, but in case we couldn't transmit, ensure the packet is
@@ -1103,31 +1595,43 @@ void flood(struct rte_mbuf *packet, uint16_t nb_devices) {
 }
 
 // Initializes the given device using the given memory pool
-static int nf_init_device(uint16_t device, struct rte_mempool *mbuf_pool) {
+static int nf_init_device(uint16_t device, struct rte_mempool **mbuf_pools) {
   int retval;
+  const uint16_t num_queues = rte_lcore_count();
 
   // device_conf passed to rte_eth_dev_configure cannot be NULL
   struct rte_eth_conf device_conf = { 0 };
   // device_conf.rxmode.hw_strip_crc = 1;
+  device_conf.rxmode.mq_mode = ETH_MQ_RX_RSS;
+  device_conf.rx_adv_conf.rss_conf = rss_conf[device];
 
-  // Configure the device (1, 1 == number of RX/TX queues)
-  retval = rte_eth_dev_configure(device, 1, 1, &device_conf);
+  retval = rte_eth_dev_configure(device, num_queues, num_queues, &device_conf);
   if (retval != 0) {
     return retval;
   }
 
-  // Allocate and set up a TX queue (NULL == default config)
-  retval = rte_eth_tx_queue_setup(device, 0, TX_QUEUE_SIZE,
-                                  rte_eth_dev_socket_id(device), NULL);
-  if (retval != 0) {
-    return retval;
+  // Allocate and set up TX queues
+  for (int txq = 0; txq < num_queues; txq++) {
+    retval = rte_eth_tx_queue_setup(device, txq, TX_QUEUE_SIZE,
+                                    rte_eth_dev_socket_id(device), NULL);
+    if (retval != 0) {
+      return retval;
+    }
   }
 
-  // Allocate and set up RX queues (NULL == default config)
-  retval = rte_eth_rx_queue_setup(
-      device, 0, RX_QUEUE_SIZE, rte_eth_dev_socket_id(device), NULL, mbuf_pool);
-  if (retval != 0) {
-    return retval;
+  unsigned lcore_id;
+  int rxq = 0;
+  RTE_LCORE_FOREACH(lcore_id) {
+    // Allocate and set up RX queues
+    lcores_conf[lcore_id].queue_id = rxq;
+    retval = rte_eth_rx_queue_setup(device, rxq, RX_QUEUE_SIZE,
+                                    rte_eth_dev_socket_id(device), NULL,
+                                    mbuf_pools[rxq]);
+    if (retval != 0) {
+      return retval;
+    }
+
+    rxq++;
   }
 
   // Start the device
@@ -1142,20 +1646,27 @@ static int nf_init_device(uint16_t device, struct rte_mempool *mbuf_pool) {
     return retval;
   }
 
+  set_reta(device);
+
   return 0;
 }
 
-// Main worker method (for now used on a single thread...)
 static void worker_main(void) {
+  const unsigned lcore_id = rte_lcore_id();
+  const uint16_t queue_id = lcores_conf[lcore_id].queue_id;
+
   if (!nf_init()) {
     rte_exit(EXIT_FAILURE, "Error initializing NF");
   }
+
+  bool *write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool *write_state_ptr = &RTE_PER_LCORE(write_state);
 
   printf("Core %u forwarding packets.\n", rte_lcore_id());
 
   if (rte_eth_dev_count_avail() != 2) {
     printf("We assume there will be exactly 2 devices for our simple batching "
-           "implementation.\n");
+           "implementation.");
     exit(1);
   }
   printf("Running with batches, this code is unverified!\n");
@@ -1166,18 +1677,36 @@ static void worker_main(void) {
          VIGOR_DEVICE++) {
       struct rte_mbuf *mbufs[VIGOR_BATCH_SIZE];
       uint16_t rx_count =
-          rte_eth_rx_burst(VIGOR_DEVICE, 0, mbufs, VIGOR_BATCH_SIZE);
+          rte_eth_rx_burst(VIGOR_DEVICE, queue_id, mbufs, VIGOR_BATCH_SIZE);
 
       struct rte_mbuf *mbufs_to_send[VIGOR_BATCH_SIZE];
       uint16_t tx_count = 0;
       for (uint16_t n = 0; n < rx_count; n++) {
         uint8_t *data = rte_pktmbuf_mtod(mbufs[n], uint8_t *);
         vigor_time_t VIGOR_NOW = current_time();
+
+        *write_attempt_ptr = false;
+        *write_state_ptr = false;
+
+        nf_lock_block_writes(&nf_lock);
         uint16_t dst_device =
             nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
 
+        if (*write_attempt_ptr) {
+          *write_state_ptr = true;
+
+          nf_lock_write_lock(&nf_lock);
+          uint16_t dst_device =
+              nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
+          nf_lock_write_unlock(&nf_lock);
+        } else {
+          nf_lock_allow_writes(&nf_lock);
+        }
+
         if (dst_device == VIGOR_DEVICE) {
           rte_pktmbuf_free(mbufs[n]);
+        } else if (dst_device == FLOOD_FRAME) {
+          flood(mbufs[n], VIGOR_DEVICES_COUNT, queue_id);
         } else { // includes flood when 2 devices, which is equivalent to just
                  // a
                  // send
@@ -1187,7 +1716,7 @@ static void worker_main(void) {
       }
 
       uint16_t sent_count =
-          rte_eth_tx_burst(1 - VIGOR_DEVICE, 0, mbufs_to_send, tx_count);
+          rte_eth_tx_burst(1 - VIGOR_DEVICE, queue_id, mbufs_to_send, tx_count);
       for (uint16_t n = sent_count; n < tx_count; n++) {
         rte_pktmbuf_free(mbufs[n]); // should not happen, but we're in the
                                     // unverified case anyway
@@ -1208,21 +1737,40 @@ int main(int argc, char **argv) {
 
   // Create a memory pool
   unsigned nb_devices = rte_eth_dev_count_avail();
-  struct rte_mempool *mbuf_pool = rte_pktmbuf_pool_create(
-      "MEMPOOL",                         // name
-      MEMPOOL_BUFFER_COUNT * nb_devices, // #elements
-      0, // cache size (per-core, not useful in a single-threaded app)
-      0, // application private area size
-      RTE_MBUF_DEFAULT_BUF_SIZE, // data buffer size
-      rte_socket_id()            // socket ID
-  );
-  if (mbuf_pool == NULL) {
-    rte_exit(EXIT_FAILURE, "Cannot create pool: %s\n", rte_strerror(rte_errno));
+
+  init_retas();
+  nf_util_init_locks();
+
+  char MBUF_POOL_NAME[20];
+  struct rte_mempool **mbuf_pools;
+  mbuf_pools = (struct rte_mempool **)rte_malloc(
+      NULL, sizeof(struct rte_mempool *) * rte_lcore_count(), 64);
+
+  unsigned lcore_id;
+  unsigned lcore_idx = 0;
+  RTE_LCORE_FOREACH(lcore_id) {
+    sprintf(MBUF_POOL_NAME, "MEMORY_POOL_%u", lcore_idx);
+
+    mbuf_pools[lcore_idx] =
+        rte_pktmbuf_pool_create(MBUF_POOL_NAME,                    // name
+                                MEMPOOL_BUFFER_COUNT * nb_devices, // #elements
+                                MBUF_CACHE_SIZE, // cache size (per-lcore)
+                                0, // application private area size
+                                RTE_MBUF_DEFAULT_BUF_SIZE, // data buffer size
+                                rte_socket_id()            // socket ID
+        );
+
+    if (mbuf_pools[lcore_idx] == NULL) {
+      rte_exit(EXIT_FAILURE, "Cannot create mbuf pool: %s\n",
+               rte_strerror(rte_errno));
+    }
+
+    lcore_idx++;
   }
 
   // Initialize all devices
   for (uint16_t device = 0; device < nb_devices; device++) {
-    ret = nf_init_device(device, mbuf_pool);
+    ret = nf_init_device(device, mbuf_pools);
     if (ret == 0) {
       printf("Initialized device %" PRIu16 ".\n", device);
     } else {
@@ -1230,7 +1778,10 @@ int main(int argc, char **argv) {
     }
   }
 
-  // Run!
+  RTE_LCORE_FOREACH_SLAVE(lcore_id) {
+    rte_eal_remote_launch((lcore_function_t *)worker_main, NULL, lcore_id);
+  }
+
   worker_main();
 
   return 0;
@@ -1243,13 +1794,6 @@ struct DynamicValue {
 struct ip_addr {
   uint32_t addr;
 };
-void ip_addr_allocate(void* obj) { (uintptr_t) obj; }
-bool ip_addr_eq(void* a, void* b) {
-  struct ip_addr *id1 = (struct ip_addr *)a;
-  struct ip_addr *id2 = (struct ip_addr *)b;
-
-  return (id1->addr == id2->addr);
-}
 uint32_t ip_addr_hash(void* obj) {
   struct ip_addr *id = (struct ip_addr *)obj;
 
@@ -1257,33 +1801,75 @@ uint32_t ip_addr_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, id->addr);
   return hash;
 }
+bool ip_addr_eq(void* a, void* b) {
+  struct ip_addr *id1 = (struct ip_addr *)a;
+  struct ip_addr *id2 = (struct ip_addr *)b;
+
+  return (id1->addr == id2->addr);
+}
+void ip_addr_allocate(void* obj) { (uintptr_t) obj; }
 void DynamicValue_allocate(void* obj) {
   struct DynamicValue *dv = obj;
   dv->bucket_size = 0;
   dv->bucket_time = 0;
 }
 
+uint8_t hash_key_0[RSS_HASH_KEY_LENGTH] = {
+  0xe9, 0xfe, 0x4b, 0xda, 0xe3, 0xff, 0xdd, 0xd2, 
+  0x2d, 0x7, 0xcb, 0x5, 0x58, 0xf2, 0x8a, 0x4e, 
+  0xa3, 0x79, 0xca, 0x87, 0x17, 0x85, 0xbc, 0x42, 
+  0xb2, 0x62, 0x95, 0xe6, 0xd1, 0xab, 0x35, 0xba, 
+  0xa9, 0x80, 0x94, 0x8d, 0x7f, 0x72, 0x5f, 0xac, 
+  0x79, 0x2b, 0xb1, 0xd1, 0x1d, 0x3c, 0x1f, 0xc0, 
+  0xb5, 0xe9, 0x47, 0xcd
+};
+uint8_t hash_key_1[RSS_HASH_KEY_LENGTH] = {
+  0x3f, 0xf3, 0xfd, 0xc7, 0x0, 0x11, 0xde, 0xd6, 
+  0x9d, 0xd0, 0x73, 0x9c, 0x56, 0x13, 0xfa, 0xc6, 
+  0xf5, 0x40, 0xa3, 0x18, 0x61, 0xfb, 0x6b, 0x72, 
+  0x52, 0x3a, 0x80, 0x4d, 0x49, 0xdd, 0x86, 0x88, 
+  0xd0, 0x83, 0x4f, 0xd0, 0x94, 0x2d, 0xa6, 0x31, 
+  0xfd, 0x1a, 0xce, 0x54, 0x2d, 0xc8, 0x1a, 0x22, 
+  0x8, 0xbd, 0x3a, 0x6a
+};
 
+struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {
+  {
+    .rss_key = hash_key_0,
+    .rss_key_len = RSS_HASH_KEY_LENGTH,
+    .rss_hf = ETH_RSS_NONFRAG_IPV4_TCP | ETH_RSS_NONFRAG_IPV4_UDP
+  },
+  {
+    .rss_key = hash_key_1,
+    .rss_key_len = RSS_HASH_KEY_LENGTH,
+    .rss_hf = ETH_RSS_NONFRAG_IPV4_TCP | ETH_RSS_NONFRAG_IPV4_UDP
+  }
+};
 
 bool ip_addr_eq(void* a, void* b) ;
 uint32_t ip_addr_hash(void* obj) ;
 void DynamicValue_allocate(void* obj) ;
 void ip_addr_allocate(void* obj) ;
-struct Map* map;
-struct DoubleChain* dchain;
-struct Vector* vector;
-struct Vector* vector_1;
-struct Map* map_1;
-struct DoubleChain* dchain_1;
-struct Vector* vector_2;
-struct Vector* vector_3;
-struct Map* map_2;
-struct DoubleChain* dchain_2;
-struct Vector* vector_4;
-struct Vector* vector_5;
+struct MapLocks* map;
+struct DoubleChainLocks* dchain;
+struct VectorLocks* vector;
+struct VectorLocks* vector_1;
+struct MapLocks* map_1;
+struct DoubleChainLocks* dchain_1;
+struct VectorLocks* vector_2;
+struct VectorLocks* vector_3;
+struct MapLocks* map_2;
+struct DoubleChainLocks* dchain_2;
+struct VectorLocks* vector_4;
+struct VectorLocks* vector_5;
 
 bool nf_init() {
-  int map_allocation_succeeded__1 = map_allocate(ip_addr_eq, ip_addr_hash, 65536u, &map);
+
+  if (!(rte_get_master_lcore() == rte_lcore_id())) {
+    return 1;
+  }
+
+  int map_allocation_succeeded__1 = map_locks_allocate(ip_addr_eq, ip_addr_hash, 65536u, &map);
 
   // 1891
   // 1892
@@ -1298,7 +1884,7 @@ bool nf_init() {
   // 1901
   // 1902
   if (map_allocation_succeeded__1) {
-    int is_dchain_allocated__4 = dchain_allocate(65536u, &dchain);
+    int is_dchain_allocated__4 = dchain_locks_allocate(65536u, &dchain);
 
     // 1891
     // 1892
@@ -1312,7 +1898,7 @@ bool nf_init() {
     // 1900
     // 1901
     if (is_dchain_allocated__4) {
-      int vector_alloc_success__7 = vector_allocate(16u, 65536u, DynamicValue_allocate, &vector);
+      int vector_alloc_success__7 = vector_locks_allocate(16u, 65536u, DynamicValue_allocate, &vector);
 
       // 1891
       // 1892
@@ -1325,7 +1911,7 @@ bool nf_init() {
       // 1899
       // 1900
       if (vector_alloc_success__7) {
-        int vector_alloc_success__10 = vector_allocate(4u, 65536u, ip_addr_allocate, &vector_1);
+        int vector_alloc_success__10 = vector_locks_allocate(4u, 65536u, ip_addr_allocate, &vector_1);
 
         // 1891
         // 1892
@@ -1337,7 +1923,7 @@ bool nf_init() {
         // 1898
         // 1899
         if (vector_alloc_success__10) {
-          int map_allocation_succeeded__13 = map_allocate(ip_addr_eq, ip_addr_hash, 65536u, &map_1);
+          int map_allocation_succeeded__13 = map_locks_allocate(ip_addr_eq, ip_addr_hash, 65536u, &map_1);
 
           // 1891
           // 1892
@@ -1348,7 +1934,7 @@ bool nf_init() {
           // 1897
           // 1898
           if (map_allocation_succeeded__13) {
-            int is_dchain_allocated__16 = dchain_allocate(65536u, &dchain_1);
+            int is_dchain_allocated__16 = dchain_locks_allocate(65536u, &dchain_1);
 
             // 1891
             // 1892
@@ -1358,7 +1944,7 @@ bool nf_init() {
             // 1896
             // 1897
             if (is_dchain_allocated__16) {
-              int vector_alloc_success__19 = vector_allocate(16u, 65536u, DynamicValue_allocate, &vector_2);
+              int vector_alloc_success__19 = vector_locks_allocate(16u, 65536u, DynamicValue_allocate, &vector_2);
 
               // 1891
               // 1892
@@ -1367,7 +1953,7 @@ bool nf_init() {
               // 1895
               // 1896
               if (vector_alloc_success__19) {
-                int vector_alloc_success__22 = vector_allocate(4u, 65536u, ip_addr_allocate, &vector_3);
+                int vector_alloc_success__22 = vector_locks_allocate(4u, 65536u, ip_addr_allocate, &vector_3);
 
                 // 1891
                 // 1892
@@ -1375,25 +1961,25 @@ bool nf_init() {
                 // 1894
                 // 1895
                 if (vector_alloc_success__22) {
-                  int map_allocation_succeeded__25 = map_allocate(ip_addr_eq, ip_addr_hash, 65536u, &map_2);
+                  int map_allocation_succeeded__25 = map_locks_allocate(ip_addr_eq, ip_addr_hash, 65536u, &map_2);
 
                   // 1891
                   // 1892
                   // 1893
                   // 1894
                   if (map_allocation_succeeded__25) {
-                    int is_dchain_allocated__28 = dchain_allocate(65536u, &dchain_2);
+                    int is_dchain_allocated__28 = dchain_locks_allocate(65536u, &dchain_2);
 
                     // 1891
                     // 1892
                     // 1893
                     if (is_dchain_allocated__28) {
-                      int vector_alloc_success__31 = vector_allocate(16u, 65536u, DynamicValue_allocate, &vector_4);
+                      int vector_alloc_success__31 = vector_locks_allocate(16u, 65536u, DynamicValue_allocate, &vector_4);
 
                       // 1891
                       // 1892
                       if (vector_alloc_success__31) {
-                        int vector_alloc_success__34 = vector_allocate(4u, 65536u, ip_addr_allocate, &vector_5);
+                        int vector_alloc_success__34 = vector_locks_allocate(4u, 65536u, ip_addr_allocate, &vector_5);
 
                         // 1891
                         if (vector_alloc_success__34) {
@@ -1485,6 +2071,8 @@ bool nf_init() {
 }
 
 int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t now) {
+  bool* write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
+  bool* write_state_ptr = &RTE_PER_LCORE(write_state);
   struct rte_ether_hdr* ether_header_1 = (struct rte_ether_hdr*)(packet);
 
   // 1905
@@ -1646,9 +2234,24 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
   // 2061
   if ((8u == ether_header_1->ether_type) & (20ul <= (4294967282u + packet_length))) {
     struct rte_ipv4_hdr* ipv4_header_1 = (struct rte_ipv4_hdr*)(packet + 14u);
-    int number_of_freed_flows__56 = expire_items_single_map(dchain, vector_1, map, now - 6000000000000000ul);
-    int number_of_freed_flows__57 = expire_items_single_map(dchain_1, vector_3, map_1, now - 6000000000000000ul);
-    int number_of_freed_flows__58 = expire_items_single_map(dchain_2, vector_5, map_2, now - 6000000000000000ul);
+    int number_of_freed_flows__56 = expire_items_single_map_locks(dchain, vector_1, map, now - 6000000000000000ul);
+
+    if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+      return 1;
+    }
+
+    int number_of_freed_flows__57 = expire_items_single_map_locks(dchain_1, vector_3, map_1, now - 6000000000000000ul);
+
+    if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+      return 1;
+    }
+
+    int number_of_freed_flows__58 = expire_items_single_map_locks(dchain_2, vector_5, map_2, now - 6000000000000000ul);
+
+    if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+      return 1;
+    }
+
 
     // 1905
     if (0u != device) {
@@ -1818,7 +2421,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
       map_key[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
       map_key[3u] = ((ipv4_header_1->src_addr & 4043309055u) >> 24ul) & 0xff;
       int map_value_out;
-      int map_has_this_key__68 = map_get(map, &map_key, &map_value_out);
+      int map_has_this_key__68 = map_locks_get(map, &map_key, &map_value_out);
 
       // 1906
       // 1907
@@ -1854,7 +2457,12 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
       // 1937
       if (0u == map_has_this_key__68) {
         uint32_t new_index__71;
-        int out_of_space__71 = !dchain_allocate_new_index(dchain, &new_index__71, now);
+        int out_of_space__71 = !dchain_locks_allocate_new_index(dchain, &new_index__71, now);
+
+        if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+          return 1;
+        }
+
 
         // 1906
         // 1907
@@ -1888,14 +2496,26 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         // 1935
         // 1936
         if (false == ((out_of_space__71) & (0u == number_of_freed_flows__56))) {
+
+          if (!write_state_ptr[0]) {
+            write_attempt_ptr[0] = 1;
+            return 1;
+          }
+
           uint8_t* vector_value_out = 0u;
-          vector_borrow(vector_1, new_index__71, (void**)(&vector_value_out));
+          vector_locks_borrow(vector_1, new_index__71, (void**)(&vector_value_out));
           vector_value_out[0u] = ipv4_header_1->src_addr & 0xff;
           vector_value_out[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
           vector_value_out[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
           vector_value_out[3u] = ((ipv4_header_1->src_addr & 4043309055u) >> 24ul) & 0xff;
+
+          if (!write_state_ptr[0]) {
+            write_attempt_ptr[0] = 1;
+            return 1;
+          }
+
           uint8_t* vector_value_out_1 = 0u;
-          vector_borrow(vector, new_index__71, (void**)(&vector_value_out_1));
+          vector_locks_borrow(vector, new_index__71, (void**)(&vector_value_out_1));
           vector_value_out_1[0u] = 3750000000ul - packet_length;
           vector_value_out_1[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
           vector_value_out_1[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -1912,16 +2532,21 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           vector_value_out_1[13u] = (now >> 40) & 0xff;
           vector_value_out_1[14u] = (now >> 48) & 0xff;
           vector_value_out_1[15u] = (now >> 56) & 0xff;
-          map_put(map, vector_value_out, new_index__71);
-          vector_return(vector_1, new_index__71, vector_value_out);
-          vector_return(vector, new_index__71, vector_value_out_1);
+          map_locks_put(map, vector_value_out, new_index__71);
+
+          if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+            return 1;
+          }
+
+          vector_locks_return(vector_1, new_index__71, vector_value_out);
+          vector_locks_return(vector, new_index__71, vector_value_out_1);
           uint8_t map_key_1[4];
           map_key_1[0u] = ipv4_header_1->src_addr & 0xff;
           map_key_1[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
           map_key_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
           map_key_1[3u] = ((ipv4_header_1->src_addr & 4244635647u) >> 24ul) & 0xff;
           int map_value_out_1;
-          int map_has_this_key__79 = map_get(map_1, &map_key_1, &map_value_out_1);
+          int map_has_this_key__79 = map_locks_get(map_1, &map_key_1, &map_value_out_1);
 
           // 1906
           // 1907
@@ -1932,7 +2557,12 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           // 1912
           if (0u == map_has_this_key__79) {
             uint32_t new_index__82;
-            int out_of_space__82 = !dchain_allocate_new_index(dchain_1, &new_index__82, now);
+            int out_of_space__82 = !dchain_locks_allocate_new_index(dchain_1, &new_index__82, now);
+
+            if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+              return 1;
+            }
+
 
             // 1906
             // 1907
@@ -1941,14 +2571,26 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
             // 1910
             // 1911
             if (false == ((out_of_space__82) & (0u == number_of_freed_flows__57))) {
+
+              if (!write_state_ptr[0]) {
+                write_attempt_ptr[0] = 1;
+                return 1;
+              }
+
               uint8_t* vector_value_out_2 = 0u;
-              vector_borrow(vector_3, new_index__82, (void**)(&vector_value_out_2));
+              vector_locks_borrow(vector_3, new_index__82, (void**)(&vector_value_out_2));
               vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
               vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
               vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
               vector_value_out_2[3u] = ((ipv4_header_1->src_addr & 4244635647u) >> 24ul) & 0xff;
+
+              if (!write_state_ptr[0]) {
+                write_attempt_ptr[0] = 1;
+                return 1;
+              }
+
               uint8_t* vector_value_out_3 = 0u;
-              vector_borrow(vector_2, new_index__82, (void**)(&vector_value_out_3));
+              vector_locks_borrow(vector_2, new_index__82, (void**)(&vector_value_out_3));
               vector_value_out_3[0u] = 3750000000ul - packet_length;
               vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
               vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -1965,33 +2607,55 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               vector_value_out_3[13u] = (now >> 40) & 0xff;
               vector_value_out_3[14u] = (now >> 48) & 0xff;
               vector_value_out_3[15u] = (now >> 56) & 0xff;
-              map_put(map_1, vector_value_out_2, new_index__82);
-              vector_return(vector_3, new_index__82, vector_value_out_2);
-              vector_return(vector_2, new_index__82, vector_value_out_3);
+              map_locks_put(map_1, vector_value_out_2, new_index__82);
+
+              if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                return 1;
+              }
+
+              vector_locks_return(vector_3, new_index__82, vector_value_out_2);
+              vector_locks_return(vector_2, new_index__82, vector_value_out_3);
               uint8_t map_key_2[4];
               map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
               map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
               map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
               map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
               int map_value_out_2;
-              int map_has_this_key__90 = map_get(map_2, &map_key_2, &map_value_out_2);
+              int map_has_this_key__90 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
               // 1906
               // 1907
               if (0u == map_has_this_key__90) {
                 uint32_t new_index__93;
-                int out_of_space__93 = !dchain_allocate_new_index(dchain_2, &new_index__93, now);
+                int out_of_space__93 = !dchain_locks_allocate_new_index(dchain_2, &new_index__93, now);
+
+                if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                  return 1;
+                }
+
 
                 // 1906
                 if (false == ((out_of_space__93) & (0u == number_of_freed_flows__58))) {
+
+                  if (!write_state_ptr[0]) {
+                    write_attempt_ptr[0] = 1;
+                    return 1;
+                  }
+
                   uint8_t* vector_value_out_4 = 0u;
-                  vector_borrow(vector_5, new_index__93, (void**)(&vector_value_out_4));
+                  vector_locks_borrow(vector_5, new_index__93, (void**)(&vector_value_out_4));
                   vector_value_out_4[0u] = ipv4_header_1->src_addr & 0xff;
                   vector_value_out_4[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                   vector_value_out_4[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   vector_value_out_4[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                  if (!write_state_ptr[0]) {
+                    write_attempt_ptr[0] = 1;
+                    return 1;
+                  }
+
                   uint8_t* vector_value_out_5 = 0u;
-                  vector_borrow(vector_4, new_index__93, (void**)(&vector_value_out_5));
+                  vector_locks_borrow(vector_4, new_index__93, (void**)(&vector_value_out_5));
                   vector_value_out_5[0u] = 3750000000ul - packet_length;
                   vector_value_out_5[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                   vector_value_out_5[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -2008,9 +2672,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   vector_value_out_5[13u] = (now >> 40) & 0xff;
                   vector_value_out_5[14u] = (now >> 48) & 0xff;
                   vector_value_out_5[15u] = (now >> 56) & 0xff;
-                  map_put(map_2, vector_value_out_4, new_index__93);
-                  vector_return(vector_5, new_index__93, vector_value_out_4);
-                  vector_return(vector_4, new_index__93, vector_value_out_5);
+                  map_locks_put(map_2, vector_value_out_4, new_index__93);
+
+                  if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                    return 1;
+                  }
+
+                  vector_locks_return(vector_5, new_index__93, vector_value_out_4);
+                  vector_locks_return(vector_4, new_index__93, vector_value_out_5);
                   return 1;
                 }
 
@@ -2026,9 +2695,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               // 1910
               // 1911
               else {
-                dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                if (!write_state_ptr[0]) {
+                  write_attempt_ptr[0] = 1;
+                  return 1;
+                }
+
                 uint8_t* vector_value_out_4 = 0u;
-                vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_4));
+                vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_4));
                 vector_value_out_4[0u] = 3750000000ul - packet_length;
                 vector_value_out_4[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                 vector_value_out_4[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -2057,13 +2732,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                     // 1908
                     if ((vector_value_out_4[0ul] + ((625ul * (now - vector_value_out_4[8ul])) / 1000000000ul)) <= packet_length) {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_4);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_4);
                       return 1;
                     }
 
                     // 1909
                     else {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_4);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_4);
                       return 1;
                     } // !((vector_value_out_4[0ul] + ((625ul * (now - vector_value_out_4[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -2071,7 +2746,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                   // 1910
                   else {
-                    vector_return(vector_4, map_value_out_2, vector_value_out_4);
+                    vector_locks_return(vector_4, map_value_out_2, vector_value_out_4);
                     return 1;
                   } // !((vector_value_out_4[0ul] + ((625ul * (now - vector_value_out_4[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -2079,7 +2754,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                 // 1911
                 else {
-                  vector_return(vector_4, map_value_out_2, vector_value_out_4);
+                  vector_locks_return(vector_4, map_value_out_2, vector_value_out_4);
                   return 1;
                 } // !((now - vector_value_out_4[8ul]) < 6000000000000000ul)
 
@@ -2119,9 +2794,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           // 1935
           // 1936
           else {
-            dchain_rejuvenate_index(dchain_1, map_value_out_1, now);
+            dchain_locks_rejuvenate_index(dchain_1, map_value_out_1, now);
+
+            if (!write_state_ptr[0]) {
+              write_attempt_ptr[0] = 1;
+              return 1;
+            }
+
             uint8_t* vector_value_out_2 = 0u;
-            vector_borrow(vector_2, map_value_out_1, (void**)(&vector_value_out_2));
+            vector_locks_borrow(vector_2, map_value_out_1, (void**)(&vector_value_out_2));
             vector_value_out_2[0u] = 3750000000ul - packet_length;
             vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
             vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -2180,31 +2861,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 // 1917
                 // 1918
                 if ((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length) {
-                  vector_return(vector_2, map_value_out_1, vector_value_out_2);
+                  vector_locks_return(vector_2, map_value_out_1, vector_value_out_2);
                   uint8_t map_key_2[4];
                   map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                   map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__171 = map_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__171 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                   // 1913
                   // 1914
                   if (0u == map_has_this_key__171) {
                     uint32_t new_index__174;
-                    int out_of_space__174 = !dchain_allocate_new_index(dchain_2, &new_index__174, now);
+                    int out_of_space__174 = !dchain_locks_allocate_new_index(dchain_2, &new_index__174, now);
+
+                    if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                      return 1;
+                    }
+
 
                     // 1913
                     if (false == ((out_of_space__174) & (0u == number_of_freed_flows__58))) {
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_3 = 0u;
-                      vector_borrow(vector_5, new_index__174, (void**)(&vector_value_out_3));
+                      vector_locks_borrow(vector_5, new_index__174, (void**)(&vector_value_out_3));
                       vector_value_out_3[0u] = ipv4_header_1->src_addr & 0xff;
                       vector_value_out_3[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                       vector_value_out_3[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                       vector_value_out_3[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_4 = 0u;
-                      vector_borrow(vector_4, new_index__174, (void**)(&vector_value_out_4));
+                      vector_locks_borrow(vector_4, new_index__174, (void**)(&vector_value_out_4));
                       vector_value_out_4[0u] = 3750000000ul - packet_length;
                       vector_value_out_4[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                       vector_value_out_4[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -2221,9 +2919,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                       vector_value_out_4[13u] = (now >> 40) & 0xff;
                       vector_value_out_4[14u] = (now >> 48) & 0xff;
                       vector_value_out_4[15u] = (now >> 56) & 0xff;
-                      map_put(map_2, vector_value_out_3, new_index__174);
-                      vector_return(vector_5, new_index__174, vector_value_out_3);
-                      vector_return(vector_4, new_index__174, vector_value_out_4);
+                      map_locks_put(map_2, vector_value_out_3, new_index__174);
+
+                      if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                        return 1;
+                      }
+
+                      vector_locks_return(vector_5, new_index__174, vector_value_out_3);
+                      vector_locks_return(vector_4, new_index__174, vector_value_out_4);
                       return 1;
                     }
 
@@ -2239,9 +2942,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   // 1917
                   // 1918
                   else {
-                    dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                    dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                    if (!write_state_ptr[0]) {
+                      write_attempt_ptr[0] = 1;
+                      return 1;
+                    }
+
                     uint8_t* vector_value_out_3 = 0u;
-                    vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_3));
+                    vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_3));
                     vector_value_out_3[0u] = 3750000000ul - packet_length;
                     vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                     vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -2270,13 +2979,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                         // 1915
                         if ((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= packet_length) {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                           return 1;
                         }
 
                         // 1916
                         else {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                           return 1;
                         } // !((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -2284,7 +2993,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                       // 1917
                       else {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                         return 1;
                       } // !((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -2292,7 +3001,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                     // 1918
                     else {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                       return 1;
                     } // !((now - vector_value_out_3[8ul]) < 6000000000000000ul)
 
@@ -2307,31 +3016,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 // 1923
                 // 1924
                 else {
-                  vector_return(vector_2, map_value_out_1, vector_value_out_2);
+                  vector_locks_return(vector_2, map_value_out_1, vector_value_out_2);
                   uint8_t map_key_2[4];
                   map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                   map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__237 = map_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__237 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                   // 1919
                   // 1920
                   if (0u == map_has_this_key__237) {
                     uint32_t new_index__240;
-                    int out_of_space__240 = !dchain_allocate_new_index(dchain_2, &new_index__240, now);
+                    int out_of_space__240 = !dchain_locks_allocate_new_index(dchain_2, &new_index__240, now);
+
+                    if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                      return 1;
+                    }
+
 
                     // 1919
                     if (false == ((out_of_space__240) & (0u == number_of_freed_flows__58))) {
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_3 = 0u;
-                      vector_borrow(vector_5, new_index__240, (void**)(&vector_value_out_3));
+                      vector_locks_borrow(vector_5, new_index__240, (void**)(&vector_value_out_3));
                       vector_value_out_3[0u] = ipv4_header_1->src_addr & 0xff;
                       vector_value_out_3[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                       vector_value_out_3[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                       vector_value_out_3[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_4 = 0u;
-                      vector_borrow(vector_4, new_index__240, (void**)(&vector_value_out_4));
+                      vector_locks_borrow(vector_4, new_index__240, (void**)(&vector_value_out_4));
                       vector_value_out_4[0u] = 3750000000ul - packet_length;
                       vector_value_out_4[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                       vector_value_out_4[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -2348,9 +3074,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                       vector_value_out_4[13u] = (now >> 40) & 0xff;
                       vector_value_out_4[14u] = (now >> 48) & 0xff;
                       vector_value_out_4[15u] = (now >> 56) & 0xff;
-                      map_put(map_2, vector_value_out_3, new_index__240);
-                      vector_return(vector_5, new_index__240, vector_value_out_3);
-                      vector_return(vector_4, new_index__240, vector_value_out_4);
+                      map_locks_put(map_2, vector_value_out_3, new_index__240);
+
+                      if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                        return 1;
+                      }
+
+                      vector_locks_return(vector_5, new_index__240, vector_value_out_3);
+                      vector_locks_return(vector_4, new_index__240, vector_value_out_4);
                       return 1;
                     }
 
@@ -2366,9 +3097,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   // 1923
                   // 1924
                   else {
-                    dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                    dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                    if (!write_state_ptr[0]) {
+                      write_attempt_ptr[0] = 1;
+                      return 1;
+                    }
+
                     uint8_t* vector_value_out_3 = 0u;
-                    vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_3));
+                    vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_3));
                     vector_value_out_3[0u] = 3750000000ul - packet_length;
                     vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                     vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -2397,13 +3134,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                         // 1921
                         if ((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= packet_length) {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                           return 1;
                         }
 
                         // 1922
                         else {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                           return 1;
                         } // !((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -2411,7 +3148,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                       // 1923
                       else {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                         return 1;
                       } // !((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -2419,7 +3156,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                     // 1924
                     else {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                       return 1;
                     } // !((now - vector_value_out_3[8ul]) < 6000000000000000ul)
 
@@ -2436,31 +3173,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               // 1929
               // 1930
               else {
-                vector_return(vector_2, map_value_out_1, vector_value_out_2);
+                vector_locks_return(vector_2, map_value_out_1, vector_value_out_2);
                 uint8_t map_key_2[4];
                 map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                 map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                 map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                 map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                 int map_value_out_2;
-                int map_has_this_key__303 = map_get(map_2, &map_key_2, &map_value_out_2);
+                int map_has_this_key__303 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                 // 1925
                 // 1926
                 if (0u == map_has_this_key__303) {
                   uint32_t new_index__306;
-                  int out_of_space__306 = !dchain_allocate_new_index(dchain_2, &new_index__306, now);
+                  int out_of_space__306 = !dchain_locks_allocate_new_index(dchain_2, &new_index__306, now);
+
+                  if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                    return 1;
+                  }
+
 
                   // 1925
                   if (false == ((out_of_space__306) & (0u == number_of_freed_flows__58))) {
+
+                    if (!write_state_ptr[0]) {
+                      write_attempt_ptr[0] = 1;
+                      return 1;
+                    }
+
                     uint8_t* vector_value_out_3 = 0u;
-                    vector_borrow(vector_5, new_index__306, (void**)(&vector_value_out_3));
+                    vector_locks_borrow(vector_5, new_index__306, (void**)(&vector_value_out_3));
                     vector_value_out_3[0u] = ipv4_header_1->src_addr & 0xff;
                     vector_value_out_3[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                     vector_value_out_3[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                     vector_value_out_3[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                    if (!write_state_ptr[0]) {
+                      write_attempt_ptr[0] = 1;
+                      return 1;
+                    }
+
                     uint8_t* vector_value_out_4 = 0u;
-                    vector_borrow(vector_4, new_index__306, (void**)(&vector_value_out_4));
+                    vector_locks_borrow(vector_4, new_index__306, (void**)(&vector_value_out_4));
                     vector_value_out_4[0u] = 3750000000ul - packet_length;
                     vector_value_out_4[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                     vector_value_out_4[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -2477,9 +3231,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                     vector_value_out_4[13u] = (now >> 40) & 0xff;
                     vector_value_out_4[14u] = (now >> 48) & 0xff;
                     vector_value_out_4[15u] = (now >> 56) & 0xff;
-                    map_put(map_2, vector_value_out_3, new_index__306);
-                    vector_return(vector_5, new_index__306, vector_value_out_3);
-                    vector_return(vector_4, new_index__306, vector_value_out_4);
+                    map_locks_put(map_2, vector_value_out_3, new_index__306);
+
+                    if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                      return 1;
+                    }
+
+                    vector_locks_return(vector_5, new_index__306, vector_value_out_3);
+                    vector_locks_return(vector_4, new_index__306, vector_value_out_4);
                     return 1;
                   }
 
@@ -2495,9 +3254,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 // 1929
                 // 1930
                 else {
-                  dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                  dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                  if (!write_state_ptr[0]) {
+                    write_attempt_ptr[0] = 1;
+                    return 1;
+                  }
+
                   uint8_t* vector_value_out_3 = 0u;
-                  vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_3));
+                  vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_3));
                   vector_value_out_3[0u] = 3750000000ul - packet_length;
                   vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                   vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -2526,13 +3291,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                       // 1927
                       if ((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= packet_length) {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                         return 1;
                       }
 
                       // 1928
                       else {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                         return 1;
                       } // !((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -2540,7 +3305,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                     // 1929
                     else {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                       return 1;
                     } // !((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -2548,7 +3313,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                   // 1930
                   else {
-                    vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                    vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                     return 1;
                   } // !((now - vector_value_out_3[8ul]) < 6000000000000000ul)
 
@@ -2565,31 +3330,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
             // 1935
             // 1936
             else {
-              vector_return(vector_2, map_value_out_1, vector_value_out_2);
+              vector_locks_return(vector_2, map_value_out_1, vector_value_out_2);
               uint8_t map_key_2[4];
               map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
               map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
               map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
               map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
               int map_value_out_2;
-              int map_has_this_key__369 = map_get(map_2, &map_key_2, &map_value_out_2);
+              int map_has_this_key__369 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
               // 1931
               // 1932
               if (0u == map_has_this_key__369) {
                 uint32_t new_index__372;
-                int out_of_space__372 = !dchain_allocate_new_index(dchain_2, &new_index__372, now);
+                int out_of_space__372 = !dchain_locks_allocate_new_index(dchain_2, &new_index__372, now);
+
+                if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                  return 1;
+                }
+
 
                 // 1931
                 if (false == ((out_of_space__372) & (0u == number_of_freed_flows__58))) {
+
+                  if (!write_state_ptr[0]) {
+                    write_attempt_ptr[0] = 1;
+                    return 1;
+                  }
+
                   uint8_t* vector_value_out_3 = 0u;
-                  vector_borrow(vector_5, new_index__372, (void**)(&vector_value_out_3));
+                  vector_locks_borrow(vector_5, new_index__372, (void**)(&vector_value_out_3));
                   vector_value_out_3[0u] = ipv4_header_1->src_addr & 0xff;
                   vector_value_out_3[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                   vector_value_out_3[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   vector_value_out_3[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                  if (!write_state_ptr[0]) {
+                    write_attempt_ptr[0] = 1;
+                    return 1;
+                  }
+
                   uint8_t* vector_value_out_4 = 0u;
-                  vector_borrow(vector_4, new_index__372, (void**)(&vector_value_out_4));
+                  vector_locks_borrow(vector_4, new_index__372, (void**)(&vector_value_out_4));
                   vector_value_out_4[0u] = 3750000000ul - packet_length;
                   vector_value_out_4[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                   vector_value_out_4[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -2606,9 +3388,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   vector_value_out_4[13u] = (now >> 40) & 0xff;
                   vector_value_out_4[14u] = (now >> 48) & 0xff;
                   vector_value_out_4[15u] = (now >> 56) & 0xff;
-                  map_put(map_2, vector_value_out_3, new_index__372);
-                  vector_return(vector_5, new_index__372, vector_value_out_3);
-                  vector_return(vector_4, new_index__372, vector_value_out_4);
+                  map_locks_put(map_2, vector_value_out_3, new_index__372);
+
+                  if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                    return 1;
+                  }
+
+                  vector_locks_return(vector_5, new_index__372, vector_value_out_3);
+                  vector_locks_return(vector_4, new_index__372, vector_value_out_4);
                   return 1;
                 }
 
@@ -2624,9 +3411,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               // 1935
               // 1936
               else {
-                dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                if (!write_state_ptr[0]) {
+                  write_attempt_ptr[0] = 1;
+                  return 1;
+                }
+
                 uint8_t* vector_value_out_3 = 0u;
-                vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_3));
+                vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_3));
                 vector_value_out_3[0u] = 3750000000ul - packet_length;
                 vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                 vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -2655,13 +3448,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                     // 1933
                     if ((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= packet_length) {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                       return 1;
                     }
 
                     // 1934
                     else {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                       return 1;
                     } // !((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -2669,7 +3462,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                   // 1935
                   else {
-                    vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                    vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                     return 1;
                   } // !((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -2677,7 +3470,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                 // 1936
                 else {
-                  vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                  vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                   return 1;
                 } // !((now - vector_value_out_3[8ul]) < 6000000000000000ul)
 
@@ -2821,9 +3614,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
       // 2060
       // 2061
       else {
-        dchain_rejuvenate_index(dchain, map_value_out, now);
+        dchain_locks_rejuvenate_index(dchain, map_value_out, now);
+
+        if (!write_state_ptr[0]) {
+          write_attempt_ptr[0] = 1;
+          return 1;
+        }
+
         uint8_t* vector_value_out = 0u;
-        vector_borrow(vector, map_value_out, (void**)(&vector_value_out));
+        vector_locks_borrow(vector, map_value_out, (void**)(&vector_value_out));
         vector_value_out[0u] = 3750000000ul - packet_length;
         vector_value_out[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
         vector_value_out[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -3032,14 +3831,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
             // 1967
             // 1968
             if ((vector_value_out[0ul] + ((625ul * (now - vector_value_out[8ul])) / 1000000000ul)) <= packet_length) {
-              vector_return(vector, map_value_out, vector_value_out);
+              vector_locks_return(vector, map_value_out, vector_value_out);
               uint8_t map_key_1[4];
               map_key_1[0u] = ipv4_header_1->src_addr & 0xff;
               map_key_1[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
               map_key_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
               map_key_1[3u] = ((ipv4_header_1->src_addr & 4244635647u) >> 24ul) & 0xff;
               int map_value_out_1;
-              int map_has_this_key__450 = map_get(map_1, &map_key_1, &map_value_out_1);
+              int map_has_this_key__450 = map_locks_get(map_1, &map_key_1, &map_value_out_1);
 
               // 1938
               // 1939
@@ -3050,7 +3849,12 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               // 1944
               if (0u == map_has_this_key__450) {
                 uint32_t new_index__453;
-                int out_of_space__453 = !dchain_allocate_new_index(dchain_1, &new_index__453, now);
+                int out_of_space__453 = !dchain_locks_allocate_new_index(dchain_1, &new_index__453, now);
+
+                if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                  return 1;
+                }
+
 
                 // 1938
                 // 1939
@@ -3059,14 +3863,26 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 // 1942
                 // 1943
                 if (false == ((out_of_space__453) & (0u == number_of_freed_flows__57))) {
+
+                  if (!write_state_ptr[0]) {
+                    write_attempt_ptr[0] = 1;
+                    return 1;
+                  }
+
                   uint8_t* vector_value_out_1 = 0u;
-                  vector_borrow(vector_3, new_index__453, (void**)(&vector_value_out_1));
+                  vector_locks_borrow(vector_3, new_index__453, (void**)(&vector_value_out_1));
                   vector_value_out_1[0u] = ipv4_header_1->src_addr & 0xff;
                   vector_value_out_1[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                   vector_value_out_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   vector_value_out_1[3u] = ((ipv4_header_1->src_addr & 4244635647u) >> 24ul) & 0xff;
+
+                  if (!write_state_ptr[0]) {
+                    write_attempt_ptr[0] = 1;
+                    return 1;
+                  }
+
                   uint8_t* vector_value_out_2 = 0u;
-                  vector_borrow(vector_2, new_index__453, (void**)(&vector_value_out_2));
+                  vector_locks_borrow(vector_2, new_index__453, (void**)(&vector_value_out_2));
                   vector_value_out_2[0u] = 3750000000ul - packet_length;
                   vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                   vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -3083,33 +3899,55 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   vector_value_out_2[13u] = (now >> 40) & 0xff;
                   vector_value_out_2[14u] = (now >> 48) & 0xff;
                   vector_value_out_2[15u] = (now >> 56) & 0xff;
-                  map_put(map_1, vector_value_out_1, new_index__453);
-                  vector_return(vector_3, new_index__453, vector_value_out_1);
-                  vector_return(vector_2, new_index__453, vector_value_out_2);
+                  map_locks_put(map_1, vector_value_out_1, new_index__453);
+
+                  if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                    return 1;
+                  }
+
+                  vector_locks_return(vector_3, new_index__453, vector_value_out_1);
+                  vector_locks_return(vector_2, new_index__453, vector_value_out_2);
                   uint8_t map_key_2[4];
                   map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                   map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__461 = map_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__461 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                   // 1938
                   // 1939
                   if (0u == map_has_this_key__461) {
                     uint32_t new_index__464;
-                    int out_of_space__464 = !dchain_allocate_new_index(dchain_2, &new_index__464, now);
+                    int out_of_space__464 = !dchain_locks_allocate_new_index(dchain_2, &new_index__464, now);
+
+                    if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                      return 1;
+                    }
+
 
                     // 1938
                     if (false == ((out_of_space__464) & (0u == number_of_freed_flows__58))) {
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_3 = 0u;
-                      vector_borrow(vector_5, new_index__464, (void**)(&vector_value_out_3));
+                      vector_locks_borrow(vector_5, new_index__464, (void**)(&vector_value_out_3));
                       vector_value_out_3[0u] = ipv4_header_1->src_addr & 0xff;
                       vector_value_out_3[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                       vector_value_out_3[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                       vector_value_out_3[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_4 = 0u;
-                      vector_borrow(vector_4, new_index__464, (void**)(&vector_value_out_4));
+                      vector_locks_borrow(vector_4, new_index__464, (void**)(&vector_value_out_4));
                       vector_value_out_4[0u] = 3750000000ul - packet_length;
                       vector_value_out_4[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                       vector_value_out_4[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -3126,9 +3964,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                       vector_value_out_4[13u] = (now >> 40) & 0xff;
                       vector_value_out_4[14u] = (now >> 48) & 0xff;
                       vector_value_out_4[15u] = (now >> 56) & 0xff;
-                      map_put(map_2, vector_value_out_3, new_index__464);
-                      vector_return(vector_5, new_index__464, vector_value_out_3);
-                      vector_return(vector_4, new_index__464, vector_value_out_4);
+                      map_locks_put(map_2, vector_value_out_3, new_index__464);
+
+                      if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                        return 1;
+                      }
+
+                      vector_locks_return(vector_5, new_index__464, vector_value_out_3);
+                      vector_locks_return(vector_4, new_index__464, vector_value_out_4);
                       return 1;
                     }
 
@@ -3144,9 +3987,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   // 1942
                   // 1943
                   else {
-                    dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                    dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                    if (!write_state_ptr[0]) {
+                      write_attempt_ptr[0] = 1;
+                      return 1;
+                    }
+
                     uint8_t* vector_value_out_3 = 0u;
-                    vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_3));
+                    vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_3));
                     vector_value_out_3[0u] = 3750000000ul - packet_length;
                     vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                     vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -3175,13 +4024,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                         // 1940
                         if ((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= packet_length) {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                           return 1;
                         }
 
                         // 1941
                         else {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                           return 1;
                         } // !((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -3189,7 +4038,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                       // 1942
                       else {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                         return 1;
                       } // !((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -3197,7 +4046,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                     // 1943
                     else {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                       return 1;
                     } // !((now - vector_value_out_3[8ul]) < 6000000000000000ul)
 
@@ -3237,9 +4086,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               // 1967
               // 1968
               else {
-                dchain_rejuvenate_index(dchain_1, map_value_out_1, now);
+                dchain_locks_rejuvenate_index(dchain_1, map_value_out_1, now);
+
+                if (!write_state_ptr[0]) {
+                  write_attempt_ptr[0] = 1;
+                  return 1;
+                }
+
                 uint8_t* vector_value_out_1 = 0u;
-                vector_borrow(vector_2, map_value_out_1, (void**)(&vector_value_out_1));
+                vector_locks_borrow(vector_2, map_value_out_1, (void**)(&vector_value_out_1));
                 vector_value_out_1[0u] = 3750000000ul - packet_length;
                 vector_value_out_1[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                 vector_value_out_1[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -3298,31 +4153,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                     // 1949
                     // 1950
                     if ((vector_value_out_1[0ul] + ((625ul * (now - vector_value_out_1[8ul])) / 1000000000ul)) <= packet_length) {
-                      vector_return(vector_2, map_value_out_1, vector_value_out_1);
+                      vector_locks_return(vector_2, map_value_out_1, vector_value_out_1);
                       uint8_t map_key_2[4];
                       map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                       map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                       map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                       map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                       int map_value_out_2;
-                      int map_has_this_key__542 = map_get(map_2, &map_key_2, &map_value_out_2);
+                      int map_has_this_key__542 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                       // 1945
                       // 1946
                       if (0u == map_has_this_key__542) {
                         uint32_t new_index__545;
-                        int out_of_space__545 = !dchain_allocate_new_index(dchain_2, &new_index__545, now);
+                        int out_of_space__545 = !dchain_locks_allocate_new_index(dchain_2, &new_index__545, now);
+
+                        if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                          return 1;
+                        }
+
 
                         // 1945
                         if (false == ((out_of_space__545) & (0u == number_of_freed_flows__58))) {
+
+                          if (!write_state_ptr[0]) {
+                            write_attempt_ptr[0] = 1;
+                            return 1;
+                          }
+
                           uint8_t* vector_value_out_2 = 0u;
-                          vector_borrow(vector_5, new_index__545, (void**)(&vector_value_out_2));
+                          vector_locks_borrow(vector_5, new_index__545, (void**)(&vector_value_out_2));
                           vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
                           vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                           vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                           vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                          if (!write_state_ptr[0]) {
+                            write_attempt_ptr[0] = 1;
+                            return 1;
+                          }
+
                           uint8_t* vector_value_out_3 = 0u;
-                          vector_borrow(vector_4, new_index__545, (void**)(&vector_value_out_3));
+                          vector_locks_borrow(vector_4, new_index__545, (void**)(&vector_value_out_3));
                           vector_value_out_3[0u] = 3750000000ul - packet_length;
                           vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                           vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -3339,9 +4211,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                           vector_value_out_3[13u] = (now >> 40) & 0xff;
                           vector_value_out_3[14u] = (now >> 48) & 0xff;
                           vector_value_out_3[15u] = (now >> 56) & 0xff;
-                          map_put(map_2, vector_value_out_2, new_index__545);
-                          vector_return(vector_5, new_index__545, vector_value_out_2);
-                          vector_return(vector_4, new_index__545, vector_value_out_3);
+                          map_locks_put(map_2, vector_value_out_2, new_index__545);
+
+                          if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                            return 1;
+                          }
+
+                          vector_locks_return(vector_5, new_index__545, vector_value_out_2);
+                          vector_locks_return(vector_4, new_index__545, vector_value_out_3);
                           return 1;
                         }
 
@@ -3357,9 +4234,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                       // 1949
                       // 1950
                       else {
-                        dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                        dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                        if (!write_state_ptr[0]) {
+                          write_attempt_ptr[0] = 1;
+                          return 1;
+                        }
+
                         uint8_t* vector_value_out_2 = 0u;
-                        vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
+                        vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
                         vector_value_out_2[0u] = 3750000000ul - packet_length;
                         vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                         vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -3388,13 +4271,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                             // 1947
                             if ((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length) {
-                              vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                              vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                               return 1;
                             }
 
                             // 1948
                             else {
-                              vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                              vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                               return 1;
                             } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -3402,7 +4285,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                           // 1949
                           else {
-                            vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                            vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                             return 1;
                           } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -3410,7 +4293,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                         // 1950
                         else {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         } // !((now - vector_value_out_2[8ul]) < 6000000000000000ul)
 
@@ -3425,31 +4308,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                     // 1955
                     // 1956
                     else {
-                      vector_return(vector_2, map_value_out_1, vector_value_out_1);
+                      vector_locks_return(vector_2, map_value_out_1, vector_value_out_1);
                       uint8_t map_key_2[4];
                       map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                       map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                       map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                       map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                       int map_value_out_2;
-                      int map_has_this_key__608 = map_get(map_2, &map_key_2, &map_value_out_2);
+                      int map_has_this_key__608 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                       // 1951
                       // 1952
                       if (0u == map_has_this_key__608) {
                         uint32_t new_index__611;
-                        int out_of_space__611 = !dchain_allocate_new_index(dchain_2, &new_index__611, now);
+                        int out_of_space__611 = !dchain_locks_allocate_new_index(dchain_2, &new_index__611, now);
+
+                        if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                          return 1;
+                        }
+
 
                         // 1951
                         if (false == ((out_of_space__611) & (0u == number_of_freed_flows__58))) {
+
+                          if (!write_state_ptr[0]) {
+                            write_attempt_ptr[0] = 1;
+                            return 1;
+                          }
+
                           uint8_t* vector_value_out_2 = 0u;
-                          vector_borrow(vector_5, new_index__611, (void**)(&vector_value_out_2));
+                          vector_locks_borrow(vector_5, new_index__611, (void**)(&vector_value_out_2));
                           vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
                           vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                           vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                           vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                          if (!write_state_ptr[0]) {
+                            write_attempt_ptr[0] = 1;
+                            return 1;
+                          }
+
                           uint8_t* vector_value_out_3 = 0u;
-                          vector_borrow(vector_4, new_index__611, (void**)(&vector_value_out_3));
+                          vector_locks_borrow(vector_4, new_index__611, (void**)(&vector_value_out_3));
                           vector_value_out_3[0u] = 3750000000ul - packet_length;
                           vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                           vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -3466,9 +4366,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                           vector_value_out_3[13u] = (now >> 40) & 0xff;
                           vector_value_out_3[14u] = (now >> 48) & 0xff;
                           vector_value_out_3[15u] = (now >> 56) & 0xff;
-                          map_put(map_2, vector_value_out_2, new_index__611);
-                          vector_return(vector_5, new_index__611, vector_value_out_2);
-                          vector_return(vector_4, new_index__611, vector_value_out_3);
+                          map_locks_put(map_2, vector_value_out_2, new_index__611);
+
+                          if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                            return 1;
+                          }
+
+                          vector_locks_return(vector_5, new_index__611, vector_value_out_2);
+                          vector_locks_return(vector_4, new_index__611, vector_value_out_3);
                           return 1;
                         }
 
@@ -3484,9 +4389,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                       // 1955
                       // 1956
                       else {
-                        dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                        dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                        if (!write_state_ptr[0]) {
+                          write_attempt_ptr[0] = 1;
+                          return 1;
+                        }
+
                         uint8_t* vector_value_out_2 = 0u;
-                        vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
+                        vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
                         vector_value_out_2[0u] = 3750000000ul - packet_length;
                         vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                         vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -3515,13 +4426,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                             // 1953
                             if ((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length) {
-                              vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                              vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                               return 1;
                             }
 
                             // 1954
                             else {
-                              vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                              vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                               return 1;
                             } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -3529,7 +4440,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                           // 1955
                           else {
-                            vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                            vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                             return 1;
                           } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -3537,7 +4448,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                         // 1956
                         else {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         } // !((now - vector_value_out_2[8ul]) < 6000000000000000ul)
 
@@ -3554,31 +4465,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   // 1961
                   // 1962
                   else {
-                    vector_return(vector_2, map_value_out_1, vector_value_out_1);
+                    vector_locks_return(vector_2, map_value_out_1, vector_value_out_1);
                     uint8_t map_key_2[4];
                     map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                     map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                     map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                     map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                     int map_value_out_2;
-                    int map_has_this_key__674 = map_get(map_2, &map_key_2, &map_value_out_2);
+                    int map_has_this_key__674 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                     // 1957
                     // 1958
                     if (0u == map_has_this_key__674) {
                       uint32_t new_index__677;
-                      int out_of_space__677 = !dchain_allocate_new_index(dchain_2, &new_index__677, now);
+                      int out_of_space__677 = !dchain_locks_allocate_new_index(dchain_2, &new_index__677, now);
+
+                      if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                        return 1;
+                      }
+
 
                       // 1957
                       if (false == ((out_of_space__677) & (0u == number_of_freed_flows__58))) {
+
+                        if (!write_state_ptr[0]) {
+                          write_attempt_ptr[0] = 1;
+                          return 1;
+                        }
+
                         uint8_t* vector_value_out_2 = 0u;
-                        vector_borrow(vector_5, new_index__677, (void**)(&vector_value_out_2));
+                        vector_locks_borrow(vector_5, new_index__677, (void**)(&vector_value_out_2));
                         vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
                         vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                         vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                         vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                        if (!write_state_ptr[0]) {
+                          write_attempt_ptr[0] = 1;
+                          return 1;
+                        }
+
                         uint8_t* vector_value_out_3 = 0u;
-                        vector_borrow(vector_4, new_index__677, (void**)(&vector_value_out_3));
+                        vector_locks_borrow(vector_4, new_index__677, (void**)(&vector_value_out_3));
                         vector_value_out_3[0u] = 3750000000ul - packet_length;
                         vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                         vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -3595,9 +4523,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                         vector_value_out_3[13u] = (now >> 40) & 0xff;
                         vector_value_out_3[14u] = (now >> 48) & 0xff;
                         vector_value_out_3[15u] = (now >> 56) & 0xff;
-                        map_put(map_2, vector_value_out_2, new_index__677);
-                        vector_return(vector_5, new_index__677, vector_value_out_2);
-                        vector_return(vector_4, new_index__677, vector_value_out_3);
+                        map_locks_put(map_2, vector_value_out_2, new_index__677);
+
+                        if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                          return 1;
+                        }
+
+                        vector_locks_return(vector_5, new_index__677, vector_value_out_2);
+                        vector_locks_return(vector_4, new_index__677, vector_value_out_3);
                         return 1;
                       }
 
@@ -3613,9 +4546,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                     // 1961
                     // 1962
                     else {
-                      dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                      dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_2 = 0u;
-                      vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
+                      vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
                       vector_value_out_2[0u] = 3750000000ul - packet_length;
                       vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                       vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -3644,13 +4583,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                           // 1959
                           if ((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length) {
-                            vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                            vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                             return 1;
                           }
 
                           // 1960
                           else {
-                            vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                            vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                             return 1;
                           } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -3658,7 +4597,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                         // 1961
                         else {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -3666,7 +4605,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                       // 1962
                       else {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                         return 1;
                       } // !((now - vector_value_out_2[8ul]) < 6000000000000000ul)
 
@@ -3683,31 +4622,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 // 1967
                 // 1968
                 else {
-                  vector_return(vector_2, map_value_out_1, vector_value_out_1);
+                  vector_locks_return(vector_2, map_value_out_1, vector_value_out_1);
                   uint8_t map_key_2[4];
                   map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                   map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__740 = map_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__740 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                   // 1963
                   // 1964
                   if (0u == map_has_this_key__740) {
                     uint32_t new_index__743;
-                    int out_of_space__743 = !dchain_allocate_new_index(dchain_2, &new_index__743, now);
+                    int out_of_space__743 = !dchain_locks_allocate_new_index(dchain_2, &new_index__743, now);
+
+                    if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                      return 1;
+                    }
+
 
                     // 1963
                     if (false == ((out_of_space__743) & (0u == number_of_freed_flows__58))) {
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_2 = 0u;
-                      vector_borrow(vector_5, new_index__743, (void**)(&vector_value_out_2));
+                      vector_locks_borrow(vector_5, new_index__743, (void**)(&vector_value_out_2));
                       vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
                       vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                       vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                       vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_3 = 0u;
-                      vector_borrow(vector_4, new_index__743, (void**)(&vector_value_out_3));
+                      vector_locks_borrow(vector_4, new_index__743, (void**)(&vector_value_out_3));
                       vector_value_out_3[0u] = 3750000000ul - packet_length;
                       vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                       vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -3724,9 +4680,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                       vector_value_out_3[13u] = (now >> 40) & 0xff;
                       vector_value_out_3[14u] = (now >> 48) & 0xff;
                       vector_value_out_3[15u] = (now >> 56) & 0xff;
-                      map_put(map_2, vector_value_out_2, new_index__743);
-                      vector_return(vector_5, new_index__743, vector_value_out_2);
-                      vector_return(vector_4, new_index__743, vector_value_out_3);
+                      map_locks_put(map_2, vector_value_out_2, new_index__743);
+
+                      if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                        return 1;
+                      }
+
+                      vector_locks_return(vector_5, new_index__743, vector_value_out_2);
+                      vector_locks_return(vector_4, new_index__743, vector_value_out_3);
                       return 1;
                     }
 
@@ -3742,9 +4703,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   // 1967
                   // 1968
                   else {
-                    dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                    dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                    if (!write_state_ptr[0]) {
+                      write_attempt_ptr[0] = 1;
+                      return 1;
+                    }
+
                     uint8_t* vector_value_out_2 = 0u;
-                    vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
+                    vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
                     vector_value_out_2[0u] = 3750000000ul - packet_length;
                     vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                     vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -3773,13 +4740,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                         // 1965
                         if ((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length) {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         }
 
                         // 1966
                         else {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -3787,7 +4754,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                       // 1967
                       else {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                         return 1;
                       } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -3795,7 +4762,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                     // 1968
                     else {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                       return 1;
                     } // !((now - vector_value_out_2[8ul]) < 6000000000000000ul)
 
@@ -3839,14 +4806,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
             // 1998
             // 1999
             else {
-              vector_return(vector, map_value_out, vector_value_out);
+              vector_locks_return(vector, map_value_out, vector_value_out);
               uint8_t map_key_1[4];
               map_key_1[0u] = ipv4_header_1->src_addr & 0xff;
               map_key_1[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
               map_key_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
               map_key_1[3u] = ((ipv4_header_1->src_addr & 4244635647u) >> 24ul) & 0xff;
               int map_value_out_1;
-              int map_has_this_key__806 = map_get(map_1, &map_key_1, &map_value_out_1);
+              int map_has_this_key__806 = map_locks_get(map_1, &map_key_1, &map_value_out_1);
 
               // 1969
               // 1970
@@ -3857,7 +4824,12 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               // 1975
               if (0u == map_has_this_key__806) {
                 uint32_t new_index__809;
-                int out_of_space__809 = !dchain_allocate_new_index(dchain_1, &new_index__809, now);
+                int out_of_space__809 = !dchain_locks_allocate_new_index(dchain_1, &new_index__809, now);
+
+                if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                  return 1;
+                }
+
 
                 // 1969
                 // 1970
@@ -3866,14 +4838,26 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 // 1973
                 // 1974
                 if (false == ((out_of_space__809) & (0u == number_of_freed_flows__57))) {
+
+                  if (!write_state_ptr[0]) {
+                    write_attempt_ptr[0] = 1;
+                    return 1;
+                  }
+
                   uint8_t* vector_value_out_1 = 0u;
-                  vector_borrow(vector_3, new_index__809, (void**)(&vector_value_out_1));
+                  vector_locks_borrow(vector_3, new_index__809, (void**)(&vector_value_out_1));
                   vector_value_out_1[0u] = ipv4_header_1->src_addr & 0xff;
                   vector_value_out_1[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                   vector_value_out_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   vector_value_out_1[3u] = ((ipv4_header_1->src_addr & 4244635647u) >> 24ul) & 0xff;
+
+                  if (!write_state_ptr[0]) {
+                    write_attempt_ptr[0] = 1;
+                    return 1;
+                  }
+
                   uint8_t* vector_value_out_2 = 0u;
-                  vector_borrow(vector_2, new_index__809, (void**)(&vector_value_out_2));
+                  vector_locks_borrow(vector_2, new_index__809, (void**)(&vector_value_out_2));
                   vector_value_out_2[0u] = 3750000000ul - packet_length;
                   vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                   vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -3890,33 +4874,55 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   vector_value_out_2[13u] = (now >> 40) & 0xff;
                   vector_value_out_2[14u] = (now >> 48) & 0xff;
                   vector_value_out_2[15u] = (now >> 56) & 0xff;
-                  map_put(map_1, vector_value_out_1, new_index__809);
-                  vector_return(vector_3, new_index__809, vector_value_out_1);
-                  vector_return(vector_2, new_index__809, vector_value_out_2);
+                  map_locks_put(map_1, vector_value_out_1, new_index__809);
+
+                  if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                    return 1;
+                  }
+
+                  vector_locks_return(vector_3, new_index__809, vector_value_out_1);
+                  vector_locks_return(vector_2, new_index__809, vector_value_out_2);
                   uint8_t map_key_2[4];
                   map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                   map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__817 = map_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__817 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                   // 1969
                   // 1970
                   if (0u == map_has_this_key__817) {
                     uint32_t new_index__820;
-                    int out_of_space__820 = !dchain_allocate_new_index(dchain_2, &new_index__820, now);
+                    int out_of_space__820 = !dchain_locks_allocate_new_index(dchain_2, &new_index__820, now);
+
+                    if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                      return 1;
+                    }
+
 
                     // 1969
                     if (false == ((out_of_space__820) & (0u == number_of_freed_flows__58))) {
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_3 = 0u;
-                      vector_borrow(vector_5, new_index__820, (void**)(&vector_value_out_3));
+                      vector_locks_borrow(vector_5, new_index__820, (void**)(&vector_value_out_3));
                       vector_value_out_3[0u] = ipv4_header_1->src_addr & 0xff;
                       vector_value_out_3[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                       vector_value_out_3[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                       vector_value_out_3[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_4 = 0u;
-                      vector_borrow(vector_4, new_index__820, (void**)(&vector_value_out_4));
+                      vector_locks_borrow(vector_4, new_index__820, (void**)(&vector_value_out_4));
                       vector_value_out_4[0u] = 3750000000ul - packet_length;
                       vector_value_out_4[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                       vector_value_out_4[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -3933,9 +4939,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                       vector_value_out_4[13u] = (now >> 40) & 0xff;
                       vector_value_out_4[14u] = (now >> 48) & 0xff;
                       vector_value_out_4[15u] = (now >> 56) & 0xff;
-                      map_put(map_2, vector_value_out_3, new_index__820);
-                      vector_return(vector_5, new_index__820, vector_value_out_3);
-                      vector_return(vector_4, new_index__820, vector_value_out_4);
+                      map_locks_put(map_2, vector_value_out_3, new_index__820);
+
+                      if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                        return 1;
+                      }
+
+                      vector_locks_return(vector_5, new_index__820, vector_value_out_3);
+                      vector_locks_return(vector_4, new_index__820, vector_value_out_4);
                       return 1;
                     }
 
@@ -3951,9 +4962,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   // 1973
                   // 1974
                   else {
-                    dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                    dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                    if (!write_state_ptr[0]) {
+                      write_attempt_ptr[0] = 1;
+                      return 1;
+                    }
+
                     uint8_t* vector_value_out_3 = 0u;
-                    vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_3));
+                    vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_3));
                     vector_value_out_3[0u] = 3750000000ul - packet_length;
                     vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                     vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -3982,13 +4999,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                         // 1971
                         if ((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= packet_length) {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                           return 1;
                         }
 
                         // 1972
                         else {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                           return 1;
                         } // !((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -3996,7 +5013,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                       // 1973
                       else {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                         return 1;
                       } // !((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -4004,7 +5021,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                     // 1974
                     else {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                       return 1;
                     } // !((now - vector_value_out_3[8ul]) < 6000000000000000ul)
 
@@ -4044,9 +5061,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               // 1998
               // 1999
               else {
-                dchain_rejuvenate_index(dchain_1, map_value_out_1, now);
+                dchain_locks_rejuvenate_index(dchain_1, map_value_out_1, now);
+
+                if (!write_state_ptr[0]) {
+                  write_attempt_ptr[0] = 1;
+                  return 1;
+                }
+
                 uint8_t* vector_value_out_1 = 0u;
-                vector_borrow(vector_2, map_value_out_1, (void**)(&vector_value_out_1));
+                vector_locks_borrow(vector_2, map_value_out_1, (void**)(&vector_value_out_1));
                 vector_value_out_1[0u] = 3750000000ul - packet_length;
                 vector_value_out_1[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                 vector_value_out_1[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -4105,31 +5128,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                     // 1980
                     // 1981
                     if ((vector_value_out_1[0ul] + ((625ul * (now - vector_value_out_1[8ul])) / 1000000000ul)) <= packet_length) {
-                      vector_return(vector_2, map_value_out_1, vector_value_out_1);
+                      vector_locks_return(vector_2, map_value_out_1, vector_value_out_1);
                       uint8_t map_key_2[4];
                       map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                       map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                       map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                       map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                       int map_value_out_2;
-                      int map_has_this_key__898 = map_get(map_2, &map_key_2, &map_value_out_2);
+                      int map_has_this_key__898 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                       // 1976
                       // 1977
                       if (0u == map_has_this_key__898) {
                         uint32_t new_index__901;
-                        int out_of_space__901 = !dchain_allocate_new_index(dchain_2, &new_index__901, now);
+                        int out_of_space__901 = !dchain_locks_allocate_new_index(dchain_2, &new_index__901, now);
+
+                        if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                          return 1;
+                        }
+
 
                         // 1976
                         if (false == ((out_of_space__901) & (0u == number_of_freed_flows__58))) {
+
+                          if (!write_state_ptr[0]) {
+                            write_attempt_ptr[0] = 1;
+                            return 1;
+                          }
+
                           uint8_t* vector_value_out_2 = 0u;
-                          vector_borrow(vector_5, new_index__901, (void**)(&vector_value_out_2));
+                          vector_locks_borrow(vector_5, new_index__901, (void**)(&vector_value_out_2));
                           vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
                           vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                           vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                           vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                          if (!write_state_ptr[0]) {
+                            write_attempt_ptr[0] = 1;
+                            return 1;
+                          }
+
                           uint8_t* vector_value_out_3 = 0u;
-                          vector_borrow(vector_4, new_index__901, (void**)(&vector_value_out_3));
+                          vector_locks_borrow(vector_4, new_index__901, (void**)(&vector_value_out_3));
                           vector_value_out_3[0u] = 3750000000ul - packet_length;
                           vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                           vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -4146,9 +5186,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                           vector_value_out_3[13u] = (now >> 40) & 0xff;
                           vector_value_out_3[14u] = (now >> 48) & 0xff;
                           vector_value_out_3[15u] = (now >> 56) & 0xff;
-                          map_put(map_2, vector_value_out_2, new_index__901);
-                          vector_return(vector_5, new_index__901, vector_value_out_2);
-                          vector_return(vector_4, new_index__901, vector_value_out_3);
+                          map_locks_put(map_2, vector_value_out_2, new_index__901);
+
+                          if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                            return 1;
+                          }
+
+                          vector_locks_return(vector_5, new_index__901, vector_value_out_2);
+                          vector_locks_return(vector_4, new_index__901, vector_value_out_3);
                           return 1;
                         }
 
@@ -4164,9 +5209,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                       // 1980
                       // 1981
                       else {
-                        dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                        dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                        if (!write_state_ptr[0]) {
+                          write_attempt_ptr[0] = 1;
+                          return 1;
+                        }
+
                         uint8_t* vector_value_out_2 = 0u;
-                        vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
+                        vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
                         vector_value_out_2[0u] = 3750000000ul - packet_length;
                         vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                         vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -4195,13 +5246,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                             // 1978
                             if ((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length) {
-                              vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                              vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                               return 1;
                             }
 
                             // 1979
                             else {
-                              vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                              vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                               return 1;
                             } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -4209,7 +5260,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                           // 1980
                           else {
-                            vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                            vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                             return 1;
                           } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -4217,7 +5268,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                         // 1981
                         else {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         } // !((now - vector_value_out_2[8ul]) < 6000000000000000ul)
 
@@ -4232,31 +5283,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                     // 1986
                     // 1987
                     else {
-                      vector_return(vector_2, map_value_out_1, vector_value_out_1);
+                      vector_locks_return(vector_2, map_value_out_1, vector_value_out_1);
                       uint8_t map_key_2[4];
                       map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                       map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                       map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                       map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                       int map_value_out_2;
-                      int map_has_this_key__964 = map_get(map_2, &map_key_2, &map_value_out_2);
+                      int map_has_this_key__964 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                       // 1982
                       // 1983
                       if (0u == map_has_this_key__964) {
                         uint32_t new_index__967;
-                        int out_of_space__967 = !dchain_allocate_new_index(dchain_2, &new_index__967, now);
+                        int out_of_space__967 = !dchain_locks_allocate_new_index(dchain_2, &new_index__967, now);
+
+                        if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                          return 1;
+                        }
+
 
                         // 1982
                         if (false == ((out_of_space__967) & (0u == number_of_freed_flows__58))) {
+
+                          if (!write_state_ptr[0]) {
+                            write_attempt_ptr[0] = 1;
+                            return 1;
+                          }
+
                           uint8_t* vector_value_out_2 = 0u;
-                          vector_borrow(vector_5, new_index__967, (void**)(&vector_value_out_2));
+                          vector_locks_borrow(vector_5, new_index__967, (void**)(&vector_value_out_2));
                           vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
                           vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                           vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                           vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                          if (!write_state_ptr[0]) {
+                            write_attempt_ptr[0] = 1;
+                            return 1;
+                          }
+
                           uint8_t* vector_value_out_3 = 0u;
-                          vector_borrow(vector_4, new_index__967, (void**)(&vector_value_out_3));
+                          vector_locks_borrow(vector_4, new_index__967, (void**)(&vector_value_out_3));
                           vector_value_out_3[0u] = 3750000000ul - packet_length;
                           vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                           vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -4273,9 +5341,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                           vector_value_out_3[13u] = (now >> 40) & 0xff;
                           vector_value_out_3[14u] = (now >> 48) & 0xff;
                           vector_value_out_3[15u] = (now >> 56) & 0xff;
-                          map_put(map_2, vector_value_out_2, new_index__967);
-                          vector_return(vector_5, new_index__967, vector_value_out_2);
-                          vector_return(vector_4, new_index__967, vector_value_out_3);
+                          map_locks_put(map_2, vector_value_out_2, new_index__967);
+
+                          if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                            return 1;
+                          }
+
+                          vector_locks_return(vector_5, new_index__967, vector_value_out_2);
+                          vector_locks_return(vector_4, new_index__967, vector_value_out_3);
                           return 1;
                         }
 
@@ -4291,9 +5364,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                       // 1986
                       // 1987
                       else {
-                        dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                        dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                        if (!write_state_ptr[0]) {
+                          write_attempt_ptr[0] = 1;
+                          return 1;
+                        }
+
                         uint8_t* vector_value_out_2 = 0u;
-                        vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
+                        vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
                         vector_value_out_2[0u] = 3750000000ul - packet_length;
                         vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                         vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -4322,13 +5401,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                             // 1984
                             if ((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length) {
-                              vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                              vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                               return 1;
                             }
 
                             // 1985
                             else {
-                              vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                              vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                               return 1;
                             } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -4336,7 +5415,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                           // 1986
                           else {
-                            vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                            vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                             return 1;
                           } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -4344,7 +5423,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                         // 1987
                         else {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         } // !((now - vector_value_out_2[8ul]) < 6000000000000000ul)
 
@@ -4361,31 +5440,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   // 1992
                   // 1993
                   else {
-                    vector_return(vector_2, map_value_out_1, vector_value_out_1);
+                    vector_locks_return(vector_2, map_value_out_1, vector_value_out_1);
                     uint8_t map_key_2[4];
                     map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                     map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                     map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                     map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                     int map_value_out_2;
-                    int map_has_this_key__1030 = map_get(map_2, &map_key_2, &map_value_out_2);
+                    int map_has_this_key__1030 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                     // 1988
                     // 1989
                     if (0u == map_has_this_key__1030) {
                       uint32_t new_index__1033;
-                      int out_of_space__1033 = !dchain_allocate_new_index(dchain_2, &new_index__1033, now);
+                      int out_of_space__1033 = !dchain_locks_allocate_new_index(dchain_2, &new_index__1033, now);
+
+                      if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                        return 1;
+                      }
+
 
                       // 1988
                       if (false == ((out_of_space__1033) & (0u == number_of_freed_flows__58))) {
+
+                        if (!write_state_ptr[0]) {
+                          write_attempt_ptr[0] = 1;
+                          return 1;
+                        }
+
                         uint8_t* vector_value_out_2 = 0u;
-                        vector_borrow(vector_5, new_index__1033, (void**)(&vector_value_out_2));
+                        vector_locks_borrow(vector_5, new_index__1033, (void**)(&vector_value_out_2));
                         vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
                         vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                         vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                         vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                        if (!write_state_ptr[0]) {
+                          write_attempt_ptr[0] = 1;
+                          return 1;
+                        }
+
                         uint8_t* vector_value_out_3 = 0u;
-                        vector_borrow(vector_4, new_index__1033, (void**)(&vector_value_out_3));
+                        vector_locks_borrow(vector_4, new_index__1033, (void**)(&vector_value_out_3));
                         vector_value_out_3[0u] = 3750000000ul - packet_length;
                         vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                         vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -4402,9 +5498,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                         vector_value_out_3[13u] = (now >> 40) & 0xff;
                         vector_value_out_3[14u] = (now >> 48) & 0xff;
                         vector_value_out_3[15u] = (now >> 56) & 0xff;
-                        map_put(map_2, vector_value_out_2, new_index__1033);
-                        vector_return(vector_5, new_index__1033, vector_value_out_2);
-                        vector_return(vector_4, new_index__1033, vector_value_out_3);
+                        map_locks_put(map_2, vector_value_out_2, new_index__1033);
+
+                        if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                          return 1;
+                        }
+
+                        vector_locks_return(vector_5, new_index__1033, vector_value_out_2);
+                        vector_locks_return(vector_4, new_index__1033, vector_value_out_3);
                         return 1;
                       }
 
@@ -4420,9 +5521,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                     // 1992
                     // 1993
                     else {
-                      dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                      dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_2 = 0u;
-                      vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
+                      vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
                       vector_value_out_2[0u] = 3750000000ul - packet_length;
                       vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                       vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -4451,13 +5558,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                           // 1990
                           if ((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length) {
-                            vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                            vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                             return 1;
                           }
 
                           // 1991
                           else {
-                            vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                            vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                             return 1;
                           } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -4465,7 +5572,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                         // 1992
                         else {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -4473,7 +5580,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                       // 1993
                       else {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                         return 1;
                       } // !((now - vector_value_out_2[8ul]) < 6000000000000000ul)
 
@@ -4490,31 +5597,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 // 1998
                 // 1999
                 else {
-                  vector_return(vector_2, map_value_out_1, vector_value_out_1);
+                  vector_locks_return(vector_2, map_value_out_1, vector_value_out_1);
                   uint8_t map_key_2[4];
                   map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                   map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__1096 = map_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__1096 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                   // 1994
                   // 1995
                   if (0u == map_has_this_key__1096) {
                     uint32_t new_index__1099;
-                    int out_of_space__1099 = !dchain_allocate_new_index(dchain_2, &new_index__1099, now);
+                    int out_of_space__1099 = !dchain_locks_allocate_new_index(dchain_2, &new_index__1099, now);
+
+                    if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                      return 1;
+                    }
+
 
                     // 1994
                     if (false == ((out_of_space__1099) & (0u == number_of_freed_flows__58))) {
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_2 = 0u;
-                      vector_borrow(vector_5, new_index__1099, (void**)(&vector_value_out_2));
+                      vector_locks_borrow(vector_5, new_index__1099, (void**)(&vector_value_out_2));
                       vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
                       vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                       vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                       vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_3 = 0u;
-                      vector_borrow(vector_4, new_index__1099, (void**)(&vector_value_out_3));
+                      vector_locks_borrow(vector_4, new_index__1099, (void**)(&vector_value_out_3));
                       vector_value_out_3[0u] = 3750000000ul - packet_length;
                       vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                       vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -4531,9 +5655,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                       vector_value_out_3[13u] = (now >> 40) & 0xff;
                       vector_value_out_3[14u] = (now >> 48) & 0xff;
                       vector_value_out_3[15u] = (now >> 56) & 0xff;
-                      map_put(map_2, vector_value_out_2, new_index__1099);
-                      vector_return(vector_5, new_index__1099, vector_value_out_2);
-                      vector_return(vector_4, new_index__1099, vector_value_out_3);
+                      map_locks_put(map_2, vector_value_out_2, new_index__1099);
+
+                      if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                        return 1;
+                      }
+
+                      vector_locks_return(vector_5, new_index__1099, vector_value_out_2);
+                      vector_locks_return(vector_4, new_index__1099, vector_value_out_3);
                       return 1;
                     }
 
@@ -4549,9 +5678,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   // 1998
                   // 1999
                   else {
-                    dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                    dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                    if (!write_state_ptr[0]) {
+                      write_attempt_ptr[0] = 1;
+                      return 1;
+                    }
+
                     uint8_t* vector_value_out_2 = 0u;
-                    vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
+                    vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
                     vector_value_out_2[0u] = 3750000000ul - packet_length;
                     vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                     vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -4580,13 +5715,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                         // 1996
                         if ((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length) {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         }
 
                         // 1997
                         else {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -4594,7 +5729,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                       // 1998
                       else {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                         return 1;
                       } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -4602,7 +5737,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                     // 1999
                     else {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                       return 1;
                     } // !((now - vector_value_out_2[8ul]) < 6000000000000000ul)
 
@@ -4648,14 +5783,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           // 2029
           // 2030
           else {
-            vector_return(vector, map_value_out, vector_value_out);
+            vector_locks_return(vector, map_value_out, vector_value_out);
             uint8_t map_key_1[4];
             map_key_1[0u] = ipv4_header_1->src_addr & 0xff;
             map_key_1[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
             map_key_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
             map_key_1[3u] = ((ipv4_header_1->src_addr & 4244635647u) >> 24ul) & 0xff;
             int map_value_out_1;
-            int map_has_this_key__1162 = map_get(map_1, &map_key_1, &map_value_out_1);
+            int map_has_this_key__1162 = map_locks_get(map_1, &map_key_1, &map_value_out_1);
 
             // 2000
             // 2001
@@ -4666,7 +5801,12 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
             // 2006
             if (0u == map_has_this_key__1162) {
               uint32_t new_index__1165;
-              int out_of_space__1165 = !dchain_allocate_new_index(dchain_1, &new_index__1165, now);
+              int out_of_space__1165 = !dchain_locks_allocate_new_index(dchain_1, &new_index__1165, now);
+
+              if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                return 1;
+              }
+
 
               // 2000
               // 2001
@@ -4675,14 +5815,26 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               // 2004
               // 2005
               if (false == ((out_of_space__1165) & (0u == number_of_freed_flows__57))) {
+
+                if (!write_state_ptr[0]) {
+                  write_attempt_ptr[0] = 1;
+                  return 1;
+                }
+
                 uint8_t* vector_value_out_1 = 0u;
-                vector_borrow(vector_3, new_index__1165, (void**)(&vector_value_out_1));
+                vector_locks_borrow(vector_3, new_index__1165, (void**)(&vector_value_out_1));
                 vector_value_out_1[0u] = ipv4_header_1->src_addr & 0xff;
                 vector_value_out_1[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                 vector_value_out_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                 vector_value_out_1[3u] = ((ipv4_header_1->src_addr & 4244635647u) >> 24ul) & 0xff;
+
+                if (!write_state_ptr[0]) {
+                  write_attempt_ptr[0] = 1;
+                  return 1;
+                }
+
                 uint8_t* vector_value_out_2 = 0u;
-                vector_borrow(vector_2, new_index__1165, (void**)(&vector_value_out_2));
+                vector_locks_borrow(vector_2, new_index__1165, (void**)(&vector_value_out_2));
                 vector_value_out_2[0u] = 3750000000ul - packet_length;
                 vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                 vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -4699,33 +5851,55 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 vector_value_out_2[13u] = (now >> 40) & 0xff;
                 vector_value_out_2[14u] = (now >> 48) & 0xff;
                 vector_value_out_2[15u] = (now >> 56) & 0xff;
-                map_put(map_1, vector_value_out_1, new_index__1165);
-                vector_return(vector_3, new_index__1165, vector_value_out_1);
-                vector_return(vector_2, new_index__1165, vector_value_out_2);
+                map_locks_put(map_1, vector_value_out_1, new_index__1165);
+
+                if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                  return 1;
+                }
+
+                vector_locks_return(vector_3, new_index__1165, vector_value_out_1);
+                vector_locks_return(vector_2, new_index__1165, vector_value_out_2);
                 uint8_t map_key_2[4];
                 map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                 map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                 map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                 map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                 int map_value_out_2;
-                int map_has_this_key__1173 = map_get(map_2, &map_key_2, &map_value_out_2);
+                int map_has_this_key__1173 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                 // 2000
                 // 2001
                 if (0u == map_has_this_key__1173) {
                   uint32_t new_index__1176;
-                  int out_of_space__1176 = !dchain_allocate_new_index(dchain_2, &new_index__1176, now);
+                  int out_of_space__1176 = !dchain_locks_allocate_new_index(dchain_2, &new_index__1176, now);
+
+                  if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                    return 1;
+                  }
+
 
                   // 2000
                   if (false == ((out_of_space__1176) & (0u == number_of_freed_flows__58))) {
+
+                    if (!write_state_ptr[0]) {
+                      write_attempt_ptr[0] = 1;
+                      return 1;
+                    }
+
                     uint8_t* vector_value_out_3 = 0u;
-                    vector_borrow(vector_5, new_index__1176, (void**)(&vector_value_out_3));
+                    vector_locks_borrow(vector_5, new_index__1176, (void**)(&vector_value_out_3));
                     vector_value_out_3[0u] = ipv4_header_1->src_addr & 0xff;
                     vector_value_out_3[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                     vector_value_out_3[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                     vector_value_out_3[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                    if (!write_state_ptr[0]) {
+                      write_attempt_ptr[0] = 1;
+                      return 1;
+                    }
+
                     uint8_t* vector_value_out_4 = 0u;
-                    vector_borrow(vector_4, new_index__1176, (void**)(&vector_value_out_4));
+                    vector_locks_borrow(vector_4, new_index__1176, (void**)(&vector_value_out_4));
                     vector_value_out_4[0u] = 3750000000ul - packet_length;
                     vector_value_out_4[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                     vector_value_out_4[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -4742,9 +5916,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                     vector_value_out_4[13u] = (now >> 40) & 0xff;
                     vector_value_out_4[14u] = (now >> 48) & 0xff;
                     vector_value_out_4[15u] = (now >> 56) & 0xff;
-                    map_put(map_2, vector_value_out_3, new_index__1176);
-                    vector_return(vector_5, new_index__1176, vector_value_out_3);
-                    vector_return(vector_4, new_index__1176, vector_value_out_4);
+                    map_locks_put(map_2, vector_value_out_3, new_index__1176);
+
+                    if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                      return 1;
+                    }
+
+                    vector_locks_return(vector_5, new_index__1176, vector_value_out_3);
+                    vector_locks_return(vector_4, new_index__1176, vector_value_out_4);
                     return 1;
                   }
 
@@ -4760,9 +5939,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 // 2004
                 // 2005
                 else {
-                  dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                  dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                  if (!write_state_ptr[0]) {
+                    write_attempt_ptr[0] = 1;
+                    return 1;
+                  }
+
                   uint8_t* vector_value_out_3 = 0u;
-                  vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_3));
+                  vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_3));
                   vector_value_out_3[0u] = 3750000000ul - packet_length;
                   vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                   vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -4791,13 +5976,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                       // 2002
                       if ((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= packet_length) {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                         return 1;
                       }
 
                       // 2003
                       else {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                         return 1;
                       } // !((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -4805,7 +5990,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                     // 2004
                     else {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                       return 1;
                     } // !((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -4813,7 +5998,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                   // 2005
                   else {
-                    vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                    vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                     return 1;
                   } // !((now - vector_value_out_3[8ul]) < 6000000000000000ul)
 
@@ -4853,9 +6038,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
             // 2029
             // 2030
             else {
-              dchain_rejuvenate_index(dchain_1, map_value_out_1, now);
+              dchain_locks_rejuvenate_index(dchain_1, map_value_out_1, now);
+
+              if (!write_state_ptr[0]) {
+                write_attempt_ptr[0] = 1;
+                return 1;
+              }
+
               uint8_t* vector_value_out_1 = 0u;
-              vector_borrow(vector_2, map_value_out_1, (void**)(&vector_value_out_1));
+              vector_locks_borrow(vector_2, map_value_out_1, (void**)(&vector_value_out_1));
               vector_value_out_1[0u] = 3750000000ul - packet_length;
               vector_value_out_1[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
               vector_value_out_1[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -4914,31 +6105,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   // 2011
                   // 2012
                   if ((vector_value_out_1[0ul] + ((625ul * (now - vector_value_out_1[8ul])) / 1000000000ul)) <= packet_length) {
-                    vector_return(vector_2, map_value_out_1, vector_value_out_1);
+                    vector_locks_return(vector_2, map_value_out_1, vector_value_out_1);
                     uint8_t map_key_2[4];
                     map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                     map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                     map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                     map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                     int map_value_out_2;
-                    int map_has_this_key__1254 = map_get(map_2, &map_key_2, &map_value_out_2);
+                    int map_has_this_key__1254 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                     // 2007
                     // 2008
                     if (0u == map_has_this_key__1254) {
                       uint32_t new_index__1257;
-                      int out_of_space__1257 = !dchain_allocate_new_index(dchain_2, &new_index__1257, now);
+                      int out_of_space__1257 = !dchain_locks_allocate_new_index(dchain_2, &new_index__1257, now);
+
+                      if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                        return 1;
+                      }
+
 
                       // 2007
                       if (false == ((out_of_space__1257) & (0u == number_of_freed_flows__58))) {
+
+                        if (!write_state_ptr[0]) {
+                          write_attempt_ptr[0] = 1;
+                          return 1;
+                        }
+
                         uint8_t* vector_value_out_2 = 0u;
-                        vector_borrow(vector_5, new_index__1257, (void**)(&vector_value_out_2));
+                        vector_locks_borrow(vector_5, new_index__1257, (void**)(&vector_value_out_2));
                         vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
                         vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                         vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                         vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                        if (!write_state_ptr[0]) {
+                          write_attempt_ptr[0] = 1;
+                          return 1;
+                        }
+
                         uint8_t* vector_value_out_3 = 0u;
-                        vector_borrow(vector_4, new_index__1257, (void**)(&vector_value_out_3));
+                        vector_locks_borrow(vector_4, new_index__1257, (void**)(&vector_value_out_3));
                         vector_value_out_3[0u] = 3750000000ul - packet_length;
                         vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                         vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -4955,9 +6163,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                         vector_value_out_3[13u] = (now >> 40) & 0xff;
                         vector_value_out_3[14u] = (now >> 48) & 0xff;
                         vector_value_out_3[15u] = (now >> 56) & 0xff;
-                        map_put(map_2, vector_value_out_2, new_index__1257);
-                        vector_return(vector_5, new_index__1257, vector_value_out_2);
-                        vector_return(vector_4, new_index__1257, vector_value_out_3);
+                        map_locks_put(map_2, vector_value_out_2, new_index__1257);
+
+                        if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                          return 1;
+                        }
+
+                        vector_locks_return(vector_5, new_index__1257, vector_value_out_2);
+                        vector_locks_return(vector_4, new_index__1257, vector_value_out_3);
                         return 1;
                       }
 
@@ -4973,9 +6186,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                     // 2011
                     // 2012
                     else {
-                      dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                      dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_2 = 0u;
-                      vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
+                      vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
                       vector_value_out_2[0u] = 3750000000ul - packet_length;
                       vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                       vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -5004,13 +6223,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                           // 2009
                           if ((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length) {
-                            vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                            vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                             return 1;
                           }
 
                           // 2010
                           else {
-                            vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                            vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                             return 1;
                           } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -5018,7 +6237,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                         // 2011
                         else {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -5026,7 +6245,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                       // 2012
                       else {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                         return 1;
                       } // !((now - vector_value_out_2[8ul]) < 6000000000000000ul)
 
@@ -5041,31 +6260,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   // 2017
                   // 2018
                   else {
-                    vector_return(vector_2, map_value_out_1, vector_value_out_1);
+                    vector_locks_return(vector_2, map_value_out_1, vector_value_out_1);
                     uint8_t map_key_2[4];
                     map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                     map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                     map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                     map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                     int map_value_out_2;
-                    int map_has_this_key__1320 = map_get(map_2, &map_key_2, &map_value_out_2);
+                    int map_has_this_key__1320 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                     // 2013
                     // 2014
                     if (0u == map_has_this_key__1320) {
                       uint32_t new_index__1323;
-                      int out_of_space__1323 = !dchain_allocate_new_index(dchain_2, &new_index__1323, now);
+                      int out_of_space__1323 = !dchain_locks_allocate_new_index(dchain_2, &new_index__1323, now);
+
+                      if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                        return 1;
+                      }
+
 
                       // 2013
                       if (false == ((out_of_space__1323) & (0u == number_of_freed_flows__58))) {
+
+                        if (!write_state_ptr[0]) {
+                          write_attempt_ptr[0] = 1;
+                          return 1;
+                        }
+
                         uint8_t* vector_value_out_2 = 0u;
-                        vector_borrow(vector_5, new_index__1323, (void**)(&vector_value_out_2));
+                        vector_locks_borrow(vector_5, new_index__1323, (void**)(&vector_value_out_2));
                         vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
                         vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                         vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                         vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                        if (!write_state_ptr[0]) {
+                          write_attempt_ptr[0] = 1;
+                          return 1;
+                        }
+
                         uint8_t* vector_value_out_3 = 0u;
-                        vector_borrow(vector_4, new_index__1323, (void**)(&vector_value_out_3));
+                        vector_locks_borrow(vector_4, new_index__1323, (void**)(&vector_value_out_3));
                         vector_value_out_3[0u] = 3750000000ul - packet_length;
                         vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                         vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -5082,9 +6318,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                         vector_value_out_3[13u] = (now >> 40) & 0xff;
                         vector_value_out_3[14u] = (now >> 48) & 0xff;
                         vector_value_out_3[15u] = (now >> 56) & 0xff;
-                        map_put(map_2, vector_value_out_2, new_index__1323);
-                        vector_return(vector_5, new_index__1323, vector_value_out_2);
-                        vector_return(vector_4, new_index__1323, vector_value_out_3);
+                        map_locks_put(map_2, vector_value_out_2, new_index__1323);
+
+                        if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                          return 1;
+                        }
+
+                        vector_locks_return(vector_5, new_index__1323, vector_value_out_2);
+                        vector_locks_return(vector_4, new_index__1323, vector_value_out_3);
                         return 1;
                       }
 
@@ -5100,9 +6341,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                     // 2017
                     // 2018
                     else {
-                      dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                      dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_2 = 0u;
-                      vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
+                      vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
                       vector_value_out_2[0u] = 3750000000ul - packet_length;
                       vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                       vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -5131,13 +6378,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                           // 2015
                           if ((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length) {
-                            vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                            vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                             return 1;
                           }
 
                           // 2016
                           else {
-                            vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                            vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                             return 1;
                           } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -5145,7 +6392,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                         // 2017
                         else {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -5153,7 +6400,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                       // 2018
                       else {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                         return 1;
                       } // !((now - vector_value_out_2[8ul]) < 6000000000000000ul)
 
@@ -5170,31 +6417,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 // 2023
                 // 2024
                 else {
-                  vector_return(vector_2, map_value_out_1, vector_value_out_1);
+                  vector_locks_return(vector_2, map_value_out_1, vector_value_out_1);
                   uint8_t map_key_2[4];
                   map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                   map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__1386 = map_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__1386 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                   // 2019
                   // 2020
                   if (0u == map_has_this_key__1386) {
                     uint32_t new_index__1389;
-                    int out_of_space__1389 = !dchain_allocate_new_index(dchain_2, &new_index__1389, now);
+                    int out_of_space__1389 = !dchain_locks_allocate_new_index(dchain_2, &new_index__1389, now);
+
+                    if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                      return 1;
+                    }
+
 
                     // 2019
                     if (false == ((out_of_space__1389) & (0u == number_of_freed_flows__58))) {
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_2 = 0u;
-                      vector_borrow(vector_5, new_index__1389, (void**)(&vector_value_out_2));
+                      vector_locks_borrow(vector_5, new_index__1389, (void**)(&vector_value_out_2));
                       vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
                       vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                       vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                       vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_3 = 0u;
-                      vector_borrow(vector_4, new_index__1389, (void**)(&vector_value_out_3));
+                      vector_locks_borrow(vector_4, new_index__1389, (void**)(&vector_value_out_3));
                       vector_value_out_3[0u] = 3750000000ul - packet_length;
                       vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                       vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -5211,9 +6475,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                       vector_value_out_3[13u] = (now >> 40) & 0xff;
                       vector_value_out_3[14u] = (now >> 48) & 0xff;
                       vector_value_out_3[15u] = (now >> 56) & 0xff;
-                      map_put(map_2, vector_value_out_2, new_index__1389);
-                      vector_return(vector_5, new_index__1389, vector_value_out_2);
-                      vector_return(vector_4, new_index__1389, vector_value_out_3);
+                      map_locks_put(map_2, vector_value_out_2, new_index__1389);
+
+                      if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                        return 1;
+                      }
+
+                      vector_locks_return(vector_5, new_index__1389, vector_value_out_2);
+                      vector_locks_return(vector_4, new_index__1389, vector_value_out_3);
                       return 1;
                     }
 
@@ -5229,9 +6498,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   // 2023
                   // 2024
                   else {
-                    dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                    dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                    if (!write_state_ptr[0]) {
+                      write_attempt_ptr[0] = 1;
+                      return 1;
+                    }
+
                     uint8_t* vector_value_out_2 = 0u;
-                    vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
+                    vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
                     vector_value_out_2[0u] = 3750000000ul - packet_length;
                     vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                     vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -5260,13 +6535,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                         // 2021
                         if ((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length) {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         }
 
                         // 2022
                         else {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -5274,7 +6549,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                       // 2023
                       else {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                         return 1;
                       } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -5282,7 +6557,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                     // 2024
                     else {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                       return 1;
                     } // !((now - vector_value_out_2[8ul]) < 6000000000000000ul)
 
@@ -5299,31 +6574,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               // 2029
               // 2030
               else {
-                vector_return(vector_2, map_value_out_1, vector_value_out_1);
+                vector_locks_return(vector_2, map_value_out_1, vector_value_out_1);
                 uint8_t map_key_2[4];
                 map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                 map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                 map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                 map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                 int map_value_out_2;
-                int map_has_this_key__1452 = map_get(map_2, &map_key_2, &map_value_out_2);
+                int map_has_this_key__1452 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                 // 2025
                 // 2026
                 if (0u == map_has_this_key__1452) {
                   uint32_t new_index__1455;
-                  int out_of_space__1455 = !dchain_allocate_new_index(dchain_2, &new_index__1455, now);
+                  int out_of_space__1455 = !dchain_locks_allocate_new_index(dchain_2, &new_index__1455, now);
+
+                  if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                    return 1;
+                  }
+
 
                   // 2025
                   if (false == ((out_of_space__1455) & (0u == number_of_freed_flows__58))) {
+
+                    if (!write_state_ptr[0]) {
+                      write_attempt_ptr[0] = 1;
+                      return 1;
+                    }
+
                     uint8_t* vector_value_out_2 = 0u;
-                    vector_borrow(vector_5, new_index__1455, (void**)(&vector_value_out_2));
+                    vector_locks_borrow(vector_5, new_index__1455, (void**)(&vector_value_out_2));
                     vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
                     vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                     vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                     vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                    if (!write_state_ptr[0]) {
+                      write_attempt_ptr[0] = 1;
+                      return 1;
+                    }
+
                     uint8_t* vector_value_out_3 = 0u;
-                    vector_borrow(vector_4, new_index__1455, (void**)(&vector_value_out_3));
+                    vector_locks_borrow(vector_4, new_index__1455, (void**)(&vector_value_out_3));
                     vector_value_out_3[0u] = 3750000000ul - packet_length;
                     vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                     vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -5340,9 +6632,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                     vector_value_out_3[13u] = (now >> 40) & 0xff;
                     vector_value_out_3[14u] = (now >> 48) & 0xff;
                     vector_value_out_3[15u] = (now >> 56) & 0xff;
-                    map_put(map_2, vector_value_out_2, new_index__1455);
-                    vector_return(vector_5, new_index__1455, vector_value_out_2);
-                    vector_return(vector_4, new_index__1455, vector_value_out_3);
+                    map_locks_put(map_2, vector_value_out_2, new_index__1455);
+
+                    if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                      return 1;
+                    }
+
+                    vector_locks_return(vector_5, new_index__1455, vector_value_out_2);
+                    vector_locks_return(vector_4, new_index__1455, vector_value_out_3);
                     return 1;
                   }
 
@@ -5358,9 +6655,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 // 2029
                 // 2030
                 else {
-                  dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                  dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                  if (!write_state_ptr[0]) {
+                    write_attempt_ptr[0] = 1;
+                    return 1;
+                  }
+
                   uint8_t* vector_value_out_2 = 0u;
-                  vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
+                  vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
                   vector_value_out_2[0u] = 3750000000ul - packet_length;
                   vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                   vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -5389,13 +6692,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                       // 2027
                       if ((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length) {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                         return 1;
                       }
 
                       // 2028
                       else {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                         return 1;
                       } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -5403,7 +6706,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                     // 2029
                     else {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                       return 1;
                     } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -5411,7 +6714,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                   // 2030
                   else {
-                    vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                    vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                     return 1;
                   } // !((now - vector_value_out_2[8ul]) < 6000000000000000ul)
 
@@ -5457,14 +6760,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         // 2060
         // 2061
         else {
-          vector_return(vector, map_value_out, vector_value_out);
+          vector_locks_return(vector, map_value_out, vector_value_out);
           uint8_t map_key_1[4];
           map_key_1[0u] = ipv4_header_1->src_addr & 0xff;
           map_key_1[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
           map_key_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
           map_key_1[3u] = ((ipv4_header_1->src_addr & 4244635647u) >> 24ul) & 0xff;
           int map_value_out_1;
-          int map_has_this_key__1518 = map_get(map_1, &map_key_1, &map_value_out_1);
+          int map_has_this_key__1518 = map_locks_get(map_1, &map_key_1, &map_value_out_1);
 
           // 2031
           // 2032
@@ -5475,7 +6778,12 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           // 2037
           if (0u == map_has_this_key__1518) {
             uint32_t new_index__1521;
-            int out_of_space__1521 = !dchain_allocate_new_index(dchain_1, &new_index__1521, now);
+            int out_of_space__1521 = !dchain_locks_allocate_new_index(dchain_1, &new_index__1521, now);
+
+            if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+              return 1;
+            }
+
 
             // 2031
             // 2032
@@ -5484,14 +6792,26 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
             // 2035
             // 2036
             if (false == ((out_of_space__1521) & (0u == number_of_freed_flows__57))) {
+
+              if (!write_state_ptr[0]) {
+                write_attempt_ptr[0] = 1;
+                return 1;
+              }
+
               uint8_t* vector_value_out_1 = 0u;
-              vector_borrow(vector_3, new_index__1521, (void**)(&vector_value_out_1));
+              vector_locks_borrow(vector_3, new_index__1521, (void**)(&vector_value_out_1));
               vector_value_out_1[0u] = ipv4_header_1->src_addr & 0xff;
               vector_value_out_1[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
               vector_value_out_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
               vector_value_out_1[3u] = ((ipv4_header_1->src_addr & 4244635647u) >> 24ul) & 0xff;
+
+              if (!write_state_ptr[0]) {
+                write_attempt_ptr[0] = 1;
+                return 1;
+              }
+
               uint8_t* vector_value_out_2 = 0u;
-              vector_borrow(vector_2, new_index__1521, (void**)(&vector_value_out_2));
+              vector_locks_borrow(vector_2, new_index__1521, (void**)(&vector_value_out_2));
               vector_value_out_2[0u] = 3750000000ul - packet_length;
               vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
               vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -5508,33 +6828,55 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               vector_value_out_2[13u] = (now >> 40) & 0xff;
               vector_value_out_2[14u] = (now >> 48) & 0xff;
               vector_value_out_2[15u] = (now >> 56) & 0xff;
-              map_put(map_1, vector_value_out_1, new_index__1521);
-              vector_return(vector_3, new_index__1521, vector_value_out_1);
-              vector_return(vector_2, new_index__1521, vector_value_out_2);
+              map_locks_put(map_1, vector_value_out_1, new_index__1521);
+
+              if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                return 1;
+              }
+
+              vector_locks_return(vector_3, new_index__1521, vector_value_out_1);
+              vector_locks_return(vector_2, new_index__1521, vector_value_out_2);
               uint8_t map_key_2[4];
               map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
               map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
               map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
               map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
               int map_value_out_2;
-              int map_has_this_key__1529 = map_get(map_2, &map_key_2, &map_value_out_2);
+              int map_has_this_key__1529 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
               // 2031
               // 2032
               if (0u == map_has_this_key__1529) {
                 uint32_t new_index__1532;
-                int out_of_space__1532 = !dchain_allocate_new_index(dchain_2, &new_index__1532, now);
+                int out_of_space__1532 = !dchain_locks_allocate_new_index(dchain_2, &new_index__1532, now);
+
+                if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                  return 1;
+                }
+
 
                 // 2031
                 if (false == ((out_of_space__1532) & (0u == number_of_freed_flows__58))) {
+
+                  if (!write_state_ptr[0]) {
+                    write_attempt_ptr[0] = 1;
+                    return 1;
+                  }
+
                   uint8_t* vector_value_out_3 = 0u;
-                  vector_borrow(vector_5, new_index__1532, (void**)(&vector_value_out_3));
+                  vector_locks_borrow(vector_5, new_index__1532, (void**)(&vector_value_out_3));
                   vector_value_out_3[0u] = ipv4_header_1->src_addr & 0xff;
                   vector_value_out_3[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                   vector_value_out_3[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   vector_value_out_3[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                  if (!write_state_ptr[0]) {
+                    write_attempt_ptr[0] = 1;
+                    return 1;
+                  }
+
                   uint8_t* vector_value_out_4 = 0u;
-                  vector_borrow(vector_4, new_index__1532, (void**)(&vector_value_out_4));
+                  vector_locks_borrow(vector_4, new_index__1532, (void**)(&vector_value_out_4));
                   vector_value_out_4[0u] = 3750000000ul - packet_length;
                   vector_value_out_4[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                   vector_value_out_4[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -5551,9 +6893,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   vector_value_out_4[13u] = (now >> 40) & 0xff;
                   vector_value_out_4[14u] = (now >> 48) & 0xff;
                   vector_value_out_4[15u] = (now >> 56) & 0xff;
-                  map_put(map_2, vector_value_out_3, new_index__1532);
-                  vector_return(vector_5, new_index__1532, vector_value_out_3);
-                  vector_return(vector_4, new_index__1532, vector_value_out_4);
+                  map_locks_put(map_2, vector_value_out_3, new_index__1532);
+
+                  if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                    return 1;
+                  }
+
+                  vector_locks_return(vector_5, new_index__1532, vector_value_out_3);
+                  vector_locks_return(vector_4, new_index__1532, vector_value_out_4);
                   return 1;
                 }
 
@@ -5569,9 +6916,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               // 2035
               // 2036
               else {
-                dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                if (!write_state_ptr[0]) {
+                  write_attempt_ptr[0] = 1;
+                  return 1;
+                }
+
                 uint8_t* vector_value_out_3 = 0u;
-                vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_3));
+                vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_3));
                 vector_value_out_3[0u] = 3750000000ul - packet_length;
                 vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                 vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -5600,13 +6953,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                     // 2033
                     if ((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= packet_length) {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                       return 1;
                     }
 
                     // 2034
                     else {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                       return 1;
                     } // !((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -5614,7 +6967,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                   // 2035
                   else {
-                    vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                    vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                     return 1;
                   } // !((vector_value_out_3[0ul] + ((625ul * (now - vector_value_out_3[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -5622,7 +6975,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                 // 2036
                 else {
-                  vector_return(vector_4, map_value_out_2, vector_value_out_3);
+                  vector_locks_return(vector_4, map_value_out_2, vector_value_out_3);
                   return 1;
                 } // !((now - vector_value_out_3[8ul]) < 6000000000000000ul)
 
@@ -5662,9 +7015,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           // 2060
           // 2061
           else {
-            dchain_rejuvenate_index(dchain_1, map_value_out_1, now);
+            dchain_locks_rejuvenate_index(dchain_1, map_value_out_1, now);
+
+            if (!write_state_ptr[0]) {
+              write_attempt_ptr[0] = 1;
+              return 1;
+            }
+
             uint8_t* vector_value_out_1 = 0u;
-            vector_borrow(vector_2, map_value_out_1, (void**)(&vector_value_out_1));
+            vector_locks_borrow(vector_2, map_value_out_1, (void**)(&vector_value_out_1));
             vector_value_out_1[0u] = 3750000000ul - packet_length;
             vector_value_out_1[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
             vector_value_out_1[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -5723,31 +7082,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 // 2042
                 // 2043
                 if ((vector_value_out_1[0ul] + ((625ul * (now - vector_value_out_1[8ul])) / 1000000000ul)) <= packet_length) {
-                  vector_return(vector_2, map_value_out_1, vector_value_out_1);
+                  vector_locks_return(vector_2, map_value_out_1, vector_value_out_1);
                   uint8_t map_key_2[4];
                   map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                   map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__1610 = map_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__1610 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                   // 2038
                   // 2039
                   if (0u == map_has_this_key__1610) {
                     uint32_t new_index__1613;
-                    int out_of_space__1613 = !dchain_allocate_new_index(dchain_2, &new_index__1613, now);
+                    int out_of_space__1613 = !dchain_locks_allocate_new_index(dchain_2, &new_index__1613, now);
+
+                    if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                      return 1;
+                    }
+
 
                     // 2038
                     if (false == ((out_of_space__1613) & (0u == number_of_freed_flows__58))) {
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_2 = 0u;
-                      vector_borrow(vector_5, new_index__1613, (void**)(&vector_value_out_2));
+                      vector_locks_borrow(vector_5, new_index__1613, (void**)(&vector_value_out_2));
                       vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
                       vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                       vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                       vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_3 = 0u;
-                      vector_borrow(vector_4, new_index__1613, (void**)(&vector_value_out_3));
+                      vector_locks_borrow(vector_4, new_index__1613, (void**)(&vector_value_out_3));
                       vector_value_out_3[0u] = 3750000000ul - packet_length;
                       vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                       vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -5764,9 +7140,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                       vector_value_out_3[13u] = (now >> 40) & 0xff;
                       vector_value_out_3[14u] = (now >> 48) & 0xff;
                       vector_value_out_3[15u] = (now >> 56) & 0xff;
-                      map_put(map_2, vector_value_out_2, new_index__1613);
-                      vector_return(vector_5, new_index__1613, vector_value_out_2);
-                      vector_return(vector_4, new_index__1613, vector_value_out_3);
+                      map_locks_put(map_2, vector_value_out_2, new_index__1613);
+
+                      if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                        return 1;
+                      }
+
+                      vector_locks_return(vector_5, new_index__1613, vector_value_out_2);
+                      vector_locks_return(vector_4, new_index__1613, vector_value_out_3);
                       return 1;
                     }
 
@@ -5782,9 +7163,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   // 2042
                   // 2043
                   else {
-                    dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                    dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                    if (!write_state_ptr[0]) {
+                      write_attempt_ptr[0] = 1;
+                      return 1;
+                    }
+
                     uint8_t* vector_value_out_2 = 0u;
-                    vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
+                    vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
                     vector_value_out_2[0u] = 3750000000ul - packet_length;
                     vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                     vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -5813,13 +7200,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                         // 2040
                         if ((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length) {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         }
 
                         // 2041
                         else {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -5827,7 +7214,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                       // 2042
                       else {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                         return 1;
                       } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -5835,7 +7222,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                     // 2043
                     else {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                       return 1;
                     } // !((now - vector_value_out_2[8ul]) < 6000000000000000ul)
 
@@ -5850,31 +7237,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 // 2048
                 // 2049
                 else {
-                  vector_return(vector_2, map_value_out_1, vector_value_out_1);
+                  vector_locks_return(vector_2, map_value_out_1, vector_value_out_1);
                   uint8_t map_key_2[4];
                   map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                   map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__1676 = map_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__1676 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                   // 2044
                   // 2045
                   if (0u == map_has_this_key__1676) {
                     uint32_t new_index__1679;
-                    int out_of_space__1679 = !dchain_allocate_new_index(dchain_2, &new_index__1679, now);
+                    int out_of_space__1679 = !dchain_locks_allocate_new_index(dchain_2, &new_index__1679, now);
+
+                    if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                      return 1;
+                    }
+
 
                     // 2044
                     if (false == ((out_of_space__1679) & (0u == number_of_freed_flows__58))) {
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_2 = 0u;
-                      vector_borrow(vector_5, new_index__1679, (void**)(&vector_value_out_2));
+                      vector_locks_borrow(vector_5, new_index__1679, (void**)(&vector_value_out_2));
                       vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
                       vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                       vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                       vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                      if (!write_state_ptr[0]) {
+                        write_attempt_ptr[0] = 1;
+                        return 1;
+                      }
+
                       uint8_t* vector_value_out_3 = 0u;
-                      vector_borrow(vector_4, new_index__1679, (void**)(&vector_value_out_3));
+                      vector_locks_borrow(vector_4, new_index__1679, (void**)(&vector_value_out_3));
                       vector_value_out_3[0u] = 3750000000ul - packet_length;
                       vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                       vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -5891,9 +7295,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                       vector_value_out_3[13u] = (now >> 40) & 0xff;
                       vector_value_out_3[14u] = (now >> 48) & 0xff;
                       vector_value_out_3[15u] = (now >> 56) & 0xff;
-                      map_put(map_2, vector_value_out_2, new_index__1679);
-                      vector_return(vector_5, new_index__1679, vector_value_out_2);
-                      vector_return(vector_4, new_index__1679, vector_value_out_3);
+                      map_locks_put(map_2, vector_value_out_2, new_index__1679);
+
+                      if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                        return 1;
+                      }
+
+                      vector_locks_return(vector_5, new_index__1679, vector_value_out_2);
+                      vector_locks_return(vector_4, new_index__1679, vector_value_out_3);
                       return 1;
                     }
 
@@ -5909,9 +7318,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   // 2048
                   // 2049
                   else {
-                    dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                    dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                    if (!write_state_ptr[0]) {
+                      write_attempt_ptr[0] = 1;
+                      return 1;
+                    }
+
                     uint8_t* vector_value_out_2 = 0u;
-                    vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
+                    vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
                     vector_value_out_2[0u] = 3750000000ul - packet_length;
                     vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                     vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -5940,13 +7355,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                         // 2046
                         if ((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length) {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         }
 
                         // 2047
                         else {
-                          vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                          vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                           return 1;
                         } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -5954,7 +7369,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                       // 2048
                       else {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                         return 1;
                       } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -5962,7 +7377,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                     // 2049
                     else {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                       return 1;
                     } // !((now - vector_value_out_2[8ul]) < 6000000000000000ul)
 
@@ -5979,31 +7394,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               // 2054
               // 2055
               else {
-                vector_return(vector_2, map_value_out_1, vector_value_out_1);
+                vector_locks_return(vector_2, map_value_out_1, vector_value_out_1);
                 uint8_t map_key_2[4];
                 map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
                 map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                 map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                 map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                 int map_value_out_2;
-                int map_has_this_key__1742 = map_get(map_2, &map_key_2, &map_value_out_2);
+                int map_has_this_key__1742 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
                 // 2050
                 // 2051
                 if (0u == map_has_this_key__1742) {
                   uint32_t new_index__1745;
-                  int out_of_space__1745 = !dchain_allocate_new_index(dchain_2, &new_index__1745, now);
+                  int out_of_space__1745 = !dchain_locks_allocate_new_index(dchain_2, &new_index__1745, now);
+
+                  if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                    return 1;
+                  }
+
 
                   // 2050
                   if (false == ((out_of_space__1745) & (0u == number_of_freed_flows__58))) {
+
+                    if (!write_state_ptr[0]) {
+                      write_attempt_ptr[0] = 1;
+                      return 1;
+                    }
+
                     uint8_t* vector_value_out_2 = 0u;
-                    vector_borrow(vector_5, new_index__1745, (void**)(&vector_value_out_2));
+                    vector_locks_borrow(vector_5, new_index__1745, (void**)(&vector_value_out_2));
                     vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
                     vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                     vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                     vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                    if (!write_state_ptr[0]) {
+                      write_attempt_ptr[0] = 1;
+                      return 1;
+                    }
+
                     uint8_t* vector_value_out_3 = 0u;
-                    vector_borrow(vector_4, new_index__1745, (void**)(&vector_value_out_3));
+                    vector_locks_borrow(vector_4, new_index__1745, (void**)(&vector_value_out_3));
                     vector_value_out_3[0u] = 3750000000ul - packet_length;
                     vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                     vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -6020,9 +7452,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                     vector_value_out_3[13u] = (now >> 40) & 0xff;
                     vector_value_out_3[14u] = (now >> 48) & 0xff;
                     vector_value_out_3[15u] = (now >> 56) & 0xff;
-                    map_put(map_2, vector_value_out_2, new_index__1745);
-                    vector_return(vector_5, new_index__1745, vector_value_out_2);
-                    vector_return(vector_4, new_index__1745, vector_value_out_3);
+                    map_locks_put(map_2, vector_value_out_2, new_index__1745);
+
+                    if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                      return 1;
+                    }
+
+                    vector_locks_return(vector_5, new_index__1745, vector_value_out_2);
+                    vector_locks_return(vector_4, new_index__1745, vector_value_out_3);
                     return 1;
                   }
 
@@ -6038,9 +7475,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 // 2054
                 // 2055
                 else {
-                  dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                  dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                  if (!write_state_ptr[0]) {
+                    write_attempt_ptr[0] = 1;
+                    return 1;
+                  }
+
                   uint8_t* vector_value_out_2 = 0u;
-                  vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
+                  vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
                   vector_value_out_2[0u] = 3750000000ul - packet_length;
                   vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                   vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -6069,13 +7512,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                       // 2052
                       if ((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length) {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                         return 1;
                       }
 
                       // 2053
                       else {
-                        vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                        vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                         return 1;
                       } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -6083,7 +7526,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                     // 2054
                     else {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                       return 1;
                     } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -6091,7 +7534,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                   // 2055
                   else {
-                    vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                    vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                     return 1;
                   } // !((now - vector_value_out_2[8ul]) < 6000000000000000ul)
 
@@ -6108,31 +7551,48 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
             // 2060
             // 2061
             else {
-              vector_return(vector_2, map_value_out_1, vector_value_out_1);
+              vector_locks_return(vector_2, map_value_out_1, vector_value_out_1);
               uint8_t map_key_2[4];
               map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
               map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
               map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
               map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
               int map_value_out_2;
-              int map_has_this_key__1808 = map_get(map_2, &map_key_2, &map_value_out_2);
+              int map_has_this_key__1808 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
 
               // 2056
               // 2057
               if (0u == map_has_this_key__1808) {
                 uint32_t new_index__1811;
-                int out_of_space__1811 = !dchain_allocate_new_index(dchain_2, &new_index__1811, now);
+                int out_of_space__1811 = !dchain_locks_allocate_new_index(dchain_2, &new_index__1811, now);
+
+                if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                  return 1;
+                }
+
 
                 // 2056
                 if (false == ((out_of_space__1811) & (0u == number_of_freed_flows__58))) {
+
+                  if (!write_state_ptr[0]) {
+                    write_attempt_ptr[0] = 1;
+                    return 1;
+                  }
+
                   uint8_t* vector_value_out_2 = 0u;
-                  vector_borrow(vector_5, new_index__1811, (void**)(&vector_value_out_2));
+                  vector_locks_borrow(vector_5, new_index__1811, (void**)(&vector_value_out_2));
                   vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
                   vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
                   vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+
+                  if (!write_state_ptr[0]) {
+                    write_attempt_ptr[0] = 1;
+                    return 1;
+                  }
+
                   uint8_t* vector_value_out_3 = 0u;
-                  vector_borrow(vector_4, new_index__1811, (void**)(&vector_value_out_3));
+                  vector_locks_borrow(vector_4, new_index__1811, (void**)(&vector_value_out_3));
                   vector_value_out_3[0u] = 3750000000ul - packet_length;
                   vector_value_out_3[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                   vector_value_out_3[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -6149,9 +7609,14 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   vector_value_out_3[13u] = (now >> 40) & 0xff;
                   vector_value_out_3[14u] = (now >> 48) & 0xff;
                   vector_value_out_3[15u] = (now >> 56) & 0xff;
-                  map_put(map_2, vector_value_out_2, new_index__1811);
-                  vector_return(vector_5, new_index__1811, vector_value_out_2);
-                  vector_return(vector_4, new_index__1811, vector_value_out_3);
+                  map_locks_put(map_2, vector_value_out_2, new_index__1811);
+
+                  if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
+                    return 1;
+                  }
+
+                  vector_locks_return(vector_5, new_index__1811, vector_value_out_2);
+                  vector_locks_return(vector_4, new_index__1811, vector_value_out_3);
                   return 1;
                 }
 
@@ -6167,9 +7632,15 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               // 2060
               // 2061
               else {
-                dchain_rejuvenate_index(dchain_2, map_value_out_2, now);
+                dchain_locks_rejuvenate_index(dchain_2, map_value_out_2, now);
+
+                if (!write_state_ptr[0]) {
+                  write_attempt_ptr[0] = 1;
+                  return 1;
+                }
+
                 uint8_t* vector_value_out_2 = 0u;
-                vector_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
+                vector_locks_borrow(vector_4, map_value_out_2, (void**)(&vector_value_out_2));
                 vector_value_out_2[0u] = 3750000000ul - packet_length;
                 vector_value_out_2[1u] = ((3750000000ul - packet_length) >> 8ul) & 0xff;
                 vector_value_out_2[2u] = ((3750000000ul - packet_length) >> 16ul) & 0xff;
@@ -6198,13 +7669,13 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                     // 2058
                     if ((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length) {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                       return 1;
                     }
 
                     // 2059
                     else {
-                      vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                      vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                       return 1;
                     } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= packet_length)
 
@@ -6212,7 +7683,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                   // 2060
                   else {
-                    vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                    vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                     return 1;
                   } // !((vector_value_out_2[0ul] + ((625ul * (now - vector_value_out_2[8ul])) / 1000000000ul)) <= 3750000000ul)
 
@@ -6220,7 +7691,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
                 // 2061
                 else {
-                  vector_return(vector_4, map_value_out_2, vector_value_out_2);
+                  vector_locks_return(vector_4, map_value_out_2, vector_value_out_2);
                   return 1;
                 } // !((now - vector_value_out_2[8ul]) < 6000000000000000ul)
 
@@ -6246,4 +7717,8 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
 }
 
-
+void init_retas() {
+  for (unsigned i = 0; i < MAX_NUM_DEVICES; i++) {
+    retas_per_device[i].set = false;
+  }
+}

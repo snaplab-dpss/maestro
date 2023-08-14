@@ -1240,23 +1240,13 @@ struct TouchedPort {
   uint32_t src;
   uint16_t port;
 };
-bool ip_addr_eq(void* a, void* b) {
-    return 
-
-          ((void *)0)
-
-              ;
-  }
-uint32_t touched_port_hash(void* obj) {
-  struct TouchedPort *tp = (struct TouchedPort *)obj;
-
-  unsigned hash = 0;
-  hash = __builtin_ia32_crc32si(hash, tp->src);
-  hash = __builtin_ia32_crc32si(hash, tp->port);
-  return hash;
+void counter_allocate(void* obj) { (uintptr_t) obj; }
+bool touched_port_eq(void* a, void* b) {
+  struct TouchedPort *tp1 = (struct TouchedPort *)a;
+  struct TouchedPort *tp2 = (struct TouchedPort *)b;
+  return tp1->src == tp2->src && tp1->port == tp2->port;
 }
-void ip_addr_allocate(void* obj) { (uintptr_t) obj; }
-void touched_port_allocate(void* obj) {
+bool ip_addr_eq(void* a, void* b) {
     return 
 
           ((void *)0)
@@ -1270,11 +1260,21 @@ uint32_t ip_addr_hash(void* obj) {
 
               ;
   }
-void counter_allocate(void* obj) { (uintptr_t) obj; }
-bool touched_port_eq(void* a, void* b) {
-  struct TouchedPort *tp1 = (struct TouchedPort *)a;
-  struct TouchedPort *tp2 = (struct TouchedPort *)b;
-  return tp1->src == tp2->src && tp1->port == tp2->port;
+void touched_port_allocate(void* obj) {
+    return 
+
+          ((void *)0)
+
+              ;
+  }
+void ip_addr_allocate(void* obj) { (uintptr_t) obj; }
+uint32_t touched_port_hash(void* obj) {
+  struct TouchedPort *tp = (struct TouchedPort *)obj;
+
+  unsigned hash = 0;
+  hash = __builtin_ia32_crc32si(hash, tp->src);
+  hash = __builtin_ia32_crc32si(hash, tp->port);
+  return hash;
 }
 struct tcpudp_hdr {
   uint16_t src_port;
@@ -1403,7 +1403,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
     // 153
     if (((6u == ipv4_header_1->next_proto_id) | (17u == ipv4_header_1->next_proto_id)) & ((4294967262u + packet_length) >= 4ul)) {
       struct tcpudp_hdr* tcpudp_header_1 = (struct tcpudp_hdr*)(packet + (14u + 20u));
-      int number_of_freed_flows__42 = expire_items_single_map(dchain, vector, map, now - 10000000000ul);
+      int number_of_freed_flows__42 = expire_items_single_map(dchain, vector, map, now - 100000000000ul);
 
       // 148
       if (0u != device) {
@@ -1492,7 +1492,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           if (0u == map_has_this_key__86) {
 
             // 151
-            if (vector_value_out < 64u) {
+            if (((int*)(vector_value_out))[0] < 64u) {
               uint8_t* vector_value_out_1 = 0u;
               vector_borrow(vector_2, (64u * map_value_out) + ((int*)(vector_value_out))[0], (void**)(&vector_value_out_1));
               vector_value_out_1[0u] = ipv4_header_1->src_addr & 0xff;
@@ -1514,7 +1514,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               vector_return(vector_1, map_value_out, vector_value_out);
               // dropping
               return device;
-            } // !(vector_value_out < 64u)
+            } // !(((int*)(vector_value_out))[0] < 64u)
 
           }
 
