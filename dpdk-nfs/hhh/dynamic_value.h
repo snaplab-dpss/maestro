@@ -10,7 +10,7 @@
 struct DynamicValue {
   uint64_t bucket_size;
   vigor_time_t bucket_time;
-};
+} __attribute__((packed));
 
 unsigned DynamicValue_hash(void *obj);
 bool DynamicValue_eq(void *a, void *b);

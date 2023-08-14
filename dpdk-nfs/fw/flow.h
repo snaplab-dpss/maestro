@@ -13,7 +13,7 @@ struct FlowId {
   uint32_t src_ip;
   uint32_t dst_ip;
   uint8_t protocol;
-};
+} __attribute__((packed));
 
 #define DEFAULT_FLOWID FlowIdc(0, 0, 0, 0, 0)
 

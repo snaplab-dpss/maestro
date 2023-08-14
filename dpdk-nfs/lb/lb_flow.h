@@ -15,7 +15,7 @@ struct LoadBalancedFlow {
   uint16_t src_port;
   uint16_t dst_port;
   uint8_t protocol;
-};
+} __attribute__((packed));
 
 unsigned LoadBalancedFlow_hash(void* obj);
 bool LoadBalancedFlow_eq(void* a, void* b);

@@ -13,7 +13,7 @@ struct LoadBalancedBackend {
   uint16_t nic;
   struct rte_ether_addr mac;
   uint32_t ip;
-};
+} __attribute__((packed));
 
 #define DEFAULT_LOADBALANCEDBACKEND \
   LoadBalancedBackendc(0, rte_ether_addrc(0, 0, 0, 0, 0, 0), 0)

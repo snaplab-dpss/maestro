@@ -15,7 +15,7 @@
 struct client {
   uint32_t src_ip;
   uint32_t dst_ip;
-};
+} __attribute__((packed));
 
 unsigned client_hash(void *obj);
 

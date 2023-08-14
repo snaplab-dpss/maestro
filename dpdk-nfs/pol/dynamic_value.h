@@ -11,7 +11,7 @@
 struct DynamicValue {
   uint64_t bucket_size;
   vigor_time_t bucket_time;
-};
+} __attribute__((packed));
 
 #define DEFAULT_DYNAMICVALUE DynamicValuec(0, 0)
 

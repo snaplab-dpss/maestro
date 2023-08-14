@@ -12,7 +12,7 @@ struct flow {
   uint32_t src_ip;
   uint32_t dst_ip;
   uint8_t protocol;
-};
+} __attribute__((packed));
 
 unsigned flow_hash(void *obj);
 bool flow_eq(void *a, void *b);

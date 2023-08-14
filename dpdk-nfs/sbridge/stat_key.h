@@ -14,7 +14,7 @@
 struct StaticKey {
   struct rte_ether_addr addr;
   uint16_t device;
-};
+} __attribute__((packed));
 
 unsigned StaticKey_hash(void* obj);
 bool StaticKey_eq(void* a, void* b);

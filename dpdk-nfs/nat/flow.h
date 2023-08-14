@@ -10,7 +10,7 @@ struct FlowId {
   uint32_t dst_ip;
   uint16_t internal_device;
   uint8_t protocol;
-};
+} __attribute__((packed));
 
 #include <stdbool.h>
 #include "lib/verified/boilerplate-util.h"

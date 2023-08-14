@@ -11,7 +11,7 @@
 struct TouchedPort {
   uint32_t src;
   uint16_t port;
-};
+} __attribute__((packed));
 
 bool touched_port_eq(void *a, void *b);
 void touched_port_allocate(void *obj);
