@@ -1236,21 +1236,21 @@ int main(int argc, char **argv) {
   return 0;
 }
 
-struct ip_addr {
-  uint32_t addr;
-};
 struct DynamicValue {
   uint64_t bucket_size;
   int64_t bucket_time;
+};
+struct ip_addr {
+  uint32_t addr;
 };
 void ip_addr_allocate(void* obj) {
   struct ip_addr* id = (struct ip_addr*)obj;
   id->addr = 0;
 }
-bool ip_addr_eq(void* a, void* b) {
-  struct ip_addr* id1 = (struct ip_addr*)a;
-  struct ip_addr* id2 = (struct ip_addr*)b;
-  return (id1->addr == id2->addr);
+void DynamicValue_allocate(void* obj) {
+  struct DynamicValue* id = (struct DynamicValue*)obj;
+  id->bucket_size = 0;
+  id->bucket_time = 0;
 }
 uint32_t ip_addr_hash(void* obj) {
   struct ip_addr* id = (struct ip_addr*)obj;
@@ -1259,10 +1259,10 @@ uint32_t ip_addr_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, id->addr);
   return hash;
 }
-void DynamicValue_allocate(void* obj) {
-  struct DynamicValue* id = (struct DynamicValue*)obj;
-  id->bucket_size = 0;
-  id->bucket_time = 0;
+bool ip_addr_eq(void* a, void* b) {
+  struct ip_addr* id1 = (struct ip_addr*)a;
+  struct ip_addr* id2 = (struct ip_addr*)b;
+  return (id1->addr == id2->addr);
 }
 
 
@@ -1362,7 +1362,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
       map_key[2u] = (ipv4_header_1->dst_addr >> 16) & 0xff;
       map_key[3u] = (ipv4_header_1->dst_addr >> 24) & 0xff;
       int map_value_out;
-      int map_has_this_key__42 = map_get(map, &map_key, &map_value_out);
+      int map_has_this_key__42 = map_get(map, map_key, &map_value_out);
 
       // 124
       // 125

@@ -1320,7 +1320,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
   map_key[4u] = ether_header_1->s_addr.addr_bytes[4ul];
   map_key[5u] = ether_header_1->s_addr.addr_bytes[5ul];
   int map_value_out;
-  int map_has_this_key__29 = map_get(map, &map_key, &map_value_out);
+  int map_has_this_key__29 = map_get(map, map_key, &map_value_out);
 
   // 186
   // 187
@@ -1368,7 +1368,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
       map_key_1[4u] = ether_header_1->d_addr.addr_bytes[4ul];
       map_key_1[5u] = ether_header_1->d_addr.addr_bytes[5ul];
       int map_value_out_1;
-      int map_has_this_key__40 = map_get(map, &map_key_1, &map_value_out_1);
+      int map_has_this_key__40 = map_get(map, map_key_1, &map_value_out_1);
 
       // 186
       // 187
@@ -1400,7 +1400,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         if (0u != device) {
 
           // 188
-          if (vector_value_out_2 != device) {
+          if (((int*)(vector_value_out_2))[0] != device) {
             return 0;
           }
 
@@ -1408,7 +1408,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           else {
             // dropping
             return device;
-          } // !(vector_value_out_2 != device)
+          } // !(((int*)(vector_value_out_2))[0] != device)
 
         }
 
@@ -1417,7 +1417,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         else {
 
           // 190
-          if (((uint16_t*)(vector_value_out_2))[0]) {
+          if (((int*)(vector_value_out_2))[0]) {
             return 1;
           }
 
@@ -1425,7 +1425,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           else {
             // dropping
             return device;
-          } // !((uint16_t*)(vector_value_out_2))[0]
+          } // !((int*)(vector_value_out_2))[0]
 
         } // !(0u != device)
 
@@ -1448,7 +1448,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
       map_key_1[4u] = ether_header_1->d_addr.addr_bytes[4ul];
       map_key_1[5u] = ether_header_1->d_addr.addr_bytes[5ul];
       int map_value_out_1;
-      int map_has_this_key__85 = map_get(map, &map_key_1, &map_value_out_1);
+      int map_has_this_key__85 = map_get(map, map_key_1, &map_value_out_1);
 
       // 192
       // 193
@@ -1480,7 +1480,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         if (0u != device) {
 
           // 194
-          if (vector_value_out != device) {
+          if (((int*)(vector_value_out))[0] != device) {
             return 0;
           }
 
@@ -1488,7 +1488,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           else {
             // dropping
             return device;
-          } // !(vector_value_out != device)
+          } // !(((int*)(vector_value_out))[0] != device)
 
         }
 
@@ -1497,7 +1497,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         else {
 
           // 196
-          if (((uint16_t*)(vector_value_out))[0]) {
+          if (((int*)(vector_value_out))[0]) {
             return 1;
           }
 
@@ -1505,7 +1505,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           else {
             // dropping
             return device;
-          } // !((uint16_t*)(vector_value_out))[0]
+          } // !((int*)(vector_value_out))[0]
 
         } // !(0u != device)
 
@@ -1531,7 +1531,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
     map_key_1[4u] = ether_header_1->d_addr.addr_bytes[4ul];
     map_key_1[5u] = ether_header_1->d_addr.addr_bytes[5ul];
     int map_value_out_1;
-    int map_has_this_key__131 = map_get(map, &map_key_1, &map_value_out_1);
+    int map_has_this_key__131 = map_get(map, map_key_1, &map_value_out_1);
 
     // 198
     // 199
@@ -1563,7 +1563,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
       if (0u != device) {
 
         // 200
-        if (vector_value_out != device) {
+        if (((int*)(vector_value_out))[0] != device) {
           return 0;
         }
 
@@ -1571,7 +1571,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         else {
           // dropping
           return device;
-        } // !(vector_value_out != device)
+        } // !(((int*)(vector_value_out))[0] != device)
 
       }
 
@@ -1580,7 +1580,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
       else {
 
         // 202
-        if (((uint16_t*)(vector_value_out))[0]) {
+        if (((int*)(vector_value_out))[0]) {
           return 1;
         }
 
@@ -1588,7 +1588,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         else {
           // dropping
           return device;
-        } // !((uint16_t*)(vector_value_out))[0]
+        } // !((int*)(vector_value_out))[0]
 
       } // !(0u != device)
 

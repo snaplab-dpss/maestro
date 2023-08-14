@@ -2084,22 +2084,22 @@ void DynamicValue_allocate(void* obj) {
 }
 
 uint8_t hash_key_0[RSS_HASH_KEY_LENGTH] = {
-  0x14, 0x76, 0x5d, 0x91, 0x2e, 0x2, 0x9b, 0xff, 
-  0xf2, 0x46, 0xc3, 0x17, 0xe4, 0x71, 0xc4, 0x77, 
-  0x90, 0xed, 0xfc, 0xc4, 0xe9, 0x37, 0xf1, 0x69, 
-  0xf4, 0xb6, 0xbf, 0xc0, 0x14, 0xcd, 0x3f, 0x29, 
-  0x43, 0x9c, 0xba, 0x72, 0x9e, 0x55, 0x71, 0x90, 
-  0x9c, 0x34, 0xa8, 0x80, 0xa6, 0x6c, 0xf7, 0x36, 
-  0x59, 0xf3, 0xfa, 0x43
+  0x2c, 0x41, 0x41, 0xc, 0x5c, 0xaf, 0x93, 0x86, 
+  0x89, 0xc5, 0x4c, 0xd7, 0xd4, 0xa4, 0x5e, 0x51, 
+  0x9c, 0x19, 0xe5, 0x48, 0xe7, 0x85, 0x53, 0xf6, 
+  0x5f, 0x5e, 0x86, 0x3e, 0x8a, 0x17, 0xf9, 0xb6, 
+  0x58, 0x3a, 0xc2, 0xb4, 0xe9, 0x56, 0x3a, 0x73, 
+  0x1b, 0x86, 0x4a, 0xef, 0x2b, 0xa8, 0x40, 0xc7, 
+  0xc1, 0x26, 0x10, 0xa9
 };
 uint8_t hash_key_1[RSS_HASH_KEY_LENGTH] = {
-  0x42, 0xc0, 0x72, 0xe8, 0xae, 0xfe, 0x9c, 0x28, 
-  0x3d, 0x4d, 0x53, 0xe3, 0xd8, 0x33, 0x48, 0x3b, 
-  0x2d, 0xa2, 0x72, 0x3, 0x87, 0x11, 0xb, 0x6, 
-  0xb6, 0x6f, 0xfb, 0x1, 0xf5, 0xc4, 0x27, 0x37, 
-  0x84, 0x99, 0x20, 0x32, 0x97, 0xbc, 0x5a, 0xd5, 
-  0x9, 0xae, 0xb8, 0xe1, 0xe1, 0x0, 0x1d, 0xe, 
-  0xa2, 0x8f, 0x11, 0x2a
+  0x56, 0xd4, 0x77, 0x8e, 0x9a, 0x82, 0xf7, 0x7d, 
+  0x62, 0x61, 0xc3, 0xac, 0x76, 0x2e, 0x28, 0xaf, 
+  0xe7, 0x39, 0xa, 0x25, 0x33, 0xf2, 0xb8, 0x3c, 
+  0xaf, 0x3a, 0x7c, 0xa2, 0x56, 0x8b, 0xe0, 0xac, 
+  0x5f, 0x57, 0x3a, 0xf9, 0xda, 0x31, 0x76, 0x3c, 
+  0x92, 0x39, 0xe8, 0x8, 0x67, 0x11, 0xb7, 0x4e, 
+  0x4a, 0xc1, 0x74, 0x7d
 };
 
 struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {
@@ -2195,7 +2195,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
   map_key[4u] = ether_header_1->s_addr.addr_bytes[4ul];
   map_key[5u] = ether_header_1->s_addr.addr_bytes[5ul];
   int map_value_out;
-  int map_has_this_key__29 = map_get(map, &map_key, &map_value_out);
+  int map_has_this_key__29 = map_get(map, map_key, &map_value_out);
 
   // 186
   // 187
@@ -2243,7 +2243,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
       map_key_1[4u] = ether_header_1->d_addr.addr_bytes[4ul];
       map_key_1[5u] = ether_header_1->d_addr.addr_bytes[5ul];
       int map_value_out_1;
-      int map_has_this_key__40 = map_get(map, &map_key_1, &map_value_out_1);
+      int map_has_this_key__40 = map_get(map, map_key_1, &map_value_out_1);
 
       // 186
       // 187
@@ -2275,7 +2275,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         if (0u != device) {
 
           // 188
-          if (vector_value_out_2 != device) {
+          if (((int*)(vector_value_out_2))[0] != device) {
             return 0;
           }
 
@@ -2283,7 +2283,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           else {
             // dropping
             return device;
-          } // !(vector_value_out_2 != device)
+          } // !(((int*)(vector_value_out_2))[0] != device)
 
         }
 
@@ -2292,7 +2292,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         else {
 
           // 190
-          if (((uint16_t*)(vector_value_out_2))[0]) {
+          if (((int*)(vector_value_out_2))[0]) {
             return 1;
           }
 
@@ -2300,7 +2300,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           else {
             // dropping
             return device;
-          } // !((uint16_t*)(vector_value_out_2))[0]
+          } // !((int*)(vector_value_out_2))[0]
 
         } // !(0u != device)
 
@@ -2323,7 +2323,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
       map_key_1[4u] = ether_header_1->d_addr.addr_bytes[4ul];
       map_key_1[5u] = ether_header_1->d_addr.addr_bytes[5ul];
       int map_value_out_1;
-      int map_has_this_key__85 = map_get(map, &map_key_1, &map_value_out_1);
+      int map_has_this_key__85 = map_get(map, map_key_1, &map_value_out_1);
 
       // 192
       // 193
@@ -2355,7 +2355,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         if (0u != device) {
 
           // 194
-          if (vector_value_out != device) {
+          if (((int*)(vector_value_out))[0] != device) {
             return 0;
           }
 
@@ -2363,7 +2363,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           else {
             // dropping
             return device;
-          } // !(vector_value_out != device)
+          } // !(((int*)(vector_value_out))[0] != device)
 
         }
 
@@ -2372,7 +2372,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         else {
 
           // 196
-          if (((uint16_t*)(vector_value_out))[0]) {
+          if (((int*)(vector_value_out))[0]) {
             return 1;
           }
 
@@ -2380,7 +2380,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           else {
             // dropping
             return device;
-          } // !((uint16_t*)(vector_value_out))[0]
+          } // !((int*)(vector_value_out))[0]
 
         } // !(0u != device)
 
@@ -2406,7 +2406,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
     map_key_1[4u] = ether_header_1->d_addr.addr_bytes[4ul];
     map_key_1[5u] = ether_header_1->d_addr.addr_bytes[5ul];
     int map_value_out_1;
-    int map_has_this_key__131 = map_get(map, &map_key_1, &map_value_out_1);
+    int map_has_this_key__131 = map_get(map, map_key_1, &map_value_out_1);
 
     // 198
     // 199
@@ -2438,7 +2438,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
       if (0u != device) {
 
         // 200
-        if (vector_value_out != device) {
+        if (((int*)(vector_value_out))[0] != device) {
           return 0;
         }
 
@@ -2446,7 +2446,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         else {
           // dropping
           return device;
-        } // !(vector_value_out != device)
+        } // !(((int*)(vector_value_out))[0] != device)
 
       }
 
@@ -2455,7 +2455,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
       else {
 
         // 202
-        if (((uint16_t*)(vector_value_out))[0]) {
+        if (((int*)(vector_value_out))[0]) {
           return 1;
         }
 
@@ -2463,7 +2463,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         else {
           // dropping
           return device;
-        } // !((uint16_t*)(vector_value_out))[0]
+        } // !((int*)(vector_value_out))[0]
 
       } // !(0u != device)
 

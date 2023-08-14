@@ -2082,8 +2082,24 @@ struct FlowId {
   uint32_t dst_ip;
   uint8_t protocol;
 };
+void FlowId_allocate(void* obj) {
+  struct FlowId* id = (struct FlowId*)obj;
+  id->src_port = 0;
+  id->dst_port = 0;
+  id->src_ip = 0;
+  id->dst_ip = 0;
+  id->protocol = 0;
+}
 void null_init(void* obj) {
   *(uint32_t *)obj = 0;
+}
+bool FlowId_eq(void* a, void* b) {
+  struct FlowId* id1 = (struct FlowId*)a;
+  struct FlowId* id2 = (struct FlowId*)b;
+
+  return (id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
+      &&(id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
+          &&(id1->protocol == id2->protocol);
 }
 uint32_t FlowId_hash(void* obj) {
   struct FlowId* id = (struct FlowId*)obj;
@@ -2096,44 +2112,28 @@ uint32_t FlowId_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, id->protocol);
   return hash;
 }
-bool FlowId_eq(void* a, void* b) {
-  struct FlowId* id1 = (struct FlowId*)a;
-  struct FlowId* id2 = (struct FlowId*)b;
-
-  return (id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
-      &&(id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
-          &&(id1->protocol == id2->protocol);
-}
-void FlowId_allocate(void* obj) {
-  struct FlowId* id = (struct FlowId*)obj;
-  id->src_port = 0;
-  id->dst_port = 0;
-  id->src_ip = 0;
-  id->dst_ip = 0;
-  id->protocol = 0;
-}
 struct tcpudp_hdr {
   uint16_t src_port;
   uint16_t dst_port;
 };
 
 uint8_t hash_key_0[RSS_HASH_KEY_LENGTH] = {
-  0x47, 0xed, 0x9d, 0xdb, 0x58, 0x19, 0xbc, 0xda, 
-  0x53, 0xd5, 0x92, 0xf3, 0x56, 0x35, 0xfe, 0x34, 
-  0x8a, 0x62, 0x7c, 0x7f, 0x90, 0xe5, 0x10, 0x64, 
-  0xf, 0x61, 0x3f, 0x16, 0xed, 0x18, 0x33, 0x34, 
-  0x6, 0xd1, 0x10, 0x5e, 0xea, 0xcc, 0x39, 0x3d, 
-  0xa1, 0xcb, 0x30, 0xf8, 0x0, 0x2e, 0x2c, 0x8a, 
-  0x90, 0xa8, 0x9, 0x21
+  0xb7, 0x1a, 0x9d, 0x18, 0x1c, 0x27, 0x84, 0x1c, 
+  0xe, 0x55, 0xa1, 0x24, 0x8, 0xff, 0x1c, 0xf7, 
+  0x6e, 0xfe, 0x98, 0xaf, 0x1d, 0x1b, 0x16, 0xda, 
+  0x5d, 0x7c, 0xa6, 0x76, 0x48, 0xe0, 0x4f, 0xff, 
+  0xfa, 0xec, 0x18, 0x16, 0x13, 0x9c, 0x32, 0x21, 
+  0xf1, 0xd3, 0x45, 0xf9, 0xd2, 0x61, 0xf1, 0x41, 
+  0x5f, 0x89, 0xf0, 0x7c
 };
 uint8_t hash_key_1[RSS_HASH_KEY_LENGTH] = {
-  0x4c, 0x21, 0x57, 0xa5, 0xd0, 0x97, 0xa1, 0x6, 
-  0x7b, 0xa0, 0x5d, 0xa9, 0xfd, 0xaf, 0x34, 0x8f, 
-  0x50, 0xf4, 0xf, 0x2b, 0x21, 0xe6, 0xcf, 0xbb, 
-  0x23, 0xb2, 0xbd, 0xdc, 0x4e, 0xf1, 0xa6, 0x9a, 
-  0x12, 0xfe, 0x40, 0xe3, 0x95, 0xe1, 0xe9, 0x11, 
-  0x82, 0x46, 0xba, 0x7f, 0xf5, 0xee, 0xe, 0x45, 
-  0xe3, 0x1d, 0x70, 0x4
+  0xa1, 0xe5, 0xd, 0x7e, 0x8b, 0xf3, 0x1f, 0x1e, 
+  0x5f, 0x89, 0x6e, 0xc0, 0x3d, 0xa2, 0xc1, 0x92, 
+  0xf9, 0x29, 0x7f, 0x2a, 0x36, 0xcd, 0x81, 0x73, 
+  0xee, 0xd3, 0xa3, 0xc2, 0x99, 0x7d, 0xa6, 0x3b, 
+  0x62, 0xb4, 0xb9, 0xed, 0xa7, 0xd9, 0xb, 0x6, 
+  0x62, 0x79, 0xc6, 0xa0, 0x1b, 0x87, 0x32, 0x15, 
+  0xb1, 0xb2, 0x3f, 0xe7
 };
 
 struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {
@@ -2172,7 +2172,7 @@ bool nf_init() {
   // 116
   // 117
   if (map_allocation_succeeded__1) {
-    int vector_alloc_success__4 = vector_allocate(16u, 65536u, FlowId_allocate, &vector);
+    int vector_alloc_success__4 = vector_allocate(13u, 65536u, FlowId_allocate, &vector);
 
     // 114
     // 115
@@ -2257,7 +2257,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         map_key[11u] = (ipv4_header_1->src_addr >> 24) & 0xff;
         map_key[12u] = ipv4_header_1->next_proto_id;
         int map_value_out;
-        int map_has_this_key__39 = map_get(map, &map_key, &map_value_out);
+        int map_has_this_key__39 = map_get(map, map_key, &map_value_out);
 
         // 120
         if (0u == map_has_this_key__39) {
@@ -2307,7 +2307,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         map_key[11u] = (ipv4_header_1->dst_addr >> 24) & 0xff;
         map_key[12u] = ipv4_header_1->next_proto_id;
         int map_value_out;
-        int map_has_this_key__61 = map_get(map, &map_key, &map_value_out);
+        int map_has_this_key__61 = map_get(map, map_key, &map_value_out);
 
         // 122
         // 123
@@ -2332,9 +2332,6 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
             vector_value_out[10u] = (ipv4_header_1->dst_addr >> 16) & 0xff;
             vector_value_out[11u] = (ipv4_header_1->dst_addr >> 24) & 0xff;
             vector_value_out[12u] = ipv4_header_1->next_proto_id;
-            vector_value_out[13u] = 171u;
-            vector_value_out[14u] = 171u;
-            vector_value_out[15u] = 171u;
             map_put(map, vector_value_out, new_index__64);
             vector_return(vector, new_index__64, vector_value_out);
             uint8_t* vector_value_out_1 = 0u;

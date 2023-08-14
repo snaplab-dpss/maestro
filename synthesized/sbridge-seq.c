@@ -1243,6 +1243,10 @@ struct StaticKey {
 struct DynamicValue {
   uint16_t device;
 };
+void DynamicValue_allocate(void* obj) {
+  struct DynamicValue *id = (struct DynamicValue *)obj;
+  id->device = 0;
+}
 uint32_t StaticKey_hash(void* obj) {
   struct StaticKey *id = (struct StaticKey *)obj;
 
@@ -1274,10 +1278,6 @@ bool StaticKey_eq(void* a, void* b) {
 
       addr_eq = rte_ether_addr_eq(&id1->addr, &id2->addr);
   return addr_eq &&(id1->device == id2->device);
-}
-void DynamicValue_allocate(void* obj) {
-  struct DynamicValue *id = (struct DynamicValue *)obj;
-  id->device = 0;
 }
 
 
@@ -1393,7 +1393,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
   map_key[6u] = device & 0xff;
   map_key[7u] = (device >> 8) & 0xff;
   int map_value_out;
-  int map_has_this_key__34 = map_get(map_1, &map_key, &map_value_out);
+  int map_has_this_key__34 = map_get(map_1, map_key, &map_value_out);
 
   // 90
   // 91

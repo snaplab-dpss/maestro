@@ -1791,21 +1791,6 @@ struct TouchedPort {
   uint32_t src;
   uint16_t port;
 };
-bool ip_addr_eq(void* a, void* b) {
-    return 
-
-          ((void *)0)
-
-              ;
-  }
-void counter_allocate(void* obj) { (uintptr_t) obj; }
-uint32_t ip_addr_hash(void* obj) {
-    return 
-
-          ((void *)0)
-
-              ;
-  }
 void touched_port_allocate(void* obj) {
     return 
 
@@ -1813,11 +1798,6 @@ void touched_port_allocate(void* obj) {
 
               ;
   }
-bool touched_port_eq(void* a, void* b) {
-  struct TouchedPort *tp1 = (struct TouchedPort *)a;
-  struct TouchedPort *tp2 = (struct TouchedPort *)b;
-  return tp1->src == tp2->src && tp1->port == tp2->port;
-}
 uint32_t touched_port_hash(void* obj) {
   struct TouchedPort *tp = (struct TouchedPort *)obj;
 
@@ -1826,25 +1806,45 @@ uint32_t touched_port_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, tp->port);
   return hash;
 }
+bool ip_addr_eq(void* a, void* b) {
+    return 
+
+          ((void *)0)
+
+              ;
+  }
 void ip_addr_allocate(void* obj) { (uintptr_t) obj; }
+void counter_allocate(void* obj) { (uintptr_t) obj; }
+bool touched_port_eq(void* a, void* b) {
+  struct TouchedPort *tp1 = (struct TouchedPort *)a;
+  struct TouchedPort *tp2 = (struct TouchedPort *)b;
+  return tp1->src == tp2->src && tp1->port == tp2->port;
+}
+uint32_t ip_addr_hash(void* obj) {
+    return 
+
+          ((void *)0)
+
+              ;
+  }
 
 uint8_t hash_key_0[RSS_HASH_KEY_LENGTH] = {
-  0xe4, 0x23, 0x97, 0x4a, 0x7, 0x4c, 0xbd, 0xee, 
-  0x4, 0x8e, 0xe9, 0x27, 0xc7, 0x70, 0x64, 0x39, 
-  0xcf, 0xd, 0xb3, 0x30, 0xf3, 0x3a, 0xa, 0x9e, 
-  0xdd, 0xdf, 0xec, 0x78, 0x39, 0xb4, 0x11, 0x1d, 
-  0xd7, 0xa8, 0x67, 0xde, 0xf5, 0x24, 0xcc, 0xf9, 
-  0xb3, 0xb6, 0x20, 0x7a, 0x26, 0x84, 0xb4, 0xf5, 
-  0x91, 0x67, 0x26, 0x84
+  0xd4, 0x8, 0xbc, 0x9c, 0x4e, 0xe0, 0x69, 0x43, 
+  0xe6, 0xe4, 0x7b, 0xdc, 0xb8, 0x87, 0xa5, 0x9, 
+  0x12, 0xf5, 0x4b, 0xf3, 0x99, 0x5c, 0xed, 0x20, 
+  0x30, 0x56, 0x6a, 0x8b, 0x57, 0x1d, 0x57, 0x2b, 
+  0x25, 0x14, 0xc7, 0x73, 0xf4, 0x30, 0xb6, 0xdb, 
+  0x15, 0x31, 0xb7, 0xcd, 0xb9, 0x5c, 0xd6, 0xcb, 
+  0x51, 0x22, 0xbe, 0xea
 };
 uint8_t hash_key_1[RSS_HASH_KEY_LENGTH] = {
-  0x55, 0x94, 0x24, 0xfc, 0x38, 0xf2, 0x6, 0x17, 
-  0xff, 0x28, 0x86, 0xfc, 0xd7, 0xaa, 0x78, 0xbc, 
-  0x74, 0x54, 0xcd, 0x23, 0xdd, 0x54, 0xc2, 0xc0, 
-  0x0, 0x9d, 0x88, 0x1b, 0x91, 0x74, 0x4f, 0xe6, 
-  0x8, 0x73, 0xe3, 0x40, 0x65, 0xe9, 0x57, 0x64, 
-  0x11, 0xdd, 0x61, 0xe8, 0x87, 0xd9, 0xa4, 0xfc, 
-  0x2d, 0x72, 0x1f, 0xa
+  0x9b, 0xb8, 0x95, 0x13, 0x65, 0xbe, 0x46, 0x3a, 
+  0xa, 0x4d, 0xb8, 0xae, 0x56, 0x88, 0x23, 0xd0, 
+  0x8, 0xb2, 0xfb, 0xd3, 0x6f, 0x23, 0x5d, 0x5a, 
+  0xa6, 0xe1, 0x58, 0xbe, 0x65, 0xb3, 0xc5, 0x0, 
+  0x6c, 0x5a, 0x13, 0xd1, 0x18, 0x59, 0xb, 0x23, 
+  0xa6, 0xc3, 0xd1, 0xfd, 0x4c, 0xf5, 0xcd, 0x54, 
+  0xa7, 0xc9, 0x27, 0x17
 };
 
 struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {
@@ -1915,7 +1915,7 @@ bool nf_init() {
           // 140
           // 141
           if (map_allocation_succeeded__13) {
-            int vector_alloc_success__16 = vector_locks_allocate(8u, 4194304u, touched_port_allocate, &vector_2);
+            int vector_alloc_success__16 = vector_locks_allocate(6u, 4194304u, touched_port_allocate, &vector_2);
 
             // 140
             if (vector_alloc_success__16) {
@@ -2011,7 +2011,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         map_key[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
         map_key[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
         int map_value_out;
-        int map_has_this_key__53 = map_locks_get(map, &map_key, &map_value_out);
+        int map_has_this_key__53 = map_locks_get(map, map_key, &map_value_out);
 
         // 149
         // 150
@@ -2070,8 +2070,6 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
             vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
             vector_value_out_2[4u] = tcpudp_header_1->dst_port & 0xff;
             vector_value_out_2[5u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
-            vector_value_out_2[6u] = vector_value_out_2[6ul];
-            vector_value_out_2[7u] = vector_value_out_2[7ul];
             map_locks_put(map, vector_value_out, new_index__56);
 
             if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
@@ -2112,7 +2110,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           map_key_1[4u] = tcpudp_header_1->dst_port & 0xff;
           map_key_1[5u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
           int map_value_out_1;
-          int map_has_this_key__86 = map_locks_get(map_1, &map_key_1, &map_value_out_1);
+          int map_has_this_key__86 = map_locks_get(map_1, map_key_1, &map_value_out_1);
 
           // 151
           // 152
@@ -2134,8 +2132,6 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               vector_value_out_1[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
               vector_value_out_1[4u] = tcpudp_header_1->dst_port & 0xff;
               vector_value_out_1[5u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
-              vector_value_out_1[6u] = vector_value_out_1[6ul];
-              vector_value_out_1[7u] = vector_value_out_1[7ul];
               map_locks_put(map_1, vector_value_out_1, ((int*)(vector_value_out))[0]);
 
               if (write_attempt_ptr[0] && (!write_state_ptr[0])) {

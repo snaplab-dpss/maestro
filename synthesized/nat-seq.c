@@ -1244,15 +1244,6 @@ struct FlowId {
   uint16_t internal_device;
   uint8_t protocol;
 };
-bool FlowId_eq(void* a, void* b) {
-  struct FlowId* id1 = (struct FlowId*)a;
-  struct FlowId* id2 = (struct FlowId*)b;
-
-  return (id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
-      &&(id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
-          &&(id1->internal_device == id2->internal_device)
-              &&(id1->protocol == id2->protocol);
-}
 uint32_t FlowId_hash(void* obj) {
   struct FlowId* id = (struct FlowId*)obj;
 
@@ -1273,6 +1264,15 @@ void FlowId_allocate(void* obj) {
   id->dst_ip = 0;
   id->internal_device = 0;
   id->protocol = 0;
+}
+bool FlowId_eq(void* a, void* b) {
+  struct FlowId* id1 = (struct FlowId*)a;
+  struct FlowId* id2 = (struct FlowId*)b;
+
+  return (id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
+      &&(id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
+          &&(id1->internal_device == id2->internal_device)
+              &&(id1->protocol == id2->protocol);
 }
 struct tcpudp_hdr {
   uint16_t src_port;
@@ -1295,7 +1295,7 @@ bool nf_init() {
   // 121
   // 122
   if (map_allocation_succeeded__1) {
-    int vector_alloc_success__4 = vector_allocate(16u, 65536u, FlowId_allocate, &vector);
+    int vector_alloc_success__4 = vector_allocate(15u, 65536u, FlowId_allocate, &vector);
 
     // 120
     // 121
@@ -1422,7 +1422,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         map_key[13u] = (device >> 8) & 0xff;
         map_key[14u] = ipv4_header_1->next_proto_id;
         int map_value_out;
-        int map_has_this_key__68 = map_get(map, &map_key, &map_value_out);
+        int map_has_this_key__68 = map_get(map, map_key, &map_value_out);
 
         // 128
         // 129
@@ -1449,7 +1449,6 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
             vector_value_out[12u] = device & 0xff;
             vector_value_out[13u] = (device >> 8) & 0xff;
             vector_value_out[14u] = ipv4_header_1->next_proto_id;
-            vector_value_out[15u] = 171u;
             map_put(map, vector_value_out, new_index__71);
             vector_return(vector, new_index__71, vector_value_out);
             int checksum__77 = rte_ipv4_udptcp_cksum(ipv4_header_1, tcpudp_header_1);

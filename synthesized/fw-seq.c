@@ -1243,6 +1243,14 @@ struct FlowId {
   uint32_t dst_ip;
   uint8_t protocol;
 };
+bool FlowId_eq(void* a, void* b) {
+  struct FlowId* id1 = (struct FlowId*)a;
+  struct FlowId* id2 = (struct FlowId*)b;
+
+  return (id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
+      &&(id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
+          &&(id1->protocol == id2->protocol);
+}
 uint32_t FlowId_hash(void* obj) {
   struct FlowId* id = (struct FlowId*)obj;
 
@@ -1253,14 +1261,6 @@ uint32_t FlowId_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, id->dst_ip);
   hash = __builtin_ia32_crc32si(hash, id->protocol);
   return hash;
-}
-bool FlowId_eq(void* a, void* b) {
-  struct FlowId* id1 = (struct FlowId*)a;
-  struct FlowId* id2 = (struct FlowId*)b;
-
-  return (id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
-      &&(id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
-          &&(id1->protocol == id2->protocol);
 }
 void null_init(void* obj) {
   *(uint32_t *)obj = 0;
@@ -1297,7 +1297,7 @@ bool nf_init() {
   // 116
   // 117
   if (map_allocation_succeeded__1) {
-    int vector_alloc_success__4 = vector_allocate(16u, 65536u, FlowId_allocate, &vector);
+    int vector_alloc_success__4 = vector_allocate(13u, 65536u, FlowId_allocate, &vector);
 
     // 114
     // 115
@@ -1382,7 +1382,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         map_key[11u] = (ipv4_header_1->src_addr >> 24) & 0xff;
         map_key[12u] = ipv4_header_1->next_proto_id;
         int map_value_out;
-        int map_has_this_key__39 = map_get(map, &map_key, &map_value_out);
+        int map_has_this_key__39 = map_get(map, map_key, &map_value_out);
 
         // 120
         if (0u == map_has_this_key__39) {
@@ -1432,7 +1432,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         map_key[11u] = (ipv4_header_1->dst_addr >> 24) & 0xff;
         map_key[12u] = ipv4_header_1->next_proto_id;
         int map_value_out;
-        int map_has_this_key__61 = map_get(map, &map_key, &map_value_out);
+        int map_has_this_key__61 = map_get(map, map_key, &map_value_out);
 
         // 122
         // 123
@@ -1457,9 +1457,6 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
             vector_value_out[10u] = (ipv4_header_1->dst_addr >> 16) & 0xff;
             vector_value_out[11u] = (ipv4_header_1->dst_addr >> 24) & 0xff;
             vector_value_out[12u] = ipv4_header_1->next_proto_id;
-            vector_value_out[13u] = 171u;
-            vector_value_out[14u] = 171u;
-            vector_value_out[15u] = 171u;
             map_put(map, vector_value_out, new_index__64);
             vector_return(vector, new_index__64, vector_value_out);
             uint8_t* vector_value_out_1 = 0u;

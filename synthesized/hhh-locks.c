@@ -1794,6 +1794,17 @@ struct DynamicValue {
 struct ip_addr {
   uint32_t addr;
 };
+bool ip_addr_eq(void* a, void* b) {
+  struct ip_addr *id1 = (struct ip_addr *)a;
+  struct ip_addr *id2 = (struct ip_addr *)b;
+
+  return (id1->addr == id2->addr);
+}
+void DynamicValue_allocate(void* obj) {
+  struct DynamicValue *dv = obj;
+  dv->bucket_size = 0;
+  dv->bucket_time = 0;
+}
 uint32_t ip_addr_hash(void* obj) {
   struct ip_addr *id = (struct ip_addr *)obj;
 
@@ -1801,36 +1812,25 @@ uint32_t ip_addr_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, id->addr);
   return hash;
 }
-bool ip_addr_eq(void* a, void* b) {
-  struct ip_addr *id1 = (struct ip_addr *)a;
-  struct ip_addr *id2 = (struct ip_addr *)b;
-
-  return (id1->addr == id2->addr);
-}
 void ip_addr_allocate(void* obj) { (uintptr_t) obj; }
-void DynamicValue_allocate(void* obj) {
-  struct DynamicValue *dv = obj;
-  dv->bucket_size = 0;
-  dv->bucket_time = 0;
-}
 
 uint8_t hash_key_0[RSS_HASH_KEY_LENGTH] = {
-  0xe9, 0xfe, 0x4b, 0xda, 0xe3, 0xff, 0xdd, 0xd2, 
-  0x2d, 0x7, 0xcb, 0x5, 0x58, 0xf2, 0x8a, 0x4e, 
-  0xa3, 0x79, 0xca, 0x87, 0x17, 0x85, 0xbc, 0x42, 
-  0xb2, 0x62, 0x95, 0xe6, 0xd1, 0xab, 0x35, 0xba, 
-  0xa9, 0x80, 0x94, 0x8d, 0x7f, 0x72, 0x5f, 0xac, 
-  0x79, 0x2b, 0xb1, 0xd1, 0x1d, 0x3c, 0x1f, 0xc0, 
-  0xb5, 0xe9, 0x47, 0xcd
+  0x8, 0xab, 0x8b, 0xfc, 0x52, 0xa2, 0xbc, 0x45, 
+  0xe2, 0xf6, 0xda, 0x3d, 0x75, 0x9b, 0xbc, 0x6b, 
+  0x71, 0xd1, 0x1, 0x5b, 0xd0, 0x95, 0xfe, 0x3c, 
+  0xbc, 0xf8, 0x96, 0xfa, 0x98, 0x23, 0xee, 0xa0, 
+  0xce, 0x79, 0x9d, 0x20, 0x1b, 0x59, 0x66, 0xfd, 
+  0x4f, 0x40, 0x3b, 0xc4, 0xdb, 0xf7, 0x2f, 0x4d, 
+  0xc8, 0x30, 0xa8, 0x99
 };
 uint8_t hash_key_1[RSS_HASH_KEY_LENGTH] = {
-  0x3f, 0xf3, 0xfd, 0xc7, 0x0, 0x11, 0xde, 0xd6, 
-  0x9d, 0xd0, 0x73, 0x9c, 0x56, 0x13, 0xfa, 0xc6, 
-  0xf5, 0x40, 0xa3, 0x18, 0x61, 0xfb, 0x6b, 0x72, 
-  0x52, 0x3a, 0x80, 0x4d, 0x49, 0xdd, 0x86, 0x88, 
-  0xd0, 0x83, 0x4f, 0xd0, 0x94, 0x2d, 0xa6, 0x31, 
-  0xfd, 0x1a, 0xce, 0x54, 0x2d, 0xc8, 0x1a, 0x22, 
-  0x8, 0xbd, 0x3a, 0x6a
+  0xf9, 0x57, 0x47, 0x9a, 0x7f, 0x5d, 0x6b, 0xa8, 
+  0xc3, 0xaa, 0x6c, 0x1d, 0xef, 0x7, 0x97, 0x74, 
+  0x15, 0x17, 0x65, 0xf1, 0xc2, 0x9c, 0x11, 0x15, 
+  0x1d, 0x65, 0x3a, 0x78, 0x2e, 0xdf, 0x53, 0x27, 
+  0x36, 0x9a, 0xc1, 0xb6, 0xf7, 0x2c, 0x5e, 0xbb, 
+  0xd7, 0xca, 0xd8, 0xc6, 0xd2, 0x70, 0x3a, 0xe7, 
+  0x87, 0x9f, 0xd8, 0x49
 };
 
 struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {
@@ -2421,7 +2421,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
       map_key[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
       map_key[3u] = ((ipv4_header_1->src_addr & 4043309055u) >> 24ul) & 0xff;
       int map_value_out;
-      int map_has_this_key__68 = map_locks_get(map, &map_key, &map_value_out);
+      int map_has_this_key__68 = map_locks_get(map, map_key, &map_value_out);
 
       // 1906
       // 1907
@@ -2546,7 +2546,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           map_key_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
           map_key_1[3u] = ((ipv4_header_1->src_addr & 4244635647u) >> 24ul) & 0xff;
           int map_value_out_1;
-          int map_has_this_key__79 = map_locks_get(map_1, &map_key_1, &map_value_out_1);
+          int map_has_this_key__79 = map_locks_get(map_1, map_key_1, &map_value_out_1);
 
           // 1906
           // 1907
@@ -2621,7 +2621,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
               map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
               int map_value_out_2;
-              int map_has_this_key__90 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+              int map_has_this_key__90 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
               // 1906
               // 1907
@@ -2868,7 +2868,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__171 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__171 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                   // 1913
                   // 1914
@@ -3023,7 +3023,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__237 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__237 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                   // 1919
                   // 1920
@@ -3180,7 +3180,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                 map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                 int map_value_out_2;
-                int map_has_this_key__303 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                int map_has_this_key__303 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                 // 1925
                 // 1926
@@ -3337,7 +3337,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
               map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
               int map_value_out_2;
-              int map_has_this_key__369 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+              int map_has_this_key__369 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
               // 1931
               // 1932
@@ -3838,7 +3838,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               map_key_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
               map_key_1[3u] = ((ipv4_header_1->src_addr & 4244635647u) >> 24ul) & 0xff;
               int map_value_out_1;
-              int map_has_this_key__450 = map_locks_get(map_1, &map_key_1, &map_value_out_1);
+              int map_has_this_key__450 = map_locks_get(map_1, map_key_1, &map_value_out_1);
 
               // 1938
               // 1939
@@ -3913,7 +3913,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__461 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__461 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                   // 1938
                   // 1939
@@ -4160,7 +4160,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                       map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                       map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                       int map_value_out_2;
-                      int map_has_this_key__542 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                      int map_has_this_key__542 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                       // 1945
                       // 1946
@@ -4315,7 +4315,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                       map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                       map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                       int map_value_out_2;
-                      int map_has_this_key__608 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                      int map_has_this_key__608 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                       // 1951
                       // 1952
@@ -4472,7 +4472,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                     map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                     map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                     int map_value_out_2;
-                    int map_has_this_key__674 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                    int map_has_this_key__674 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                     // 1957
                     // 1958
@@ -4629,7 +4629,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__740 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__740 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                   // 1963
                   // 1964
@@ -4813,7 +4813,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               map_key_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
               map_key_1[3u] = ((ipv4_header_1->src_addr & 4244635647u) >> 24ul) & 0xff;
               int map_value_out_1;
-              int map_has_this_key__806 = map_locks_get(map_1, &map_key_1, &map_value_out_1);
+              int map_has_this_key__806 = map_locks_get(map_1, map_key_1, &map_value_out_1);
 
               // 1969
               // 1970
@@ -4888,7 +4888,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__817 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__817 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                   // 1969
                   // 1970
@@ -5135,7 +5135,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                       map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                       map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                       int map_value_out_2;
-                      int map_has_this_key__898 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                      int map_has_this_key__898 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                       // 1976
                       // 1977
@@ -5290,7 +5290,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                       map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                       map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                       int map_value_out_2;
-                      int map_has_this_key__964 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                      int map_has_this_key__964 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                       // 1982
                       // 1983
@@ -5447,7 +5447,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                     map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                     map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                     int map_value_out_2;
-                    int map_has_this_key__1030 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                    int map_has_this_key__1030 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                     // 1988
                     // 1989
@@ -5604,7 +5604,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__1096 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__1096 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                   // 1994
                   // 1995
@@ -5790,7 +5790,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
             map_key_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
             map_key_1[3u] = ((ipv4_header_1->src_addr & 4244635647u) >> 24ul) & 0xff;
             int map_value_out_1;
-            int map_has_this_key__1162 = map_locks_get(map_1, &map_key_1, &map_value_out_1);
+            int map_has_this_key__1162 = map_locks_get(map_1, map_key_1, &map_value_out_1);
 
             // 2000
             // 2001
@@ -5865,7 +5865,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                 map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                 int map_value_out_2;
-                int map_has_this_key__1173 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                int map_has_this_key__1173 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                 // 2000
                 // 2001
@@ -6112,7 +6112,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                     map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                     map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                     int map_value_out_2;
-                    int map_has_this_key__1254 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                    int map_has_this_key__1254 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                     // 2007
                     // 2008
@@ -6267,7 +6267,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                     map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                     map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                     int map_value_out_2;
-                    int map_has_this_key__1320 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                    int map_has_this_key__1320 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                     // 2013
                     // 2014
@@ -6424,7 +6424,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__1386 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__1386 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                   // 2019
                   // 2020
@@ -6581,7 +6581,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                 map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                 int map_value_out_2;
-                int map_has_this_key__1452 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                int map_has_this_key__1452 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                 // 2025
                 // 2026
@@ -6767,7 +6767,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           map_key_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
           map_key_1[3u] = ((ipv4_header_1->src_addr & 4244635647u) >> 24ul) & 0xff;
           int map_value_out_1;
-          int map_has_this_key__1518 = map_locks_get(map_1, &map_key_1, &map_value_out_1);
+          int map_has_this_key__1518 = map_locks_get(map_1, map_key_1, &map_value_out_1);
 
           // 2031
           // 2032
@@ -6842,7 +6842,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
               map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
               int map_value_out_2;
-              int map_has_this_key__1529 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+              int map_has_this_key__1529 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
               // 2031
               // 2032
@@ -7089,7 +7089,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__1610 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__1610 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                   // 2038
                   // 2039
@@ -7244,7 +7244,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                   map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                   map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                   int map_value_out_2;
-                  int map_has_this_key__1676 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                  int map_has_this_key__1676 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                   // 2044
                   // 2045
@@ -7401,7 +7401,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
                 map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
                 int map_value_out_2;
-                int map_has_this_key__1742 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+                int map_has_this_key__1742 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
                 // 2050
                 // 2051
@@ -7558,7 +7558,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
               map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
               int map_value_out_2;
-              int map_has_this_key__1808 = map_locks_get(map_2, &map_key_2, &map_value_out_2);
+              int map_has_this_key__1808 = map_locks_get(map_2, map_key_2, &map_value_out_2);
 
               // 2056
               // 2057

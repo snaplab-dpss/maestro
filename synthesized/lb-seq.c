@@ -1236,6 +1236,13 @@ int main(int argc, char **argv) {
   return 0;
 }
 
+struct LoadBalancedFlow {
+  uint32_t src_ip;
+  uint32_t dst_ip;
+  uint16_t src_port;
+  uint16_t dst_port;
+  uint8_t protocol;
+};
 struct LoadBalancedBackend {
   uint16_t nic;
   struct rte_ether_addr mac;
@@ -1244,52 +1251,6 @@ struct LoadBalancedBackend {
 struct ip_addr {
   uint32_t addr;
 };
-struct LoadBalancedFlow {
-  uint32_t src_ip;
-  uint32_t dst_ip;
-  uint16_t src_port;
-  uint16_t dst_port;
-  uint8_t protocol;
-};
-bool ip_addr_eq(void* a, void* b) {
-  struct ip_addr* id1 = (struct ip_addr*)a;
-  struct ip_addr* id2 = (struct ip_addr*)b;
-
-  return (id1->addr == id2->addr);
-}
-bool LoadBalancedFlow_eq(void* a, void* b) {
-  struct LoadBalancedFlow* id1 = (struct LoadBalancedFlow*)a;
-  struct LoadBalancedFlow* id2 = (struct LoadBalancedFlow*)b;
-
-  return (id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
-      &&(id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
-          &&(id1->protocol == id2->protocol);
-}
-void null_init(void* obj) {
-  *(uint32_t *)obj = 0;
-}
-void ip_addr_allocate(void* obj) {
-  struct ip_addr* id = (struct ip_addr*)obj;
-  id->addr = 0;
-}
-uint32_t LoadBalancedFlow_hash(void* obj) {
-  struct LoadBalancedFlow* id = (struct LoadBalancedFlow*)obj;
-
-  unsigned hash = 0;
-  hash = __builtin_ia32_crc32si(hash, id->src_ip);
-  hash = __builtin_ia32_crc32si(hash, id->dst_ip);
-  hash = __builtin_ia32_crc32si(hash, id->src_port);
-  hash = __builtin_ia32_crc32si(hash, id->dst_port);
-  hash = __builtin_ia32_crc32si(hash, id->protocol);
-  return hash;
-}
-uint32_t ip_addr_hash(void* obj) {
-  struct ip_addr* id = (struct ip_addr*)obj;
-
-  unsigned hash = 0;
-  hash = __builtin_ia32_crc32si(hash, id->addr);
-  return hash;
-}
 void LoadBalancedBackend_allocate(void* obj) {
   struct LoadBalancedBackend* id = (struct LoadBalancedBackend*)obj;
   id->nic = 0;
@@ -1303,6 +1264,30 @@ void LoadBalancedBackend_allocate(void* obj) {
 
   id->ip = 0;
 }
+uint32_t LoadBalancedFlow_hash(void* obj) {
+  struct LoadBalancedFlow* id = (struct LoadBalancedFlow*)obj;
+
+  unsigned hash = 0;
+  hash = __builtin_ia32_crc32si(hash, id->src_ip);
+  hash = __builtin_ia32_crc32si(hash, id->dst_ip);
+  hash = __builtin_ia32_crc32si(hash, id->src_port);
+  hash = __builtin_ia32_crc32si(hash, id->dst_port);
+  hash = __builtin_ia32_crc32si(hash, id->protocol);
+  return hash;
+}
+bool ip_addr_eq(void* a, void* b) {
+  struct ip_addr* id1 = (struct ip_addr*)a;
+  struct ip_addr* id2 = (struct ip_addr*)b;
+
+  return (id1->addr == id2->addr);
+}
+void null_init(void* obj) {
+  *(uint32_t *)obj = 0;
+}
+void ip_addr_allocate(void* obj) {
+  struct ip_addr* id = (struct ip_addr*)obj;
+  id->addr = 0;
+}
 void LoadBalancedFlow_allocate(void* obj) {
   struct LoadBalancedFlow* id = (struct LoadBalancedFlow*)obj;
   id->src_ip = 0;
@@ -1310,6 +1295,21 @@ void LoadBalancedFlow_allocate(void* obj) {
   id->src_port = 0;
   id->dst_port = 0;
   id->protocol = 0;
+}
+bool LoadBalancedFlow_eq(void* a, void* b) {
+  struct LoadBalancedFlow* id1 = (struct LoadBalancedFlow*)a;
+  struct LoadBalancedFlow* id2 = (struct LoadBalancedFlow*)b;
+
+  return (id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
+      &&(id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
+          &&(id1->protocol == id2->protocol);
+}
+uint32_t ip_addr_hash(void* obj) {
+  struct ip_addr* id = (struct ip_addr*)obj;
+
+  unsigned hash = 0;
+  hash = __builtin_ia32_crc32si(hash, id->addr);
+  return hash;
 }
 struct tcpudp_hdr {
   uint16_t src_port;
@@ -1350,7 +1350,7 @@ bool nf_init() {
   // 287
   // 288
   if (map_allocation_succeeded__1) {
-    int vector_alloc_success__4 = vector_allocate(16u, 65536u, LoadBalancedFlow_allocate, &vector);
+    int vector_alloc_success__4 = vector_allocate(13u, 65536u, LoadBalancedFlow_allocate, &vector);
 
     // 279
     // 280
@@ -1580,7 +1580,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           map_key[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
           map_key[12u] = ipv4_header_1->next_proto_id;
           int map_value_out;
-          int map_has_this_key__60 = map_get(map, &map_key, &map_value_out);
+          int map_has_this_key__60 = map_get(map, map_key, &map_value_out);
 
           // 291
           // 292
@@ -1588,7 +1588,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           // 294
           // 295
           if (0u == map_has_this_key__60) {
-            uint8_t hashed_obj[16];
+            uint8_t hashed_obj[13];
             hashed_obj[0u] = ipv4_header_1->src_addr & 0xff;
             hashed_obj[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
             hashed_obj[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
@@ -1602,9 +1602,6 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
             hashed_obj[10u] = tcpudp_header_1->dst_port & 0xff;
             hashed_obj[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
             hashed_obj[12u] = ipv4_header_1->next_proto_id;
-            hashed_obj[13u] = 171u;
-            hashed_obj[14u] = 171u;
-            hashed_obj[15u] = 171u;
             uint32_t LoadBalancedFlow_hash__63 = LoadBalancedFlow_hash(hashed_obj);
             uint32_t chosen_backend__64 = 0u;
             int32_t prefered_backend_found__64 = cht_find_preferred_available_backend(LoadBalancedFlow_hash__63, vector_4, dchain_1, 97u, 32u, &chosen_backend__64);
@@ -1641,9 +1638,6 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 vector_value_out[10u] = tcpudp_header_1->dst_port & 0xff;
                 vector_value_out[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
                 vector_value_out[12u] = ipv4_header_1->next_proto_id;
-                vector_value_out[13u] = 171u;
-                vector_value_out[14u] = 171u;
-                vector_value_out[15u] = 171u;
                 uint8_t* vector_value_out_1 = 0u;
                 vector_borrow(vector_1, new_index__75, (void**)(&vector_value_out_1));
                 vector_value_out_1[0u] = chosen_backend__64 & 0xff;
@@ -1807,8 +1801,8 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               map_key_2[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
               map_key_2[12u] = ipv4_header_1->next_proto_id;
               int map_value_out_1;
-              int map_has_this_key__147 = map_get(map, &map_key_2, &map_value_out_1);
-              uint8_t hashed_obj[16];
+              int map_has_this_key__147 = map_get(map, map_key_2, &map_value_out_1);
+              uint8_t hashed_obj[13];
               hashed_obj[0u] = ipv4_header_1->src_addr & 0xff;
               hashed_obj[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
               hashed_obj[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
@@ -1822,9 +1816,6 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
               hashed_obj[10u] = tcpudp_header_1->dst_port & 0xff;
               hashed_obj[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
               hashed_obj[12u] = ipv4_header_1->next_proto_id;
-              hashed_obj[13u] = 171u;
-              hashed_obj[14u] = 171u;
-              hashed_obj[15u] = 171u;
               uint32_t LoadBalancedFlow_hash__148 = LoadBalancedFlow_hash(hashed_obj);
               uint32_t chosen_backend__149 = 0u;
               int32_t prefered_backend_found__149 = cht_find_preferred_available_backend(LoadBalancedFlow_hash__148, vector_4, dchain_1, 97u, 32u, &chosen_backend__149);
@@ -1855,9 +1846,6 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 vector_value_out_2[10u] = tcpudp_header_1->dst_port & 0xff;
                 vector_value_out_2[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
                 vector_value_out_2[12u] = ipv4_header_1->next_proto_id;
-                vector_value_out_2[13u] = 171u;
-                vector_value_out_2[14u] = 171u;
-                vector_value_out_2[15u] = 171u;
                 uint8_t* vector_value_out_3 = 0u;
                 vector_borrow(vector_1, new_index__160, (void**)(&vector_value_out_3));
                 vector_value_out_3[0u] = chosen_backend__149 & 0xff;
@@ -1914,7 +1902,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
           map_key[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
           map_key[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
           int map_value_out;
-          int map_has_this_key__184 = map_get(map_1, &map_key, &map_value_out);
+          int map_has_this_key__184 = map_get(map_1, map_key, &map_value_out);
 
           // 301
           // 302
@@ -1980,7 +1968,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         map_key[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
         map_key[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
         int map_value_out;
-        int map_has_this_key__220 = map_get(map_1, &map_key, &map_value_out);
+        int map_has_this_key__220 = map_get(map_1, map_key, &map_value_out);
 
         // 304
         // 305
