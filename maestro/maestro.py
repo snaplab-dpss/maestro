@@ -13,7 +13,6 @@ from datetime import timedelta
 
 from colorama import Fore, Style
 
-from tools import get_balanced_lut
 from tools import build
 
 def __print(nf, msg, color):
@@ -267,13 +266,6 @@ if __name__ == "__main__":
 	)
 
 	parser.add_argument(
-		'--balance',
-		type=str,
-		required=False,
-		help='pcap used to balance LUT'
-	)
-
-	parser.add_argument(
 		'--out',
 		type=str,
 		required=True,
@@ -282,9 +274,6 @@ if __name__ == "__main__":
 
 	args = parser.parse_args()
 	args.nf = os.path.abspath(args.nf)
-
-	if args.balance and not os.path.exists(args.balance):
-		error(args.nf, f"Error: no such file or directory \"{args.balance}\"")
 
 	setup(args.nf)
 	build_maestro(args.nf)
