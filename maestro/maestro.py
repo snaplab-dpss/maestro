@@ -207,38 +207,6 @@ def stitch_synthesized_nf(synthesized_content):
 	synthesized_file.write(code)
 	synthesized_file.close()
 
-def synthesize_balance_lut(keys, pcap, target):
-	code = ""
-
-	if target == CHOICE_SEQUENTIAL:
-		return code
-
-	code += "void init_retas() {\n"                                \
-			"  for (unsigned i = 0; i < MAX_NUM_DEVICES; i++) {\n" \
-			"    retas_per_device[i].set = false;\n"               \
-			"  }\n"
-
-	if not pcap:
-		code += "}"
-		return code
-
-	for ikey, key in enumerate(keys):
-		print(f"Balancing LUT for key {ikey}")
-		lut = get_balanced_lut.run(key, pcap, True)
-
-		code += "\n"
-		code += f"  retas_per_device[{ikey}].set = true;"
-
-		for j, lut_core in enumerate(lut):
-			code += "\n"
-
-			for k, bucket in enumerate(lut_core):
-				code += f"  retas_per_device[{ikey}].tables[{j}][{k}] = {bucket};\n"
-	
-	code += "}"
-
-	return code
-
 def bundle_everything(nf):
 	seq_nf_files = []
 	seq_nf_files += glob.glob(f"{nf}/*.c")
@@ -348,9 +316,6 @@ if __name__ == "__main__":
 
 	synthesized_nf = synthesize_nf(args.nf, call_paths, args.target)
 	synthesized_content.append(synthesized_nf)
-
-	balance_lut_code = synthesize_balance_lut(keys, args.balance, args.target)
-	synthesized_content.append(balance_lut_code)
 
 	stitch_synthesized_nf(synthesized_content)
 	complete_impl_fname = build.build(CHOICE_TO_BOILERPLATE[args.target], SYNTHESIZED, args.nf)
