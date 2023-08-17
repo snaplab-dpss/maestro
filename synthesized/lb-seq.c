@@ -1236,6 +1236,13 @@ int main(int argc, char **argv) {
   return 0;
 }
 
+struct LoadBalancedFlow {
+  uint32_t src_ip;
+  uint32_t dst_ip;
+  uint16_t src_port;
+  uint16_t dst_port;
+  uint8_t protocol;
+};
 struct ip_addr {
   uint32_t addr;
 };
@@ -1244,13 +1251,19 @@ struct LoadBalancedBackend {
   struct rte_ether_addr mac;
   uint32_t ip;
 };
-struct LoadBalancedFlow {
-  uint32_t src_ip;
-  uint32_t dst_ip;
-  uint16_t src_port;
-  uint16_t dst_port;
-  uint8_t protocol;
-};
+uint32_t ip_addr_hash(void* obj) {
+  struct ip_addr* id = (struct ip_addr*)obj;
+
+  unsigned hash = 0;
+  hash = __builtin_ia32_crc32si(hash, id->addr);
+  return hash;
+}
+bool ip_addr_eq(void* a, void* b) {
+  struct ip_addr* id1 = (struct ip_addr*)a;
+  struct ip_addr* id2 = (struct ip_addr*)b;
+
+  return (id1->addr == id2->addr);
+}
 void LoadBalancedFlow_allocate(void* obj) {
   struct LoadBalancedFlow* id = (struct LoadBalancedFlow*)obj;
   id->src_ip = 0;
@@ -1259,9 +1272,8 @@ void LoadBalancedFlow_allocate(void* obj) {
   id->dst_port = 0;
   id->protocol = 0;
 }
-void ip_addr_allocate(void* obj) {
-  struct ip_addr* id = (struct ip_addr*)obj;
-  id->addr = 0;
+void null_init(void* obj) {
+  *(uint32_t *)obj = 0;
 }
 void LoadBalancedBackend_allocate(void* obj) {
   struct LoadBalancedBackend* id = (struct LoadBalancedBackend*)obj;
@@ -1275,6 +1287,10 @@ void LoadBalancedBackend_allocate(void* obj) {
   id->mac.addr_bytes[5] = 0;
 
   id->ip = 0;
+}
+void ip_addr_allocate(void* obj) {
+  struct ip_addr* id = (struct ip_addr*)obj;
+  id->addr = 0;
 }
 bool LoadBalancedFlow_eq(void* a, void* b) {
   struct LoadBalancedFlow* id1 = (struct LoadBalancedFlow*)a;
@@ -1294,22 +1310,6 @@ uint32_t LoadBalancedFlow_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, id->dst_port);
   hash = __builtin_ia32_crc32si(hash, id->protocol);
   return hash;
-}
-void null_init(void* obj) {
-  *(uint32_t *)obj = 0;
-}
-uint32_t ip_addr_hash(void* obj) {
-  struct ip_addr* id = (struct ip_addr*)obj;
-
-  unsigned hash = 0;
-  hash = __builtin_ia32_crc32si(hash, id->addr);
-  return hash;
-}
-bool ip_addr_eq(void* a, void* b) {
-  struct ip_addr* id1 = (struct ip_addr*)a;
-  struct ip_addr* id2 = (struct ip_addr*)b;
-
-  return (id1->addr == id2->addr);
 }
 struct tcpudp_hdr {
   uint16_t src_port;
@@ -1339,156 +1339,156 @@ struct Vector* vector_4;
 bool nf_init() {
   int map_allocation_succeeded__1 = map_allocate(LoadBalancedFlow_eq, LoadBalancedFlow_hash, 65536u, &map);
 
-  // 279
-  // 280
-  // 281
-  // 282
-  // 283
-  // 284
-  // 285
-  // 286
-  // 287
-  // 288
+  // 253
+  // 254
+  // 255
+  // 256
+  // 257
+  // 258
+  // 259
+  // 260
+  // 261
+  // 262
   if (map_allocation_succeeded__1) {
     int vector_alloc_success__4 = vector_allocate(13u, 65536u, LoadBalancedFlow_allocate, &vector);
 
-    // 279
-    // 280
-    // 281
-    // 282
-    // 283
-    // 284
-    // 285
-    // 286
-    // 287
+    // 253
+    // 254
+    // 255
+    // 256
+    // 257
+    // 258
+    // 259
+    // 260
+    // 261
     if (vector_alloc_success__4) {
       int is_dchain_allocated__7 = dchain_allocate(65536u, &dchain);
 
-      // 279
-      // 280
-      // 281
-      // 282
-      // 283
-      // 284
-      // 285
-      // 286
+      // 253
+      // 254
+      // 255
+      // 256
+      // 257
+      // 258
+      // 259
+      // 260
       if (is_dchain_allocated__7) {
         int vector_alloc_success__10 = vector_allocate(4u, 65536u, null_init, &vector_1);
 
-        // 279
-        // 280
-        // 281
-        // 282
-        // 283
-        // 284
-        // 285
+        // 253
+        // 254
+        // 255
+        // 256
+        // 257
+        // 258
+        // 259
         if (vector_alloc_success__10) {
           int map_allocation_succeeded__13 = map_allocate(ip_addr_eq, ip_addr_hash, 32u, &map_1);
 
-          // 279
-          // 280
-          // 281
-          // 282
-          // 283
-          // 284
+          // 253
+          // 254
+          // 255
+          // 256
+          // 257
+          // 258
           if (map_allocation_succeeded__13) {
             int vector_alloc_success__16 = vector_allocate(4u, 32u, ip_addr_allocate, &vector_2);
 
-            // 279
-            // 280
-            // 281
-            // 282
-            // 283
+            // 253
+            // 254
+            // 255
+            // 256
+            // 257
             if (vector_alloc_success__16) {
               int vector_alloc_success__19 = vector_allocate(12u, 32u, LoadBalancedBackend_allocate, &vector_3);
 
-              // 279
-              // 280
-              // 281
-              // 282
+              // 253
+              // 254
+              // 255
+              // 256
               if (vector_alloc_success__19) {
                 int is_dchain_allocated__22 = dchain_allocate(32u, &dchain_1);
 
-                // 279
-                // 280
-                // 281
+                // 253
+                // 254
+                // 255
                 if (is_dchain_allocated__22) {
                   int vector_alloc_success__25 = vector_allocate(4u, 3104u, null_init, &vector_4);
 
-                  // 279
-                  // 280
+                  // 253
+                  // 254
                   if (vector_alloc_success__25) {
                     int cht_fill_cht_successful__28 = cht_fill_cht(vector_4, 97u, 32u);
 
-                    // 279
+                    // 253
                     if (cht_fill_cht_successful__28) {
                       return 1;
                     }
 
-                    // 280
+                    // 254
                     else {
                       return 0;
                     } // !cht_fill_cht_successful__28
 
                   }
 
-                  // 281
+                  // 255
                   else {
                     return 0;
                   } // !vector_alloc_success__25
 
                 }
 
-                // 282
+                // 256
                 else {
                   return 0;
                 } // !is_dchain_allocated__22
 
               }
 
-              // 283
+              // 257
               else {
                 return 0;
               } // !vector_alloc_success__19
 
             }
 
-            // 284
+            // 258
             else {
               return 0;
             } // !vector_alloc_success__16
 
           }
 
-          // 285
+          // 259
           else {
             return 0;
           } // !map_allocation_succeeded__13
 
         }
 
-        // 286
+        // 260
         else {
           return 0;
         } // !vector_alloc_success__10
 
       }
 
-      // 287
+      // 261
       else {
         return 0;
       } // !is_dchain_allocated__7
 
     }
 
-    // 288
+    // 262
     else {
       return 0;
     } // !vector_alloc_success__4
 
   }
 
-  // 289
+  // 263
   else {
     return 0;
   } // !map_allocation_succeeded__1
@@ -1500,94 +1500,290 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
   int number_of_freed_flows__46 = expire_items_single_map(dchain_1, vector_2, map_1, now - 100000000000ul);
   struct rte_ether_hdr* ether_header_1 = (struct rte_ether_hdr*)(packet);
 
-  // 291
-  // 292
-  // 293
-  // 294
-  // 295
-  // 296
-  // 297
-  // 298
-  // 299
-  // 300
-  // 301
-  // 302
-  // 303
-  // 304
-  // 305
-  // 306
-  // 307
+  // 265
+  // 266
+  // 267
+  // 268
+  // 269
+  // 270
+  // 271
+  // 272
+  // 273
+  // 274
+  // 275
+  // 276
+  // 277
+  // 278
   if ((8u == ether_header_1->ether_type) & (20ul <= (4294967282u + packet_length))) {
     struct rte_ipv4_hdr* ipv4_header_1 = (struct rte_ipv4_hdr*)(packet + 14u);
 
-    // 291
-    // 292
-    // 293
-    // 294
-    // 295
-    // 296
-    // 297
-    // 298
-    // 299
-    // 300
-    // 301
-    // 302
-    // 303
-    // 304
-    // 305
-    // 306
+    // 265
+    // 266
+    // 267
+    // 268
+    // 269
+    // 270
+    // 271
+    // 272
+    // 273
+    // 274
+    // 275
+    // 276
+    // 277
     if (((6u == ipv4_header_1->next_proto_id) | (17u == ipv4_header_1->next_proto_id)) & ((4294967262u + packet_length) >= 4ul)) {
       struct tcpudp_hdr* tcpudp_header_1 = (struct tcpudp_hdr*)(packet + (14u + 20u));
 
-      // 291
-      // 292
-      // 293
-      // 294
-      // 295
-      // 296
-      // 297
-      // 298
-      // 299
-      // 300
-      // 301
-      // 302
-      // 303
+      // 265
+      // 266
+      // 267
+      // 268
+      // 269
+      // 270
+      // 271
+      // 272
+      // 273
+      // 274
       if (0u != device) {
+        uint8_t map_key[13];
+        map_key[0u] = ipv4_header_1->src_addr & 0xff;
+        map_key[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
+        map_key[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
+        map_key[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+        map_key[4u] = ipv4_header_1->dst_addr & 0xff;
+        map_key[5u] = (ipv4_header_1->dst_addr >> 8) & 0xff;
+        map_key[6u] = (ipv4_header_1->dst_addr >> 16) & 0xff;
+        map_key[7u] = (ipv4_header_1->dst_addr >> 24) & 0xff;
+        map_key[8u] = tcpudp_header_1->src_port & 0xff;
+        map_key[9u] = (tcpudp_header_1->src_port >> 8) & 0xff;
+        map_key[10u] = tcpudp_header_1->dst_port & 0xff;
+        map_key[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
+        map_key[12u] = ipv4_header_1->next_proto_id;
+        int map_value_out;
+        int map_has_this_key__58 = map_get(map, map_key, &map_value_out);
 
-        // 291
-        // 292
-        // 293
-        // 294
-        // 295
-        // 296
-        // 297
-        // 298
-        // 299
-        // 300
-        if (1u != device) {
-          uint8_t map_key[13];
-          map_key[0u] = ipv4_header_1->src_addr & 0xff;
-          map_key[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
-          map_key[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
-          map_key[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
-          map_key[4u] = ipv4_header_1->dst_addr & 0xff;
-          map_key[5u] = (ipv4_header_1->dst_addr >> 8) & 0xff;
-          map_key[6u] = (ipv4_header_1->dst_addr >> 16) & 0xff;
-          map_key[7u] = (ipv4_header_1->dst_addr >> 24) & 0xff;
-          map_key[8u] = tcpudp_header_1->src_port & 0xff;
-          map_key[9u] = (tcpudp_header_1->src_port >> 8) & 0xff;
-          map_key[10u] = tcpudp_header_1->dst_port & 0xff;
-          map_key[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
-          map_key[12u] = ipv4_header_1->next_proto_id;
-          int map_value_out;
-          int map_has_this_key__60 = map_get(map, map_key, &map_value_out);
+        // 265
+        // 266
+        // 267
+        // 268
+        // 269
+        if (0u == map_has_this_key__58) {
+          uint8_t hashed_obj[13];
+          hashed_obj[0u] = ipv4_header_1->src_addr & 0xff;
+          hashed_obj[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
+          hashed_obj[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
+          hashed_obj[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+          hashed_obj[4u] = ipv4_header_1->dst_addr & 0xff;
+          hashed_obj[5u] = (ipv4_header_1->dst_addr >> 8) & 0xff;
+          hashed_obj[6u] = (ipv4_header_1->dst_addr >> 16) & 0xff;
+          hashed_obj[7u] = (ipv4_header_1->dst_addr >> 24) & 0xff;
+          hashed_obj[8u] = tcpudp_header_1->src_port & 0xff;
+          hashed_obj[9u] = (tcpudp_header_1->src_port >> 8) & 0xff;
+          hashed_obj[10u] = tcpudp_header_1->dst_port & 0xff;
+          hashed_obj[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
+          hashed_obj[12u] = ipv4_header_1->next_proto_id;
+          uint32_t LoadBalancedFlow_hash__61 = LoadBalancedFlow_hash(hashed_obj);
+          uint32_t chosen_backend__62 = 0u;
+          int32_t prefered_backend_found__62 = cht_find_preferred_available_backend(LoadBalancedFlow_hash__61, vector_4, dchain_1, 97u, 32u, &chosen_backend__62);
 
-          // 291
-          // 292
-          // 293
-          // 294
-          // 295
-          if (0u == map_has_this_key__60) {
+          // 265
+          if (0u == prefered_backend_found__62) {
+            // dropping
+            return device;
+          }
+
+          // 266
+          // 267
+          // 268
+          // 269
+          else {
+            uint32_t new_index__73;
+            int out_of_space__73 = !dchain_allocate_new_index(dchain, &new_index__73, now);
+
+            // 266
+            // 267
+            if (false == ((out_of_space__73) & (0u == number_of_freed_flows__45))) {
+              uint8_t* vector_value_out = 0u;
+              vector_borrow(vector, new_index__73, (void**)(&vector_value_out));
+              vector_value_out[0u] = ipv4_header_1->src_addr & 0xff;
+              vector_value_out[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
+              vector_value_out[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
+              vector_value_out[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+              vector_value_out[4u] = ipv4_header_1->dst_addr & 0xff;
+              vector_value_out[5u] = (ipv4_header_1->dst_addr >> 8) & 0xff;
+              vector_value_out[6u] = (ipv4_header_1->dst_addr >> 16) & 0xff;
+              vector_value_out[7u] = (ipv4_header_1->dst_addr >> 24) & 0xff;
+              vector_value_out[8u] = tcpudp_header_1->src_port & 0xff;
+              vector_value_out[9u] = (tcpudp_header_1->src_port >> 8) & 0xff;
+              vector_value_out[10u] = tcpudp_header_1->dst_port & 0xff;
+              vector_value_out[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
+              vector_value_out[12u] = ipv4_header_1->next_proto_id;
+              uint8_t* vector_value_out_1 = 0u;
+              vector_borrow(vector_1, new_index__73, (void**)(&vector_value_out_1));
+              vector_value_out_1[0u] = chosen_backend__62 & 0xff;
+              vector_value_out_1[1u] = (chosen_backend__62 >> 8) & 0xff;
+              vector_value_out_1[2u] = (chosen_backend__62 >> 16) & 0xff;
+              vector_value_out_1[3u] = (chosen_backend__62 >> 24) & 0xff;
+              vector_return(vector_1, new_index__73, vector_value_out_1);
+              map_put(map, vector_value_out, new_index__73);
+              vector_return(vector, new_index__73, vector_value_out);
+              uint8_t* vector_value_out_2 = 0u;
+              vector_borrow(vector_3, chosen_backend__62, (void**)(&vector_value_out_2));
+              vector_return(vector_3, chosen_backend__62, vector_value_out_2);
+
+              // 266
+              if (vector_value_out_2[0ul]) {
+                // dropping
+                return device;
+              }
+
+              // 267
+              else {
+                int checksum__93 = rte_ipv4_udptcp_cksum(ipv4_header_1, tcpudp_header_1);
+                ipv4_header_1->hdr_checksum = checksum__93 & 0xffff;
+                ipv4_header_1->dst_addr = vector_value_out_2[8ul];
+                ether_header_1->d_addr.addr_bytes[0ul] = vector_value_out_2[2ul];
+                ether_header_1->d_addr.addr_bytes[1ul] = vector_value_out_2[3ul];
+                ether_header_1->d_addr.addr_bytes[2ul] = vector_value_out_2[4ul];
+                ether_header_1->d_addr.addr_bytes[3ul] = vector_value_out_2[5ul];
+                ether_header_1->d_addr.addr_bytes[4ul] = vector_value_out_2[6ul];
+                ether_header_1->d_addr.addr_bytes[5ul] = vector_value_out_2[7ul];
+                ether_header_1->s_addr.addr_bytes[0ul] = 171u;
+                ether_header_1->s_addr.addr_bytes[1ul] = 171u;
+                ether_header_1->s_addr.addr_bytes[2ul] = 171u;
+                ether_header_1->s_addr.addr_bytes[3ul] = 171u;
+                ether_header_1->s_addr.addr_bytes[4ul] = 171u;
+                ether_header_1->s_addr.addr_bytes[5ul] = 171u;
+                return 0;
+              } // !vector_value_out_2[0ul]
+
+            }
+
+            // 268
+            // 269
+            else {
+              uint8_t* vector_value_out = 0u;
+              vector_borrow(vector_3, chosen_backend__62, (void**)(&vector_value_out));
+              vector_return(vector_3, chosen_backend__62, vector_value_out);
+
+              // 268
+              if (vector_value_out[0ul]) {
+                // dropping
+                return device;
+              }
+
+              // 269
+              else {
+                int checksum__114 = rte_ipv4_udptcp_cksum(ipv4_header_1, tcpudp_header_1);
+                ipv4_header_1->hdr_checksum = checksum__114 & 0xffff;
+                ipv4_header_1->dst_addr = vector_value_out[8ul];
+                ether_header_1->d_addr.addr_bytes[0ul] = vector_value_out[2ul];
+                ether_header_1->d_addr.addr_bytes[1ul] = vector_value_out[3ul];
+                ether_header_1->d_addr.addr_bytes[2ul] = vector_value_out[4ul];
+                ether_header_1->d_addr.addr_bytes[3ul] = vector_value_out[5ul];
+                ether_header_1->d_addr.addr_bytes[4ul] = vector_value_out[6ul];
+                ether_header_1->d_addr.addr_bytes[5ul] = vector_value_out[7ul];
+                ether_header_1->s_addr.addr_bytes[0ul] = 171u;
+                ether_header_1->s_addr.addr_bytes[1ul] = 171u;
+                ether_header_1->s_addr.addr_bytes[2ul] = 171u;
+                ether_header_1->s_addr.addr_bytes[3ul] = 171u;
+                ether_header_1->s_addr.addr_bytes[4ul] = 171u;
+                ether_header_1->s_addr.addr_bytes[5ul] = 171u;
+                return 0;
+              } // !vector_value_out[0ul]
+
+            } // !(false == ((out_of_space__73) & (0u == number_of_freed_flows__45)))
+
+          } // !(0u == prefered_backend_found__62)
+
+        }
+
+        // 270
+        // 271
+        // 272
+        // 273
+        // 274
+        else {
+          uint8_t* vector_value_out = 0u;
+          vector_borrow(vector_1, map_value_out, (void**)(&vector_value_out));
+          vector_return(vector_1, map_value_out, vector_value_out);
+          int32_t dchain_is_index_allocated__125 = dchain_is_index_allocated(dchain_1, ((int*)(vector_value_out))[0u]);
+
+          // 270
+          // 271
+          if (dchain_is_index_allocated__125) {
+            dchain_rejuvenate_index(dchain, map_value_out, now);
+            uint8_t* vector_value_out_1 = 0u;
+            vector_borrow(vector_3, ((int*)(vector_value_out))[0], (void**)(&vector_value_out_1));
+            vector_return(vector_3, ((int*)(vector_value_out))[0], vector_value_out_1);
+
+            // 270
+            if (vector_value_out_1[0ul]) {
+              // dropping
+              return device;
+            }
+
+            // 271
+            else {
+              int checksum__141 = rte_ipv4_udptcp_cksum(ipv4_header_1, tcpudp_header_1);
+              ipv4_header_1->hdr_checksum = checksum__141 & 0xffff;
+              ipv4_header_1->dst_addr = vector_value_out_1[8ul];
+              ether_header_1->d_addr.addr_bytes[0ul] = vector_value_out_1[2ul];
+              ether_header_1->d_addr.addr_bytes[1ul] = vector_value_out_1[3ul];
+              ether_header_1->d_addr.addr_bytes[2ul] = vector_value_out_1[4ul];
+              ether_header_1->d_addr.addr_bytes[3ul] = vector_value_out_1[5ul];
+              ether_header_1->d_addr.addr_bytes[4ul] = vector_value_out_1[6ul];
+              ether_header_1->d_addr.addr_bytes[5ul] = vector_value_out_1[7ul];
+              ether_header_1->s_addr.addr_bytes[0ul] = 171u;
+              ether_header_1->s_addr.addr_bytes[1ul] = 171u;
+              ether_header_1->s_addr.addr_bytes[2ul] = 171u;
+              ether_header_1->s_addr.addr_bytes[3ul] = 171u;
+              ether_header_1->s_addr.addr_bytes[4ul] = 171u;
+              ether_header_1->s_addr.addr_bytes[5ul] = 171u;
+              return 0;
+            } // !vector_value_out_1[0ul]
+
+          }
+
+          // 272
+          // 273
+          // 274
+          else {
+            uint8_t* vector_value_out_1 = 0u;
+            vector_borrow(vector, map_value_out, (void**)(&vector_value_out_1));
+            uint8_t map_key_1[13];
+            map_key_1[0u] = ipv4_header_1->src_addr & 0xff;
+            map_key_1[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
+            map_key_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
+            map_key_1[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+            map_key_1[4u] = ipv4_header_1->dst_addr & 0xff;
+            map_key_1[5u] = (ipv4_header_1->dst_addr >> 8) & 0xff;
+            map_key_1[6u] = (ipv4_header_1->dst_addr >> 16) & 0xff;
+            map_key_1[7u] = (ipv4_header_1->dst_addr >> 24) & 0xff;
+            map_key_1[8u] = tcpudp_header_1->src_port & 0xff;
+            map_key_1[9u] = (tcpudp_header_1->src_port >> 8) & 0xff;
+            map_key_1[10u] = tcpudp_header_1->dst_port & 0xff;
+            map_key_1[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
+            map_key_1[12u] = ipv4_header_1->next_proto_id;
+            uint8_t trash[13];
+            map_erase(map, &map_key_1, (void**)(&trash));
+            dchain_free_index(dchain, map_value_out);
+            vector_return(vector, map_value_out, vector_value_out_1);
+            uint8_t map_key_2[13];
+            map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
+            map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
+            map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
+            map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+            map_key_2[4u] = ipv4_header_1->dst_addr & 0xff;
+            map_key_2[5u] = (ipv4_header_1->dst_addr >> 8) & 0xff;
+            map_key_2[6u] = (ipv4_header_1->dst_addr >> 16) & 0xff;
+            map_key_2[7u] = (ipv4_header_1->dst_addr >> 24) & 0xff;
+            map_key_2[8u] = tcpudp_header_1->src_port & 0xff;
+            map_key_2[9u] = (tcpudp_header_1->src_port >> 8) & 0xff;
+            map_key_2[10u] = tcpudp_header_1->dst_port & 0xff;
+            map_key_2[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
+            map_key_2[12u] = ipv4_header_1->next_proto_id;
+            int map_value_out_1;
+            int map_has_this_key__154 = map_get(map, map_key_2, &map_value_out_1);
             uint8_t hashed_obj[13];
             hashed_obj[0u] = ipv4_header_1->src_addr & 0xff;
             hashed_obj[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
@@ -1602,264 +1798,59 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
             hashed_obj[10u] = tcpudp_header_1->dst_port & 0xff;
             hashed_obj[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
             hashed_obj[12u] = ipv4_header_1->next_proto_id;
-            uint32_t LoadBalancedFlow_hash__63 = LoadBalancedFlow_hash(hashed_obj);
-            uint32_t chosen_backend__64 = 0u;
-            int32_t prefered_backend_found__64 = cht_find_preferred_available_backend(LoadBalancedFlow_hash__63, vector_4, dchain_1, 97u, 32u, &chosen_backend__64);
+            uint32_t LoadBalancedFlow_hash__155 = LoadBalancedFlow_hash(hashed_obj);
+            uint32_t chosen_backend__156 = 0u;
+            int32_t prefered_backend_found__156 = cht_find_preferred_available_backend(LoadBalancedFlow_hash__155, vector_4, dchain_1, 97u, 32u, &chosen_backend__156);
 
-            // 291
-            if (0u == prefered_backend_found__64) {
+            // 272
+            if (0u == prefered_backend_found__156) {
               // dropping
               return device;
             }
 
-            // 292
-            // 293
-            // 294
-            // 295
+            // 273
+            // 274
             else {
-              uint32_t new_index__75;
-              int out_of_space__75 = !dchain_allocate_new_index(dchain, &new_index__75, now);
+              uint32_t new_index__167;
+              int out_of_space__167 = !dchain_allocate_new_index(dchain, &new_index__167, now);
+              uint8_t* vector_value_out_2 = 0u;
+              vector_borrow(vector, new_index__167, (void**)(&vector_value_out_2));
+              vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
+              vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
+              vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
+              vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
+              vector_value_out_2[4u] = ipv4_header_1->dst_addr & 0xff;
+              vector_value_out_2[5u] = (ipv4_header_1->dst_addr >> 8) & 0xff;
+              vector_value_out_2[6u] = (ipv4_header_1->dst_addr >> 16) & 0xff;
+              vector_value_out_2[7u] = (ipv4_header_1->dst_addr >> 24) & 0xff;
+              vector_value_out_2[8u] = tcpudp_header_1->src_port & 0xff;
+              vector_value_out_2[9u] = (tcpudp_header_1->src_port >> 8) & 0xff;
+              vector_value_out_2[10u] = tcpudp_header_1->dst_port & 0xff;
+              vector_value_out_2[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
+              vector_value_out_2[12u] = ipv4_header_1->next_proto_id;
+              uint8_t* vector_value_out_3 = 0u;
+              vector_borrow(vector_1, new_index__167, (void**)(&vector_value_out_3));
+              vector_value_out_3[0u] = chosen_backend__156 & 0xff;
+              vector_value_out_3[1u] = (chosen_backend__156 >> 8) & 0xff;
+              vector_value_out_3[2u] = (chosen_backend__156 >> 16) & 0xff;
+              vector_value_out_3[3u] = (chosen_backend__156 >> 24) & 0xff;
+              vector_return(vector_1, new_index__167, vector_value_out_3);
+              map_put(map, vector_value_out_2, new_index__167);
+              vector_return(vector, new_index__167, vector_value_out_2);
+              uint8_t* vector_value_out_4 = 0u;
+              vector_borrow(vector_3, chosen_backend__156, (void**)(&vector_value_out_4));
+              vector_return(vector_3, chosen_backend__156, vector_value_out_4);
 
-              // 292
-              // 293
-              if (false == ((out_of_space__75) & (0u == number_of_freed_flows__45))) {
-                uint8_t* vector_value_out = 0u;
-                vector_borrow(vector, new_index__75, (void**)(&vector_value_out));
-                vector_value_out[0u] = ipv4_header_1->src_addr & 0xff;
-                vector_value_out[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
-                vector_value_out[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
-                vector_value_out[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
-                vector_value_out[4u] = ipv4_header_1->dst_addr & 0xff;
-                vector_value_out[5u] = (ipv4_header_1->dst_addr >> 8) & 0xff;
-                vector_value_out[6u] = (ipv4_header_1->dst_addr >> 16) & 0xff;
-                vector_value_out[7u] = (ipv4_header_1->dst_addr >> 24) & 0xff;
-                vector_value_out[8u] = tcpudp_header_1->src_port & 0xff;
-                vector_value_out[9u] = (tcpudp_header_1->src_port >> 8) & 0xff;
-                vector_value_out[10u] = tcpudp_header_1->dst_port & 0xff;
-                vector_value_out[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
-                vector_value_out[12u] = ipv4_header_1->next_proto_id;
-                uint8_t* vector_value_out_1 = 0u;
-                vector_borrow(vector_1, new_index__75, (void**)(&vector_value_out_1));
-                vector_value_out_1[0u] = chosen_backend__64 & 0xff;
-                vector_value_out_1[1u] = (chosen_backend__64 >> 8) & 0xff;
-                vector_value_out_1[2u] = (chosen_backend__64 >> 16) & 0xff;
-                vector_value_out_1[3u] = (chosen_backend__64 >> 24) & 0xff;
-                vector_return(vector_1, new_index__75, vector_value_out_1);
-                map_put(map, vector_value_out, new_index__75);
-                vector_return(vector, new_index__75, vector_value_out);
-                uint8_t* vector_value_out_2 = 0u;
-                vector_borrow(vector_3, chosen_backend__64, (void**)(&vector_value_out_2));
-                vector_return(vector_3, chosen_backend__64, vector_value_out_2);
-                int checksum__85 = rte_ipv4_udptcp_cksum(ipv4_header_1, tcpudp_header_1);
-                ipv4_header_1->hdr_checksum = checksum__85 & 0xffff;
-                ipv4_header_1->dst_addr = vector_value_out_2[8ul];
-                ether_header_1->d_addr.addr_bytes[0ul] = vector_value_out_2[2ul];
-                ether_header_1->d_addr.addr_bytes[1ul] = vector_value_out_2[3ul];
-                ether_header_1->d_addr.addr_bytes[2ul] = vector_value_out_2[4ul];
-                ether_header_1->d_addr.addr_bytes[3ul] = vector_value_out_2[5ul];
-                ether_header_1->d_addr.addr_bytes[4ul] = vector_value_out_2[6ul];
-                ether_header_1->d_addr.addr_bytes[5ul] = vector_value_out_2[7ul];
-                ether_header_1->s_addr.addr_bytes[0ul] = 171u;
-                ether_header_1->s_addr.addr_bytes[1ul] = 171u;
-                ether_header_1->s_addr.addr_bytes[2ul] = 171u;
-                ether_header_1->s_addr.addr_bytes[3ul] = 171u;
-                ether_header_1->s_addr.addr_bytes[4ul] = 171u;
-                ether_header_1->s_addr.addr_bytes[5ul] = 171u;
-
-                // 292
-                if (vector_value_out_2[0ul]) {
-                  return 1;
-                }
-
-                // 293
-                else {
-                  return 0;
-                } // !vector_value_out_2[0ul]
-
-              }
-
-              // 294
-              // 295
-              else {
-                uint8_t* vector_value_out = 0u;
-                vector_borrow(vector_3, chosen_backend__64, (void**)(&vector_value_out));
-                vector_return(vector_3, chosen_backend__64, vector_value_out);
-                int checksum__103 = rte_ipv4_udptcp_cksum(ipv4_header_1, tcpudp_header_1);
-                ipv4_header_1->hdr_checksum = checksum__103 & 0xffff;
-                ipv4_header_1->dst_addr = vector_value_out[8ul];
-                ether_header_1->d_addr.addr_bytes[0ul] = vector_value_out[2ul];
-                ether_header_1->d_addr.addr_bytes[1ul] = vector_value_out[3ul];
-                ether_header_1->d_addr.addr_bytes[2ul] = vector_value_out[4ul];
-                ether_header_1->d_addr.addr_bytes[3ul] = vector_value_out[5ul];
-                ether_header_1->d_addr.addr_bytes[4ul] = vector_value_out[6ul];
-                ether_header_1->d_addr.addr_bytes[5ul] = vector_value_out[7ul];
-                ether_header_1->s_addr.addr_bytes[0ul] = 171u;
-                ether_header_1->s_addr.addr_bytes[1ul] = 171u;
-                ether_header_1->s_addr.addr_bytes[2ul] = 171u;
-                ether_header_1->s_addr.addr_bytes[3ul] = 171u;
-                ether_header_1->s_addr.addr_bytes[4ul] = 171u;
-                ether_header_1->s_addr.addr_bytes[5ul] = 171u;
-
-                // 294
-                if (vector_value_out[0ul]) {
-                  return 1;
-                }
-
-                // 295
-                else {
-                  return 0;
-                } // !vector_value_out[0ul]
-
-              } // !(false == ((out_of_space__75) & (0u == number_of_freed_flows__45)))
-
-            } // !(0u == prefered_backend_found__64)
-
-          }
-
-          // 296
-          // 297
-          // 298
-          // 299
-          // 300
-          else {
-            uint8_t* vector_value_out = 0u;
-            vector_borrow(vector_1, map_value_out, (void**)(&vector_value_out));
-            vector_return(vector_1, map_value_out, vector_value_out);
-            int32_t dchain_is_index_allocated__121 = dchain_is_index_allocated(dchain_1, ((int*)(vector_value_out))[0u]);
-
-            // 296
-            // 297
-            if (dchain_is_index_allocated__121) {
-              dchain_rejuvenate_index(dchain, map_value_out, now);
-              uint8_t* vector_value_out_1 = 0u;
-              vector_borrow(vector_3, ((int*)(vector_value_out))[0], (void**)(&vector_value_out_1));
-              vector_return(vector_3, ((int*)(vector_value_out))[0], vector_value_out_1);
-              int checksum__127 = rte_ipv4_udptcp_cksum(ipv4_header_1, tcpudp_header_1);
-              ipv4_header_1->hdr_checksum = checksum__127 & 0xffff;
-              ipv4_header_1->dst_addr = vector_value_out_1[8ul];
-              ether_header_1->d_addr.addr_bytes[0ul] = vector_value_out_1[2ul];
-              ether_header_1->d_addr.addr_bytes[1ul] = vector_value_out_1[3ul];
-              ether_header_1->d_addr.addr_bytes[2ul] = vector_value_out_1[4ul];
-              ether_header_1->d_addr.addr_bytes[3ul] = vector_value_out_1[5ul];
-              ether_header_1->d_addr.addr_bytes[4ul] = vector_value_out_1[6ul];
-              ether_header_1->d_addr.addr_bytes[5ul] = vector_value_out_1[7ul];
-              ether_header_1->s_addr.addr_bytes[0ul] = 171u;
-              ether_header_1->s_addr.addr_bytes[1ul] = 171u;
-              ether_header_1->s_addr.addr_bytes[2ul] = 171u;
-              ether_header_1->s_addr.addr_bytes[3ul] = 171u;
-              ether_header_1->s_addr.addr_bytes[4ul] = 171u;
-              ether_header_1->s_addr.addr_bytes[5ul] = 171u;
-
-              // 296
-              if (vector_value_out_1[0ul]) {
-                return 1;
-              }
-
-              // 297
-              else {
-                return 0;
-              } // !vector_value_out_1[0ul]
-
-            }
-
-            // 298
-            // 299
-            // 300
-            else {
-              uint8_t* vector_value_out_1 = 0u;
-              vector_borrow(vector, map_value_out, (void**)(&vector_value_out_1));
-              uint8_t map_key_1[13];
-              map_key_1[0u] = ipv4_header_1->src_addr & 0xff;
-              map_key_1[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
-              map_key_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
-              map_key_1[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
-              map_key_1[4u] = ipv4_header_1->dst_addr & 0xff;
-              map_key_1[5u] = (ipv4_header_1->dst_addr >> 8) & 0xff;
-              map_key_1[6u] = (ipv4_header_1->dst_addr >> 16) & 0xff;
-              map_key_1[7u] = (ipv4_header_1->dst_addr >> 24) & 0xff;
-              map_key_1[8u] = tcpudp_header_1->src_port & 0xff;
-              map_key_1[9u] = (tcpudp_header_1->src_port >> 8) & 0xff;
-              map_key_1[10u] = tcpudp_header_1->dst_port & 0xff;
-              map_key_1[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
-              map_key_1[12u] = ipv4_header_1->next_proto_id;
-              uint8_t trash[13];
-              map_erase(map, &map_key_1, (void**)(&trash));
-              dchain_free_index(dchain, map_value_out);
-              vector_return(vector, map_value_out, vector_value_out_1);
-              uint8_t map_key_2[13];
-              map_key_2[0u] = ipv4_header_1->src_addr & 0xff;
-              map_key_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
-              map_key_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
-              map_key_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
-              map_key_2[4u] = ipv4_header_1->dst_addr & 0xff;
-              map_key_2[5u] = (ipv4_header_1->dst_addr >> 8) & 0xff;
-              map_key_2[6u] = (ipv4_header_1->dst_addr >> 16) & 0xff;
-              map_key_2[7u] = (ipv4_header_1->dst_addr >> 24) & 0xff;
-              map_key_2[8u] = tcpudp_header_1->src_port & 0xff;
-              map_key_2[9u] = (tcpudp_header_1->src_port >> 8) & 0xff;
-              map_key_2[10u] = tcpudp_header_1->dst_port & 0xff;
-              map_key_2[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
-              map_key_2[12u] = ipv4_header_1->next_proto_id;
-              int map_value_out_1;
-              int map_has_this_key__147 = map_get(map, map_key_2, &map_value_out_1);
-              uint8_t hashed_obj[13];
-              hashed_obj[0u] = ipv4_header_1->src_addr & 0xff;
-              hashed_obj[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
-              hashed_obj[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
-              hashed_obj[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
-              hashed_obj[4u] = ipv4_header_1->dst_addr & 0xff;
-              hashed_obj[5u] = (ipv4_header_1->dst_addr >> 8) & 0xff;
-              hashed_obj[6u] = (ipv4_header_1->dst_addr >> 16) & 0xff;
-              hashed_obj[7u] = (ipv4_header_1->dst_addr >> 24) & 0xff;
-              hashed_obj[8u] = tcpudp_header_1->src_port & 0xff;
-              hashed_obj[9u] = (tcpudp_header_1->src_port >> 8) & 0xff;
-              hashed_obj[10u] = tcpudp_header_1->dst_port & 0xff;
-              hashed_obj[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
-              hashed_obj[12u] = ipv4_header_1->next_proto_id;
-              uint32_t LoadBalancedFlow_hash__148 = LoadBalancedFlow_hash(hashed_obj);
-              uint32_t chosen_backend__149 = 0u;
-              int32_t prefered_backend_found__149 = cht_find_preferred_available_backend(LoadBalancedFlow_hash__148, vector_4, dchain_1, 97u, 32u, &chosen_backend__149);
-
-              // 298
-              if (0u == prefered_backend_found__149) {
+              // 273
+              if (vector_value_out_4[0ul]) {
                 // dropping
                 return device;
               }
 
-              // 299
-              // 300
+              // 274
               else {
-                uint32_t new_index__160;
-                int out_of_space__160 = !dchain_allocate_new_index(dchain, &new_index__160, now);
-                uint8_t* vector_value_out_2 = 0u;
-                vector_borrow(vector, new_index__160, (void**)(&vector_value_out_2));
-                vector_value_out_2[0u] = ipv4_header_1->src_addr & 0xff;
-                vector_value_out_2[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
-                vector_value_out_2[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
-                vector_value_out_2[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
-                vector_value_out_2[4u] = ipv4_header_1->dst_addr & 0xff;
-                vector_value_out_2[5u] = (ipv4_header_1->dst_addr >> 8) & 0xff;
-                vector_value_out_2[6u] = (ipv4_header_1->dst_addr >> 16) & 0xff;
-                vector_value_out_2[7u] = (ipv4_header_1->dst_addr >> 24) & 0xff;
-                vector_value_out_2[8u] = tcpudp_header_1->src_port & 0xff;
-                vector_value_out_2[9u] = (tcpudp_header_1->src_port >> 8) & 0xff;
-                vector_value_out_2[10u] = tcpudp_header_1->dst_port & 0xff;
-                vector_value_out_2[11u] = (tcpudp_header_1->dst_port >> 8) & 0xff;
-                vector_value_out_2[12u] = ipv4_header_1->next_proto_id;
-                uint8_t* vector_value_out_3 = 0u;
-                vector_borrow(vector_1, new_index__160, (void**)(&vector_value_out_3));
-                vector_value_out_3[0u] = chosen_backend__149 & 0xff;
-                vector_value_out_3[1u] = (chosen_backend__149 >> 8) & 0xff;
-                vector_value_out_3[2u] = (chosen_backend__149 >> 16) & 0xff;
-                vector_value_out_3[3u] = (chosen_backend__149 >> 24) & 0xff;
-                vector_return(vector_1, new_index__160, vector_value_out_3);
-                map_put(map, vector_value_out_2, new_index__160);
-                vector_return(vector, new_index__160, vector_value_out_2);
-                uint8_t* vector_value_out_4 = 0u;
-                vector_borrow(vector_3, chosen_backend__149, (void**)(&vector_value_out_4));
-                vector_return(vector_3, chosen_backend__149, vector_value_out_4);
-                int checksum__168 = rte_ipv4_udptcp_cksum(ipv4_header_1, tcpudp_header_1);
-                ipv4_header_1->hdr_checksum = checksum__168 & 0xffff;
+                int checksum__185 = rte_ipv4_udptcp_cksum(ipv4_header_1, tcpudp_header_1);
+                ipv4_header_1->hdr_checksum = checksum__185 & 0xffff;
                 ipv4_header_1->dst_addr = vector_value_out_4[8ul];
                 ether_header_1->d_addr.addr_bytes[0ul] = vector_value_out_4[2ul];
                 ether_header_1->d_addr.addr_bytes[1ul] = vector_value_out_4[3ul];
@@ -1873,94 +1864,20 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
                 ether_header_1->s_addr.addr_bytes[3ul] = 171u;
                 ether_header_1->s_addr.addr_bytes[4ul] = 171u;
                 ether_header_1->s_addr.addr_bytes[5ul] = 171u;
+                return 0;
+              } // !vector_value_out_4[0ul]
 
-                // 299
-                if (vector_value_out_4[0ul]) {
-                  return 1;
-                }
+            } // !(0u == prefered_backend_found__156)
 
-                // 300
-                else {
-                  return 0;
-                } // !vector_value_out_4[0ul]
+          } // !dchain_is_index_allocated__125
 
-              } // !(0u == prefered_backend_found__149)
-
-            } // !dchain_is_index_allocated__121
-
-          } // !(0u == map_has_this_key__60)
-
-        }
-
-        // 301
-        // 302
-        // 303
-        else {
-          uint8_t map_key[4];
-          map_key[0u] = ipv4_header_1->src_addr & 0xff;
-          map_key[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
-          map_key[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
-          map_key[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
-          int map_value_out;
-          int map_has_this_key__184 = map_get(map_1, map_key, &map_value_out);
-
-          // 301
-          // 302
-          if (0u == map_has_this_key__184) {
-            uint32_t new_index__187;
-            int out_of_space__187 = !dchain_allocate_new_index(dchain_1, &new_index__187, now);
-
-            // 301
-            if (false == ((out_of_space__187) & (0u == number_of_freed_flows__46))) {
-              uint8_t* vector_value_out = 0u;
-              vector_borrow(vector_3, new_index__187, (void**)(&vector_value_out));
-              vector_value_out[0u] = device & 0xff;
-              vector_value_out[1u] = (device >> 8) & 0xff;
-              vector_value_out[2u] = ether_header_1->s_addr.addr_bytes[0ul];
-              vector_value_out[3u] = ether_header_1->s_addr.addr_bytes[1ul];
-              vector_value_out[4u] = ether_header_1->s_addr.addr_bytes[2ul];
-              vector_value_out[5u] = ether_header_1->s_addr.addr_bytes[3ul];
-              vector_value_out[6u] = ether_header_1->s_addr.addr_bytes[4ul];
-              vector_value_out[7u] = ether_header_1->s_addr.addr_bytes[5ul];
-              vector_value_out[8u] = ipv4_header_1->src_addr & 0xff;
-              vector_value_out[9u] = (ipv4_header_1->src_addr >> 8) & 0xff;
-              vector_value_out[10u] = (ipv4_header_1->src_addr >> 16) & 0xff;
-              vector_value_out[11u] = (ipv4_header_1->src_addr >> 24) & 0xff;
-              vector_return(vector_3, new_index__187, vector_value_out);
-              uint8_t* vector_value_out_1 = 0u;
-              vector_borrow(vector_2, new_index__187, (void**)(&vector_value_out_1));
-              vector_value_out_1[0u] = ipv4_header_1->src_addr & 0xff;
-              vector_value_out_1[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
-              vector_value_out_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
-              vector_value_out_1[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
-              map_put(map_1, vector_value_out_1, new_index__187);
-              vector_return(vector_2, new_index__187, vector_value_out_1);
-              // dropping
-              return device;
-            }
-
-            // 302
-            else {
-              // dropping
-              return device;
-            } // !(false == ((out_of_space__187) & (0u == number_of_freed_flows__46)))
-
-          }
-
-          // 303
-          else {
-            dchain_rejuvenate_index(dchain_1, map_value_out, now);
-            // dropping
-            return device;
-          } // !(0u == map_has_this_key__184)
-
-        } // !(1u != device)
+        } // !(0u == map_has_this_key__58)
 
       }
 
-      // 304
-      // 305
-      // 306
+      // 275
+      // 276
+      // 277
       else {
         uint8_t map_key[4];
         map_key[0u] = ipv4_header_1->src_addr & 0xff;
@@ -1968,18 +1885,18 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
         map_key[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
         map_key[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
         int map_value_out;
-        int map_has_this_key__220 = map_get(map_1, map_key, &map_value_out);
+        int map_has_this_key__194 = map_get(map_1, map_key, &map_value_out);
 
-        // 304
-        // 305
-        if (0u == map_has_this_key__220) {
-          uint32_t new_index__223;
-          int out_of_space__223 = !dchain_allocate_new_index(dchain_1, &new_index__223, now);
+        // 275
+        // 276
+        if (0u == map_has_this_key__194) {
+          uint32_t new_index__197;
+          int out_of_space__197 = !dchain_allocate_new_index(dchain_1, &new_index__197, now);
 
-          // 304
-          if (false == ((out_of_space__223) & (0u == number_of_freed_flows__46))) {
+          // 275
+          if (false == ((out_of_space__197) & (0u == number_of_freed_flows__46))) {
             uint8_t* vector_value_out = 0u;
-            vector_borrow(vector_3, new_index__223, (void**)(&vector_value_out));
+            vector_borrow(vector_3, new_index__197, (void**)(&vector_value_out));
             vector_value_out[0u] = device & 0xff;
             vector_value_out[1u] = (device >> 8) & 0xff;
             vector_value_out[2u] = ether_header_1->s_addr.addr_bytes[0ul];
@@ -1992,39 +1909,39 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
             vector_value_out[9u] = (ipv4_header_1->src_addr >> 8) & 0xff;
             vector_value_out[10u] = (ipv4_header_1->src_addr >> 16) & 0xff;
             vector_value_out[11u] = (ipv4_header_1->src_addr >> 24) & 0xff;
-            vector_return(vector_3, new_index__223, vector_value_out);
+            vector_return(vector_3, new_index__197, vector_value_out);
             uint8_t* vector_value_out_1 = 0u;
-            vector_borrow(vector_2, new_index__223, (void**)(&vector_value_out_1));
+            vector_borrow(vector_2, new_index__197, (void**)(&vector_value_out_1));
             vector_value_out_1[0u] = ipv4_header_1->src_addr & 0xff;
             vector_value_out_1[1u] = (ipv4_header_1->src_addr >> 8) & 0xff;
             vector_value_out_1[2u] = (ipv4_header_1->src_addr >> 16) & 0xff;
             vector_value_out_1[3u] = (ipv4_header_1->src_addr >> 24) & 0xff;
-            map_put(map_1, vector_value_out_1, new_index__223);
-            vector_return(vector_2, new_index__223, vector_value_out_1);
+            map_put(map_1, vector_value_out_1, new_index__197);
+            vector_return(vector_2, new_index__197, vector_value_out_1);
             // dropping
             return device;
           }
 
-          // 305
+          // 276
           else {
             // dropping
             return device;
-          } // !(false == ((out_of_space__223) & (0u == number_of_freed_flows__46)))
+          } // !(false == ((out_of_space__197) & (0u == number_of_freed_flows__46)))
 
         }
 
-        // 306
+        // 277
         else {
           dchain_rejuvenate_index(dchain_1, map_value_out, now);
           // dropping
           return device;
-        } // !(0u == map_has_this_key__220)
+        } // !(0u == map_has_this_key__194)
 
       } // !(0u != device)
 
     }
 
-    // 307
+    // 278
     else {
       // dropping
       return device;
@@ -2032,7 +1949,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
   }
 
-  // 308
+  // 279
   else {
     // dropping
     return device;

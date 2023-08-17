@@ -1,5 +1,6 @@
-# Need 3 devices otherwise the concept of a load-balancer doesn't make sense
-NF_DEVICES := 3
+# Need 3 devices otherwise the concept of a load-balancer doesn't make sense.
+# However, we only have 2 port NICs, and the WAN port must be the last port...
+NF_DEVICES := 2
 
 NF_FILES := lb_main.c lb_balancer.c lb_config.c ip_addr.c lb_backend.c lb_flow.c loop.c state.c
 
@@ -11,7 +12,7 @@ NF_ARGS := --flow-expiration $(or $(EXPIRATION_TIME),100000000) \
            --backend-capacity 32 \
            --cht-height 97 \
            --backend-expiration 100000000 \
-           --wan $(or $(WAN_DEVICE), 2)
+           --wan $(or $(WAN_DEVICE), 1)
 
 NF_LAYER := 3
 
