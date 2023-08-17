@@ -202,8 +202,13 @@ def get_missing_function_defs(make_output):
 
 def get_missing_type_defs(make_output):
 	missing = []
+	
 	missing += list(set(re.findall("incomplete type `(.+)'", make_output)))
+	missing += list(set(re.findall("undefined type `(.+)'", make_output)))
+
+	missing += list(set(re.findall("incomplete type ‘(.+)’", make_output)))
 	missing += list(set(re.findall("undefined type ‘(.+)’", make_output)))
+	
 	return missing
 
 def compile(makefile):
