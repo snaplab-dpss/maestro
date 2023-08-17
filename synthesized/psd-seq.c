@@ -1240,12 +1240,17 @@ struct TouchedPort {
   uint32_t src;
   uint16_t port;
 };
-bool touched_port_eq(void* a, void* b) {
-  struct TouchedPort *tp1 = (struct TouchedPort *)a;
-  struct TouchedPort *tp2 = (struct TouchedPort *)b;
-  return tp1->src == tp2->src && tp1->port == tp2->port;
+void ip_addr_allocate(void* obj) { (uintptr_t) obj; }
+uint32_t touched_port_hash(void* obj) {
+  struct TouchedPort *tp = (struct TouchedPort *)obj;
+
+  unsigned hash = 0;
+  hash = __builtin_ia32_crc32si(hash, tp->src);
+  hash = __builtin_ia32_crc32si(hash, tp->port);
+  return hash;
 }
-void touched_port_allocate(void* obj) {
+void counter_allocate(void* obj) { (uintptr_t) obj; }
+bool ip_addr_eq(void* a, void* b) {
     return 
 
           ((void *)0)
@@ -1259,23 +1264,18 @@ uint32_t ip_addr_hash(void* obj) {
 
               ;
   }
-void ip_addr_allocate(void* obj) { (uintptr_t) obj; }
-uint32_t touched_port_hash(void* obj) {
-  struct TouchedPort *tp = (struct TouchedPort *)obj;
-
-  unsigned hash = 0;
-  hash = __builtin_ia32_crc32si(hash, tp->src);
-  hash = __builtin_ia32_crc32si(hash, tp->port);
-  return hash;
-}
-bool ip_addr_eq(void* a, void* b) {
+void touched_port_allocate(void* obj) {
     return 
 
           ((void *)0)
 
               ;
   }
-void counter_allocate(void* obj) { (uintptr_t) obj; }
+bool touched_port_eq(void* a, void* b) {
+  struct TouchedPort *tp1 = (struct TouchedPort *)a;
+  struct TouchedPort *tp2 = (struct TouchedPort *)b;
+  return tp1->src == tp2->src && tp1->port == tp2->port;
+}
 struct tcpudp_hdr {
   uint16_t src_port;
   uint16_t dst_port;
@@ -1541,5 +1541,4 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
   } // !((8u == ether_header_1->ether_type) & (20ul <= (4294967282u + packet_length)))
 
 }
-
 

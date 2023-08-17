@@ -1256,15 +1256,6 @@ uint32_t FlowId_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, id->protocol);
   return hash;
 }
-void FlowId_allocate(void* obj) {
-  struct FlowId* id = (struct FlowId*)obj;
-  id->src_port = 0;
-  id->dst_port = 0;
-  id->src_ip = 0;
-  id->dst_ip = 0;
-  id->internal_device = 0;
-  id->protocol = 0;
-}
 bool FlowId_eq(void* a, void* b) {
   struct FlowId* id1 = (struct FlowId*)a;
   struct FlowId* id2 = (struct FlowId*)b;
@@ -1273,6 +1264,15 @@ bool FlowId_eq(void* a, void* b) {
       &&(id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
           &&(id1->internal_device == id2->internal_device)
               &&(id1->protocol == id2->protocol);
+}
+void FlowId_allocate(void* obj) {
+  struct FlowId* id = (struct FlowId*)obj;
+  id->src_port = 0;
+  id->dst_port = 0;
+  id->src_ip = 0;
+  id->dst_ip = 0;
+  id->internal_device = 0;
+  id->protocol = 0;
 }
 struct tcpudp_hdr {
   uint16_t src_port;
@@ -1519,5 +1519,4 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
   } // !((8u == ether_header_1->ether_type) & (20ul <= (4294967282u + packet_length)))
 
 }
-
 

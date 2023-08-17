@@ -1236,21 +1236,16 @@ int main(int argc, char **argv) {
   return 0;
 }
 
+struct ip_addr {
+  uint32_t addr;
+};
 struct DynamicValue {
   uint64_t bucket_size;
   int64_t bucket_time;
 };
-struct ip_addr {
-  uint32_t addr;
-};
 void ip_addr_allocate(void* obj) {
   struct ip_addr* id = (struct ip_addr*)obj;
   id->addr = 0;
-}
-void DynamicValue_allocate(void* obj) {
-  struct DynamicValue* id = (struct DynamicValue*)obj;
-  id->bucket_size = 0;
-  id->bucket_time = 0;
 }
 uint32_t ip_addr_hash(void* obj) {
   struct ip_addr* id = (struct ip_addr*)obj;
@@ -1263,6 +1258,11 @@ bool ip_addr_eq(void* a, void* b) {
   struct ip_addr* id1 = (struct ip_addr*)a;
   struct ip_addr* id2 = (struct ip_addr*)b;
   return (id1->addr == id2->addr);
+}
+void DynamicValue_allocate(void* obj) {
+  struct DynamicValue* id = (struct DynamicValue*)obj;
+  id->bucket_size = 0;
+  id->bucket_time = 0;
 }
 
 
@@ -1486,5 +1486,4 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
   } // !((8u == ether_header_1->ether_type) & (20ul <= (4294967282u + packet_length)))
 
 }
-
 

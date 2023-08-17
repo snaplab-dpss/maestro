@@ -1256,6 +1256,17 @@ uint32_t StaticKey_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, id->device);
   return hash;
 }
+bool StaticKey_eq(void* a, void* b) {
+  struct StaticKey *id1 = (struct StaticKey *)a;
+  struct StaticKey *id2 = (struct StaticKey *)b;
+
+  
+
+ _Bool 
+
+      addr_eq = rte_ether_addr_eq(&id1->addr, &id2->addr);
+  return addr_eq &&(id1->device == id2->device);
+}
 void StaticKey_allocate(void* obj) {
   struct StaticKey *id = (struct StaticKey *)obj;
 
@@ -1267,17 +1278,6 @@ void StaticKey_allocate(void* obj) {
   id->addr.addr_bytes[5] = 0;
 
   id->device = 0;
-}
-bool StaticKey_eq(void* a, void* b) {
-  struct StaticKey *id1 = (struct StaticKey *)a;
-  struct StaticKey *id2 = (struct StaticKey *)b;
-
-  
-
- _Bool 
-
-      addr_eq = rte_ether_addr_eq(&id1->addr, &id2->addr);
-  return addr_eq &&(id1->device == id2->device);
 }
 
 
@@ -1454,5 +1454,4 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
   } // !(0u != device)
 
 }
-
 

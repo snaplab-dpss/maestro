@@ -1236,10 +1236,6 @@ int main(int argc, char **argv) {
   return 0;
 }
 
-struct client {
-  uint32_t src_ip;
-  uint32_t dst_ip;
-};
 struct flow {
   uint16_t src_port;
   uint16_t dst_port;
@@ -1247,6 +1243,18 @@ struct flow {
   uint32_t dst_ip;
   uint8_t protocol;
 };
+struct client {
+  uint32_t src_ip;
+  uint32_t dst_ip;
+};
+void flow_allocate(void* obj) {
+  struct flow *id = (struct flow *)obj;
+  id->src_port = 0;
+  id->dst_port = 0;
+  id->src_ip = 0;
+  id->dst_ip = 0;
+  id->protocol = 0;
+}
 uint32_t flow_hash(void* obj) {
   struct flow *id = (struct flow *)obj;
 
@@ -1272,14 +1280,6 @@ uint32_t client_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, id->src_ip);
   hash = __builtin_ia32_crc32si(hash, id->dst_ip);
   return hash;
-}
-void flow_allocate(void* obj) {
-  struct flow *id = (struct flow *)obj;
-  id->src_port = 0;
-  id->dst_port = 0;
-  id->src_ip = 0;
-  id->dst_ip = 0;
-  id->protocol = 0;
 }
 struct tcpudp_hdr {
   uint16_t src_port;
@@ -1486,5 +1486,4 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
   } // !((8u == ether_header_1->ether_type) & (20ul <= (4294967282u + packet_length)))
 
 }
-
 

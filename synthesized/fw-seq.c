@@ -1262,9 +1262,6 @@ uint32_t FlowId_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, id->protocol);
   return hash;
 }
-void null_init(void* obj) {
-  *(uint32_t *)obj = 0;
-}
 void FlowId_allocate(void* obj) {
   struct FlowId* id = (struct FlowId*)obj;
   id->src_port = 0;
@@ -1272,6 +1269,9 @@ void FlowId_allocate(void* obj) {
   id->src_ip = 0;
   id->dst_ip = 0;
   id->protocol = 0;
+}
+void null_init(void* obj) {
+  *(uint32_t *)obj = 0;
 }
 struct tcpudp_hdr {
   uint16_t src_port;
@@ -1537,5 +1537,4 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
   } // !((8u == ether_header_1->ether_type) & (20ul <= (4294967282u + packet_length)))
 
 }
-
 

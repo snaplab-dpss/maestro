@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include <linux/limits.h>
 #include <sys/types.h>
 
@@ -11,6 +13,11 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include <net/ethernet.h>
+#include <netinet/ip.h>
+#include <netinet/udp.h>
+#include <pcap.h>
+
 #include <rte_atomic.h>
 #include <rte_build_config.h>
 #include <rte_byteorder.h>
@@ -22,6 +29,7 @@
 #include <rte_malloc.h>
 #include <rte_mbuf.h>
 #include <rte_per_lcore.h>
+#include <rte_thash.h>
 
 /**********************************************
  *
@@ -1516,18 +1524,14 @@ struct rte_ether_hdr;
 #define RETA_CONF_SIZE (ETH_RSS_RETA_SIZE_512 / RTE_RETA_GROUP_SIZE)
 
 typedef struct {
-  uint16_t tables[RTE_MAX_LCORE][ETH_RSS_RETA_SIZE_512];
+  uint16_t lut[ETH_RSS_RETA_SIZE_512];
   bool set;
-} retas_t;
+} reta_t;
 
-retas_t retas_per_device[MAX_NUM_DEVICES];
-
-void init_retas();
+reta_t retas_per_device[MAX_NUM_DEVICES];
 
 void set_reta(uint16_t device) {
-  unsigned lcores = rte_lcore_count();
-
-  if (lcores <= 1 || !retas_per_device[device].set) {
+  if (!retas_per_device[device].set) {
     return;
   }
 
@@ -1546,12 +1550,13 @@ void set_reta(uint16_t device) {
   for (uint16_t bucket = 0; bucket < dev_info.reta_size; bucket++) {
     uint32_t reta_id = bucket / RTE_RETA_GROUP_SIZE;
     uint32_t reta_pos = bucket % RTE_RETA_GROUP_SIZE;
-    reta_conf[reta_id].reta[reta_pos] =
-        retas_per_device[device].tables[lcores - 2][bucket];
+    reta_conf[reta_id].reta[reta_pos] = retas_per_device[device].lut[bucket];
   }
 
   /* RETA update */
   rte_eth_dev_rss_reta_update(device, reta_conf, dev_info.reta_size);
+
+  printf("Set RETA for device %u\n", device);
 }
 
 /**********************************************
@@ -1665,11 +1670,8 @@ static void worker_main(void) {
   printf("Core %u forwarding packets.\n", rte_lcore_id());
 
   if (rte_eth_dev_count_avail() != 2) {
-    printf("We assume there will be exactly 2 devices for our simple batching "
-           "implementation.");
-    exit(1);
+    rte_exit(EXIT_FAILURE, "We assume there will be exactly 2 devices.");
   }
-  printf("Running with batches, this code is unverified!\n");
 
   while (1) {
     unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();
@@ -1725,6 +1727,402 @@ static void worker_main(void) {
   }
 }
 
+struct args_t {
+  char *pcap_fname;
+  bool valid_pcap;
+};
+
+struct args_t app_parse_args(int argc, char **argv) {
+  struct args_t args;
+
+  args.valid_pcap = false;
+
+  if (argc <= 1) {
+    return args;
+  }
+
+  args.pcap_fname = argv[1];
+  args.valid_pcap = true;
+  return args;
+}
+
+struct pcap_pkt_hdr_t {
+  struct ether_header eth_hdr;
+  struct iphdr ip_hdr;
+  struct udphdr udp_hdr;
+} __attribute__((packed));
+
+struct rss_bucket_t {
+  uint16_t id;
+  uint64_t counter;
+};
+
+struct rss_buckets_t {
+  uint16_t num_buckets;
+  struct rss_bucket_t buckets[ETH_RSS_RETA_SIZE_512];
+};
+
+struct rss_core_t {
+  uint16_t id;
+  uint64_t total_counter;
+  struct rss_buckets_t buckets;
+};
+
+struct rss_cores_t {
+  uint16_t num_cores;
+  struct rss_core_t cores[RTE_MAX_LCORE];
+};
+
+struct rss_cores_groups_t {
+  uint64_t counter_goal;
+
+  uint16_t num_underloaded;
+  uint16_t underloaded[RTE_MAX_LCORE];
+
+  uint16_t num_overloaded;
+  uint16_t overloaded[RTE_MAX_LCORE];
+};
+
+int cmp_cores_increasing(const void *a, const void *b, void *args) {
+  struct rss_cores_t *cores = (struct rss_cores_t *)args;
+
+  uint16_t *core1 = (uint16_t *)a;
+  uint16_t *core2 = (uint16_t *)b;
+
+  uint64_t counter1 = cores->cores[*core1].total_counter;
+  uint64_t counter2 = cores->cores[*core2].total_counter;
+
+  return counter1 - counter2;
+}
+
+int cmp_buckets_increasing(const void *a, const void *b) {
+  struct rss_bucket_t *bucket1 = (struct rss_bucket_t *)a;
+  struct rss_bucket_t *bucket2 = (struct rss_bucket_t *)b;
+
+  return bucket1->counter - bucket2->counter;
+}
+
+int cmp_buckets_decreasing(const void *a, const void *b) {
+  return -1 * cmp_buckets_increasing(a, b);
+}
+
+int cmp_cores_decreasing(const void *a, const void *b, void *args) {
+  return -1 * cmp_cores_increasing(a, b, args);
+}
+
+void rss_lut_balancer_init_buckets(struct rss_buckets_t *buckets) {
+  buckets->num_buckets = ETH_RSS_RETA_SIZE_512;
+  for (int b = 0; b < buckets->num_buckets; b++) {
+    buckets->buckets[b].id = b;
+    buckets->buckets[b].counter = 0;
+  }
+}
+
+void rss_lut_balancer_init_lut(unsigned device) {
+  int num_cores = rte_lcore_count();
+
+  // Set LUT default values.
+  retas_per_device[device].set = true;
+  for (int b = 0; b < ETH_RSS_RETA_SIZE_512; b++) {
+    retas_per_device[device].lut[b] = b % num_cores;
+  }
+}
+
+void rss_lut_balancer_init_cores(unsigned device, struct rss_buckets_t buckets,
+                                 struct rss_cores_t *cores) {
+  cores->num_cores = rte_lcore_count();
+  for (int c = 0; c < cores->num_cores; c++) {
+    cores->cores[c].id = c;
+    cores->cores[c].total_counter = 0;
+    cores->cores[c].buckets.num_buckets = 0;
+  }
+
+  // Group bucket counters by core.
+  for (int b = 0; b < buckets.num_buckets; b++) {
+    struct rss_bucket_t bucket = buckets.buckets[b];
+
+    uint16_t chosen_core = retas_per_device[device].lut[bucket.id];
+    uint16_t num_buckets = cores->cores[chosen_core].buckets.num_buckets;
+
+    cores->cores[chosen_core].buckets.buckets[num_buckets] = bucket;
+    cores->cores[chosen_core].buckets.num_buckets++;
+
+    cores->cores[chosen_core].total_counter += bucket.counter;
+  }
+}
+
+void rss_lut_balancer_get_core_groups(struct rss_cores_t cores,
+                                      struct rss_cores_groups_t *core_groups) {
+  uint64_t total_counter = 0;
+
+  for (int c = 0; c < cores.num_cores; c++) {
+    total_counter += cores.cores[c].total_counter;
+  }
+
+  core_groups->counter_goal =
+      (uint64_t)((double)total_counter / (double)cores.num_cores);
+  core_groups->num_overloaded = 0;
+  core_groups->num_underloaded = 0;
+
+  for (int c = 0; c < cores.num_cores; c++) {
+    if (cores.cores[c].total_counter > core_groups->counter_goal) {
+      core_groups->overloaded[core_groups->num_overloaded] = c;
+      core_groups->num_overloaded++;
+    } else {
+      core_groups->underloaded[core_groups->num_underloaded] = c;
+      core_groups->num_underloaded++;
+    }
+  }
+}
+
+void rss_lut_balancer_sort(struct rss_cores_t *cores,
+                           struct rss_cores_groups_t *core_groups) {
+  for (int c = 0; c < cores->num_cores; c++) {
+    qsort(cores->cores[c].buckets.buckets, cores->cores[c].buckets.num_buckets,
+          sizeof(struct rss_bucket_t), cmp_buckets_decreasing);
+  }
+
+  qsort_r(core_groups->underloaded, core_groups->num_underloaded,
+          sizeof(uint16_t), cmp_cores_increasing, cores);
+  qsort_r(core_groups->overloaded, core_groups->num_overloaded,
+          sizeof(uint16_t), cmp_cores_decreasing, cores);
+}
+
+void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
+                                     struct rss_cores_groups_t *core_groups,
+                                     uint16_t bucket_idx, uint16_t src_core,
+                                     uint16_t dst_core) {
+  struct rss_bucket_t *bucket =
+      &cores->cores[src_core].buckets.buckets[bucket_idx];
+
+  uint16_t src_num_buckets = cores->cores[src_core].buckets.num_buckets;
+  uint16_t dst_num_buckets = cores->cores[dst_core].buckets.num_buckets;
+
+  assert(src_num_buckets >= 2);
+  assert(dst_num_buckets >= 1);
+
+  assert(src_num_buckets <= ETH_RSS_RETA_SIZE_512);
+  assert(dst_num_buckets < ETH_RSS_RETA_SIZE_512);
+
+  // Update the total counters.
+  cores->cores[dst_core].total_counter += bucket->counter;
+  cores->cores[src_core].total_counter -= bucket->counter;
+
+  // Append to tail.
+  cores->cores[dst_core].buckets.buckets[dst_num_buckets] = *bucket;
+  cores->cores[dst_core].buckets.num_buckets++;
+
+  // Pull the tail bucket to fill the place of the leaving one.
+  *bucket = cores->cores[src_core].buckets.buckets[src_num_buckets - 1];
+  cores->cores[src_core].buckets.num_buckets--;
+}
+
+bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
+                                     struct rss_cores_groups_t *core_groups) {
+  bool changes = false;
+
+  for (int over_idx = 0; over_idx < core_groups->num_overloaded; over_idx++) {
+    uint16_t overloaded_core = core_groups->overloaded[over_idx];
+    int bucket_idx = 0;
+    int under_idx = 0;
+
+    // Keep going until the overload core becomes underloaded.
+    while (cores->cores[overloaded_core].total_counter >
+           core_groups->counter_goal) {
+      // No more buckets to move.
+      if (bucket_idx >= cores->cores[overloaded_core].buckets.num_buckets) {
+        break;
+      }
+
+      // No more underloaded available cores.
+      if (under_idx >= core_groups->num_underloaded) {
+        break;
+      }
+
+      uint16_t underloaded_core = core_groups->underloaded[under_idx];
+      uint64_t load =
+          cores->cores[overloaded_core].buckets.buckets[bucket_idx].counter;
+
+      // Underloaded core would become an overloaded core.
+      // Let's see if the next one is available to receive this load.
+      if (cores->cores[underloaded_core].total_counter + load >
+          core_groups->counter_goal) {
+        under_idx++;
+        continue;
+      }
+
+      rss_lut_balancer_migrate_bucket(cores, core_groups, bucket_idx,
+                                      overloaded_core, underloaded_core);
+      changes = true;
+
+      bucket_idx++;
+    }
+  }
+
+  return changes;
+}
+
+bool rss_lut_balancer_balance_elephants(struct rss_cores_t *cores) {
+  struct rss_cores_groups_t core_groups;
+  rss_lut_balancer_get_core_groups(*cores, &core_groups);
+
+  qsort_r(core_groups.underloaded, core_groups.num_underloaded,
+          sizeof(uint16_t), cmp_cores_increasing, cores);
+  qsort_r(core_groups.overloaded, core_groups.num_overloaded, sizeof(uint16_t),
+          cmp_cores_decreasing, cores);
+
+  for (int c = 0; c < cores->num_cores; c++) {
+    qsort(cores->cores[c].buckets.buckets, cores->cores[c].buckets.num_buckets,
+          sizeof(struct rss_bucket_t), cmp_buckets_decreasing);
+  }
+
+  return rss_lut_balancer_balance_groups(cores, &core_groups);
+}
+
+bool rss_lut_balancer_balance_mice(struct rss_cores_t *cores) {
+  struct rss_cores_groups_t core_groups;
+  rss_lut_balancer_get_core_groups(*cores, &core_groups);
+
+  qsort_r(core_groups.underloaded, core_groups.num_underloaded,
+          sizeof(uint16_t), cmp_cores_increasing, cores);
+  qsort_r(core_groups.overloaded, core_groups.num_overloaded, sizeof(uint16_t),
+          cmp_cores_decreasing, cores);
+
+  for (int c = 0; c < cores->num_cores; c++) {
+    qsort(cores->cores[c].buckets.buckets, cores->cores[c].buckets.num_buckets,
+          sizeof(struct rss_bucket_t), cmp_buckets_increasing);
+  }
+
+  return rss_lut_balancer_balance_groups(cores, &core_groups);
+}
+
+void rss_lut_balancer_print_cores(struct rss_cores_t cores) {
+  struct rss_cores_groups_t core_groups;
+  rss_lut_balancer_get_core_groups(cores, &core_groups);
+  rss_lut_balancer_sort(&cores, &core_groups);
+
+  const int NUM_BUCKETS_SHOWN = 3;
+
+  printf("======================= LUT BALANCING =======================\n");
+  printf("Goal: %lu\n", core_groups.counter_goal);
+
+  printf("Overloaded:\n");
+  for (int c = 0; c < core_groups.num_overloaded; c++) {
+    struct rss_core_t core = cores.cores[core_groups.overloaded[c]];
+    printf("  Core %2d: %9lu", core.id, core.total_counter);
+
+    printf(", #buckets: %3u", core.buckets.num_buckets);
+    printf(", buckets: [");
+    for (int i = 0; i < core.buckets.num_buckets; i++) {
+      if (i < NUM_BUCKETS_SHOWN) {
+        printf("{bucket:%3u, pkts:%8lu},", core.buckets.buckets[i].id,
+               core.buckets.buckets[i].counter);
+      } else {
+        printf("...");
+        break;
+      }
+    }
+    printf("]\n");
+  }
+
+  printf("Underloaded:\n");
+  for (int c = 0; c < core_groups.num_underloaded; c++) {
+    struct rss_core_t core = cores.cores[core_groups.underloaded[c]];
+    printf("  Core %2d: %9lu", core.id, core.total_counter);
+
+    printf(", #buckets: %3u", core.buckets.num_buckets);
+    printf(", buckets: [");
+    for (int i = 0; i < core.buckets.num_buckets; i++) {
+      if (i < NUM_BUCKETS_SHOWN) {
+        printf("{bucket:%3u, pkts:%8lu},", core.buckets.buckets[i].id,
+               core.buckets.buckets[i].counter);
+      } else {
+        printf("...");
+        break;
+      }
+    }
+    printf("]\n");
+  }
+  printf("================================================================\n");
+}
+
+struct rss_buckets_t rss_lut_buckets_from_pcap(unsigned device,
+                                               const char *pcap_fname) {
+  char errbuff[PCAP_ERRBUF_SIZE];
+  uint64_t pkt_counter = 0;
+
+  pcap_t *pcap = pcap_open_offline(pcap_fname, errbuff);
+
+  if (pcap == NULL) {
+    rte_exit(EXIT_FAILURE, "Error opening pcap: %s", errbuff);
+  }
+
+  struct pcap_pkthdr *header;
+  const u_char *data;
+
+  uint8_t key[RSS_HASH_KEY_LENGTH];
+  rte_convert_rss_key((uint32_t *)rss_conf[device].rss_key, (uint32_t *)key,
+                      rss_conf[device].rss_key_len);
+
+  struct rss_buckets_t buckets;
+  rss_lut_balancer_init_buckets(&buckets);
+
+  while (pcap_next_ex(pcap, &header, &data) >= 0) {
+    pkt_counter++;
+
+    const struct pcap_pkt_hdr_t *pkt = (const struct pcap_pkt_hdr_t *)data;
+
+    union rte_thash_tuple tuple;
+    tuple.v4.src_addr = rte_be_to_cpu_32(pkt->ip_hdr.saddr);
+    tuple.v4.dst_addr = rte_be_to_cpu_32(pkt->ip_hdr.daddr);
+    tuple.v4.sport = rte_be_to_cpu_16(pkt->udp_hdr.uh_sport);
+    tuple.v4.dport = rte_be_to_cpu_16(pkt->udp_hdr.uh_dport);
+
+    uint32_t hash =
+        rte_softrss_be((uint32_t *)&tuple, RTE_THASH_V4_L4_LEN, key);
+
+    // As per X710/e810
+    int chosen_bucket = hash & 0x1ff;
+    assert(chosen_bucket < ETH_RSS_RETA_SIZE_512);
+    assert(buckets.buckets[chosen_bucket].id == chosen_bucket);
+    buckets.buckets[chosen_bucket].counter++;
+  }
+
+  return buckets;
+}
+
+void rss_lut_balance(unsigned device, const char *pcap_fname) {
+  struct rss_buckets_t buckets = rss_lut_buckets_from_pcap(device, pcap_fname);
+
+  struct rss_cores_t cores;
+  rss_lut_balancer_init_cores(device, buckets, &cores);
+
+  printf("Before:\n");
+  rss_lut_balancer_print_cores(cores);
+
+  rss_lut_balancer_balance_elephants(&cores);
+  // rss_lut_balancer_print_cores(cores);
+
+  while (true) {
+    if (!rss_lut_balancer_balance_mice(&cores)) {
+      break;
+    }
+  }
+
+  printf("After:\n");
+  rss_lut_balancer_print_cores(cores);
+
+  // Finally, configure the LUTs
+  for (int c = 0; c < cores.num_cores; c++) {
+    struct rss_core_t core = cores.cores[c];
+
+    for (int b = 0; b < cores.cores[c].buckets.num_buckets; b++) {
+      struct rss_bucket_t bucket = core.buckets.buckets[b];
+      retas_per_device[device].lut[bucket.id] = core.id;
+    }
+  }
+}
+
 // Entry point
 int main(int argc, char **argv) {
   // Initialize the DPDK Environment Abstraction Layer (EAL)
@@ -1735,10 +2133,11 @@ int main(int argc, char **argv) {
   argc -= ret;
   argv += ret;
 
+  struct args_t args = app_parse_args(argc, argv);
+
   // Create a memory pool
   unsigned nb_devices = rte_eth_dev_count_avail();
 
-  init_retas();
   nf_util_init_locks();
 
   char MBUF_POOL_NAME[20];
@@ -1770,6 +2169,12 @@ int main(int argc, char **argv) {
 
   // Initialize all devices
   for (uint16_t device = 0; device < nb_devices; device++) {
+    rss_lut_balancer_init_lut(device);
+
+    if (args.valid_pcap) {
+      rss_lut_balance(device, args.pcap_fname);
+    }
+
     ret = nf_init_device(device, mbuf_pools);
     if (ret == 0) {
       printf("Initialized device %" PRIu16 ".\n", device);
@@ -1794,14 +2199,6 @@ struct FlowId {
   uint32_t dst_ip;
   uint8_t protocol;
 };
-bool FlowId_eq(void* a, void* b) {
-  struct FlowId* id1 = (struct FlowId*)a;
-  struct FlowId* id2 = (struct FlowId*)b;
-
-  return (id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
-      &&(id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
-          &&(id1->protocol == id2->protocol);
-}
 void FlowId_allocate(void* obj) {
   struct FlowId* id = (struct FlowId*)obj;
   id->src_port = 0;
@@ -1809,6 +2206,14 @@ void FlowId_allocate(void* obj) {
   id->src_ip = 0;
   id->dst_ip = 0;
   id->protocol = 0;
+}
+bool FlowId_eq(void* a, void* b) {
+  struct FlowId* id1 = (struct FlowId*)a;
+  struct FlowId* id2 = (struct FlowId*)b;
+
+  return (id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
+      &&(id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
+          &&(id1->protocol == id2->protocol);
 }
 void null_init(void* obj) {
   *(uint32_t *)obj = 0;
@@ -1826,22 +2231,22 @@ uint32_t FlowId_hash(void* obj) {
 }
 
 uint8_t hash_key_0[RSS_HASH_KEY_LENGTH] = {
-  0x73, 0xdf, 0xd7, 0xbd, 0x92, 0x9d, 0x22, 0xeb, 
-  0xb8, 0x16, 0x8e, 0xa4, 0x9c, 0xf, 0x40, 0x66, 
-  0x2e, 0x5e, 0xc0, 0xae, 0x39, 0xbf, 0x0, 0x40, 
-  0x87, 0x40, 0x8c, 0xd8, 0xc, 0x1f, 0xcd, 0x7f, 
-  0xfe, 0xa4, 0x3c, 0x91, 0x41, 0x5e, 0x7c, 0xfa, 
-  0x75, 0xb, 0x9e, 0x11, 0x1a, 0xde, 0x77, 0x49, 
-  0x3d, 0x38, 0xf7, 0x76
+  0x3f, 0x6f, 0x4b, 0x1, 0xed, 0xd0, 0x59, 0xcb, 
+  0xe5, 0xda, 0x2e, 0xe2, 0x19, 0x8, 0x91, 0x8b, 
+  0x19, 0x43, 0x35, 0x38, 0x52, 0xd4, 0xf4, 0xbd, 
+  0xd0, 0xdb, 0x2c, 0xb8, 0xf7, 0x56, 0xc2, 0x36, 
+  0xc5, 0xd, 0x37, 0xb2, 0xde, 0x91, 0x7d, 0xc3, 
+  0x6b, 0xab, 0xa6, 0x84, 0xb3, 0x37, 0xf, 0xcd, 
+  0x7b, 0x44, 0x5, 0xcd
 };
 uint8_t hash_key_1[RSS_HASH_KEY_LENGTH] = {
-  0x4, 0x35, 0x56, 0x1f, 0x7f, 0xa0, 0x86, 0xba, 
-  0xab, 0x70, 0xf3, 0xe0, 0xc4, 0x7, 0x26, 0x9b, 
-  0xc8, 0x75, 0x4c, 0x9, 0x15, 0xb6, 0xaf, 0x8e, 
-  0x4, 0xa6, 0x4c, 0x83, 0xd6, 0xc7, 0xb3, 0xda, 
-  0xfd, 0xa, 0xfa, 0x7c, 0xaa, 0x80, 0x36, 0x55, 
-  0xf0, 0x29, 0x36, 0xb4, 0x31, 0x5c, 0x4f, 0xf9, 
-  0xd1, 0x9c, 0x2, 0xe7
+  0xf7, 0xc5, 0x19, 0xb6, 0xbe, 0x9f, 0xd, 0xc3, 
+  0x21, 0x31, 0x11, 0xc7, 0x29, 0xf3, 0x6b, 0x1d, 
+  0x8e, 0x18, 0x73, 0x58, 0xc9, 0xea, 0x7f, 0xdb, 
+  0x22, 0x9b, 0x64, 0xfe, 0xd0, 0xf8, 0xd4, 0xc8, 
+  0xbe, 0xed, 0x7e, 0x7c, 0x8c, 0x8c, 0x40, 0xad, 
+  0xbd, 0x51, 0x74, 0xe6, 0x45, 0xe0, 0x4, 0xd3, 
+  0xf8, 0x77, 0x2b, 0xc1
 };
 
 struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {
@@ -2149,8 +2554,3 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
 
 }
 
-void init_retas() {
-  for (unsigned i = 0; i < MAX_NUM_DEVICES; i++) {
-    retas_per_device[i].set = false;
-  }
-}
