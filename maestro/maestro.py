@@ -76,14 +76,18 @@ def build_maestro(nf):
 def clean_maestro():
 	run([ "make", "clean" ], cwd=MAESTRO_DIR)
 
-def symbex(nf, rerun=False):
+def symbex(nf, rerun=False, vars={}):
 	call_paths_dir = f"{nf}/klee-last"
 	skipped = True
 
 	if not os.path.exists(call_paths_dir) or rerun:
 		log(nf, "Running symbolic execution")
 		run("rm -rf klee-*", shell=True, cwd=os.path.abspath(nf))
-		code = run([ "make", "symbex" ], cwd=os.path.abspath(nf))
+		
+		env = os.environ.copy()
+		env.update(vars)
+
+		code = run([ "make", "symbex" ], cwd=os.path.abspath(nf), env=env)
 		skipped = False
 		
 		if code != 0:
@@ -241,6 +245,20 @@ def setup(nf):
 	run([ "mkdir", "-p", BUILD_DIR ])
 	run([ "mkdir", "-p", BUILD_SYNTHESIZED_DIR ])
 
+def parse_symbex_vars(vars, rerun_symbex):
+	if len(vars) > 0 and not rerun_symbex:
+		print("Error: requesting symbex vars without running symbex. Run with --symbex.")
+		exit(1)
+
+	parsed = {}
+	for var in vars:
+		assert '=' in var and len(var.split('=')) == 2
+		k, v = var.split('=')
+		parsed[k] = v
+
+	
+	return parsed
+
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description='Parallelize a Vigor NF.')
 	
@@ -272,15 +290,25 @@ if __name__ == "__main__":
 		help='Output file',
 	)
 
+	parser.add_argument(
+		'--var',
+		action='append',
+		help='NF configuration variable for symbex (e.g., --var EXPIRATION_TIME=123).'
+			 'Requires --symbex flag to take effect.',
+		required=False
+	)
+
 	args = parser.parse_args()
 	args.nf = os.path.abspath(args.nf)
+
+	vars = parse_symbex_vars(args.var, args.symbex)
 
 	setup(args.nf)
 	build_maestro(args.nf)
 
 	t_start = perf_counter()
 
-	call_paths, skipped_symbex = symbex(args.nf, rerun=args.symbex)
+	call_paths, skipped_symbex = symbex(args.nf, rerun=args.symbex, vars=vars)
 	t_symbex = perf_counter()
 
 	if args.target != CHOICE_SEQUENTIAL:
