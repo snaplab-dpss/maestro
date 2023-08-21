@@ -246,6 +246,8 @@ def setup(nf):
 	run([ "mkdir", "-p", BUILD_SYNTHESIZED_DIR ])
 
 def parse_symbex_vars(vars, rerun_symbex):
+	vars = [] if vars == None else vars
+
 	if len(vars) > 0 and not rerun_symbex:
 		print("Error: requesting symbex vars without running symbex. Run with --symbex.")
 		exit(1)
@@ -256,7 +258,6 @@ def parse_symbex_vars(vars, rerun_symbex):
 		k, v = var.split('=')
 		parsed[k] = v
 
-	
 	return parsed
 
 if __name__ == "__main__":
