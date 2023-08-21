@@ -1918,7 +1918,8 @@ void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
 }
 
 bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
-                                     struct rss_cores_groups_t *core_groups) {
+                                     struct rss_cores_groups_t *core_groups,
+                                     bool allow_big_atom_migration) {
   bool changes = false;
 
   for (int over_idx = 0; over_idx < core_groups->num_overloaded; over_idx++) {
@@ -1943,10 +1944,26 @@ bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
       uint64_t load =
           cores->cores[overloaded_core].buckets.buckets[bucket_idx].counter;
 
+      // Is the load on this bucket alone bigger than the target?
+      bool is_big_atom = load > core_groups->counter_goal;
+
+      if (is_big_atom && allow_big_atom_migration) {
+        // This will overload, but we only overload one underloaded core at a
+        // time.
+        rss_lut_balancer_migrate_bucket(cores, core_groups, bucket_idx,
+                                        overloaded_core, underloaded_core);
+        under_idx++;
+        bucket_idx++;
+        changes = true;
+        continue;
+      }
+
       // Underloaded core would become an overloaded core.
       // Let's see if the next one is available to receive this load.
-      if (cores->cores[underloaded_core].total_counter + load >
-          core_groups->counter_goal) {
+      bool will_overload = cores->cores[underloaded_core].total_counter + load >
+                           core_groups->counter_goal;
+
+      if (will_overload) {
         under_idx++;
         continue;
       }
@@ -1955,14 +1972,16 @@ bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
                                       overloaded_core, underloaded_core);
       changes = true;
 
-      bucket_idx++;
+      if (will_overload) {
+        under_idx++;
+      }
     }
   }
 
   return changes;
 }
 
-bool rss_lut_balancer_balance_elephants(struct rss_cores_t *cores) {
+void rss_lut_balancer_balance_elephants(struct rss_cores_t *cores) {
   struct rss_cores_groups_t core_groups;
   rss_lut_balancer_get_core_groups(*cores, &core_groups);
 
@@ -1976,24 +1995,30 @@ bool rss_lut_balancer_balance_elephants(struct rss_cores_t *cores) {
           sizeof(struct rss_bucket_t), cmp_buckets_decreasing);
   }
 
-  return rss_lut_balancer_balance_groups(cores, &core_groups);
+  rss_lut_balancer_balance_groups(cores, &core_groups, true);
 }
 
-bool rss_lut_balancer_balance_mice(struct rss_cores_t *cores) {
+void rss_lut_balancer_balance_mice(struct rss_cores_t *cores) {
   struct rss_cores_groups_t core_groups;
-  rss_lut_balancer_get_core_groups(*cores, &core_groups);
 
-  qsort_r(core_groups.underloaded, core_groups.num_underloaded,
-          sizeof(uint16_t), cmp_cores_increasing, cores);
-  qsort_r(core_groups.overloaded, core_groups.num_overloaded, sizeof(uint16_t),
-          cmp_cores_decreasing, cores);
+  while (true) {
+    rss_lut_balancer_get_core_groups(*cores, &core_groups);
 
-  for (int c = 0; c < cores->num_cores; c++) {
-    qsort(cores->cores[c].buckets.buckets, cores->cores[c].buckets.num_buckets,
-          sizeof(struct rss_bucket_t), cmp_buckets_increasing);
+    qsort_r(core_groups.underloaded, core_groups.num_underloaded,
+            sizeof(uint16_t), cmp_cores_increasing, cores);
+    qsort_r(core_groups.overloaded, core_groups.num_overloaded,
+            sizeof(uint16_t), cmp_cores_decreasing, cores);
+
+    for (int c = 0; c < cores->num_cores; c++) {
+      qsort(cores->cores[c].buckets.buckets,
+            cores->cores[c].buckets.num_buckets, sizeof(struct rss_bucket_t),
+            cmp_buckets_increasing);
+    }
+
+    if (!rss_lut_balancer_balance_groups(cores, &core_groups, false)) {
+      break;
+    }
   }
-
-  return rss_lut_balancer_balance_groups(cores, &core_groups);
 }
 
 void rss_lut_balancer_print_cores(struct rss_cores_t cores) {
@@ -2101,13 +2126,10 @@ void rss_lut_balance(unsigned device, const char *pcap_fname) {
   rss_lut_balancer_print_cores(cores);
 
   rss_lut_balancer_balance_elephants(&cores);
-  // rss_lut_balancer_print_cores(cores);
+  rss_lut_balancer_balance_mice(&cores);
 
-  while (true) {
-    if (!rss_lut_balancer_balance_mice(&cores)) {
-      break;
-    }
-  }
+  rss_lut_balancer_balance_elephants(&cores);
+  rss_lut_balancer_balance_mice(&cores);
 
   printf("After:\n");
   rss_lut_balancer_print_cores(cores);
