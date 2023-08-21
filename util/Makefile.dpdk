@@ -24,9 +24,7 @@ CFLAGS += -mrtm
 # GCC optimizes a checksum check in rte_ip.h into a CMOV, which is a very poor choice
 # that causes 99th percentile latency to go through the roof;
 # force it to not do that with no-if-conversion
-ifeq ($(CC),gcc)
 CFLAGS += -fno-if-conversion -fno-if-conversion2
-endif
 
 .PHONY: $(APP)
 
