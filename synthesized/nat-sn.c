@@ -294,14 +294,15 @@ unsigned map_size(struct Map *map) { return map->size; }
 
 #define DCHAIN_RESERVED (2)
 
-typedef struct dchain_tm_cell {
+struct dchain_cell {
   int prev;
   int next;
-} __attribute__((aligned(64))) dchain_tm_cell_t;
+};
 
-typedef struct {
-  vigor_time_t timestamp;
-} __attribute__((aligned(64))) vigor_time_alligned_t;
+struct DoubleChain {
+  struct dchain_cell *cells;
+  vigor_time_t *timestamps;
+};
 
 enum DCHAIN_ENUM {
   ALLOC_LIST_HEAD = 0,
@@ -309,122 +310,38 @@ enum DCHAIN_ENUM {
   INDEX_SHIFT = DCHAIN_RESERVED
 };
 
-void dchain_tm_impl_activity_init(dchain_tm_cell_t *cells, int size) {
-  dchain_tm_cell_t *al_head = cells + ALLOC_LIST_HEAD;
-  al_head->prev = ALLOC_LIST_HEAD;
-  al_head->next = ALLOC_LIST_HEAD;
-  int i = INDEX_SHIFT;
-
-  while (i < (size + INDEX_SHIFT)) {
-    dchain_tm_cell_t *current = cells + i;
-    current->next = FREE_LIST_HEAD;
-    current->prev = current->next;
-    ++i;
-  }
-}
-
-int dchain_tm_impl_activate_index(dchain_tm_cell_t *cells, int index) {
-  int lifted = index + INDEX_SHIFT;
-
-  dchain_tm_cell_t *liftedp = cells + lifted;
-  int lifted_next = liftedp->next;
-  int lifted_prev = liftedp->prev;
-
-  // The index is already active.
-  if (lifted_next != FREE_LIST_HEAD) {
-    // There is only one element allocated - no point in changing anything
-    if (lifted_next == ALLOC_LIST_HEAD) {
-      return 0;
-    }
-
-    // Unlink it from the middle of the "alloc" chain.
-    dchain_tm_cell_t *lifted_prevp = cells + lifted_prev;
-    lifted_prevp->next = lifted_next;
-
-    dchain_tm_cell_t *lifted_nextp = cells + lifted_next;
-    lifted_nextp->prev = lifted_prev;
-
-    dchain_tm_cell_t *al_head = cells + ALLOC_LIST_HEAD;
-    int al_head_prev = al_head->prev;
-  }
-
-  dchain_tm_cell_t *al_head = cells + ALLOC_LIST_HEAD;
-  int al_head_prev = al_head->prev;
-
-  // Link it at the very end - right before the special link.
-  liftedp->next = ALLOC_LIST_HEAD;
-  liftedp->prev = al_head_prev;
-
-  dchain_tm_cell_t *al_head_prevp = cells + al_head_prev;
-  al_head_prevp->next = lifted;
-
-  al_head->prev = lifted;
-
-  return 1;
-}
-
-int dchain_tm_impl_deactivate_index(dchain_tm_cell_t *cells, int index) {
-  int freed = index + INDEX_SHIFT;
-
-  dchain_tm_cell_t *freedp = cells + freed;
-  int freed_prev = freedp->prev;
-  int freed_next = freedp->next;
-
-  // The index is already free.
-  if (freed_next == FREE_LIST_HEAD) {
-    return 0;
-  }
-
-  dchain_tm_cell_t *freed_prevp = cells + freed_prev;
-  freed_prevp->next = freed_next;
-
-  dchain_tm_cell_t *freed_nextp = cells + freed_next;
-  freed_nextp->prev = freed_prev;
-
-  freedp->next = FREE_LIST_HEAD;
-  freedp->prev = freedp->next;
-
-  return 1;
-}
-
-int dchain_tm_impl_is_index_active(dchain_tm_cell_t *cells, int index) {
-  dchain_tm_cell_t *cell = cells + index + INDEX_SHIFT;
-  return cell->next != FREE_LIST_HEAD;
-}
-
-void dchain_tm_impl_init(dchain_tm_cell_t *cells, int size) {
-  dchain_tm_cell_t *al_head = cells + ALLOC_LIST_HEAD;
+void dchain_impl_init(struct dchain_cell *cells, int size) {
+  struct dchain_cell *al_head = cells + ALLOC_LIST_HEAD;
   al_head->prev = 0;
   al_head->next = 0;
   int i = INDEX_SHIFT;
 
-  dchain_tm_cell_t *fl_head = cells + FREE_LIST_HEAD;
+  struct dchain_cell *fl_head = cells + FREE_LIST_HEAD;
   fl_head->next = i;
   fl_head->prev = fl_head->next;
 
   while (i < (size + INDEX_SHIFT - 1)) {
-
-    dchain_tm_cell_t *current = cells + i;
+    struct dchain_cell *current = cells + i;
     current->next = i + 1;
     current->prev = current->next;
 
     ++i;
   }
 
-  dchain_tm_cell_t *last = cells + i;
+  struct dchain_cell *last = cells + i;
   last->next = FREE_LIST_HEAD;
   last->prev = last->next;
 }
 
-int dchain_tm_impl_allocate_new_index(dchain_tm_cell_t *cells, int *index) {
-  dchain_tm_cell_t *fl_head = cells + FREE_LIST_HEAD;
-  dchain_tm_cell_t *al_head = cells + ALLOC_LIST_HEAD;
+int dchain_impl_allocate_new_index(struct dchain_cell *cells, int *index) {
+  struct dchain_cell *fl_head = cells + FREE_LIST_HEAD;
+  struct dchain_cell *al_head = cells + ALLOC_LIST_HEAD;
   int allocated = fl_head->next;
   if (allocated == FREE_LIST_HEAD) {
     return 0;
   }
 
-  dchain_tm_cell_t *allocp = cells + allocated;
+  struct dchain_cell *allocp = cells + allocated;
   // Extract the link from the "empty" chain.
   fl_head->next = allocp->next;
   fl_head->prev = fl_head->next;
@@ -433,18 +350,19 @@ int dchain_tm_impl_allocate_new_index(dchain_tm_cell_t *cells, int *index) {
   allocp->next = ALLOC_LIST_HEAD;
   allocp->prev = al_head->prev;
 
-  dchain_tm_cell_t *alloc_head_prevp = cells + al_head->prev;
+  struct dchain_cell *alloc_head_prevp = cells + al_head->prev;
   alloc_head_prevp->next = allocated;
   al_head->prev = allocated;
 
   *index = allocated - INDEX_SHIFT;
+
   return 1;
 }
 
-int dchain_tm_impl_free_index(dchain_tm_cell_t *cells, int index) {
+int dchain_impl_free_index(struct dchain_cell *cells, int index) {
   int freed = index + INDEX_SHIFT;
 
-  dchain_tm_cell_t *freedp = cells + freed;
+  struct dchain_cell *freedp = cells + freed;
   int freed_prev = freedp->prev;
   int freed_next = freedp->next;
 
@@ -455,90 +373,42 @@ int dchain_tm_impl_free_index(dchain_tm_cell_t *cells, int index) {
     }
   }
 
-  dchain_tm_cell_t *fr_head = cells + FREE_LIST_HEAD;
-
-  dchain_tm_cell_t *freed_prevp = cells + freed_prev;
+  struct dchain_cell *fr_head = cells + FREE_LIST_HEAD;
+  struct dchain_cell *freed_prevp = cells + freed_prev;
   freed_prevp->next = freed_next;
 
-  dchain_tm_cell_t *freed_nextp = cells + freed_next;
+  struct dchain_cell *freed_nextp = cells + freed_next;
   freed_nextp->prev = freed_prev;
 
-  // Add the link to the "free" chain.
   freedp->next = fr_head->next;
   freedp->prev = freedp->next;
 
   fr_head->next = freed;
   fr_head->prev = fr_head->next;
+
   return 1;
 }
 
-int dchain_tm_impl_next(dchain_tm_cell_t *cells, int index, int *next) {
-  dchain_tm_cell_t *cell = cells + index + INDEX_SHIFT;
+int dchain_impl_get_oldest_index(struct dchain_cell *cells, int *index) {
+  struct dchain_cell *al_head = cells + ALLOC_LIST_HEAD;
 
-  if (cell->next == ALLOC_LIST_HEAD) {
-    return 0;
-  }
-
-  *next = cell->next - INDEX_SHIFT;
-  return 1;
-}
-
-int dchain_tm_impl_get_oldest_index(dchain_tm_cell_t *cells, int *index) {
-  dchain_tm_cell_t *al_head = cells + ALLOC_LIST_HEAD;
   // No allocated indexes.
-  if (al_head->next == al_head->prev) {
-    if (al_head->next == ALLOC_LIST_HEAD) {
-      return 0;
-    }
-  }
-  *index = al_head->next - INDEX_SHIFT;
-  return 1;
-}
-
-int dchain_tm_impl_reposition_index(dchain_tm_cell_t *cells, int index,
-                                    int new_prev_index) {
-  assert(new_prev_index >= 0);
-  int lifted = index + INDEX_SHIFT;
-
-  dchain_tm_cell_t *liftedp = cells + lifted;
-
-  int lifted_next = liftedp->next;
-  int lifted_prev = liftedp->prev;
-
-  // The index is not allocated.
-  if (lifted_next == lifted_prev && lifted_next != ALLOC_LIST_HEAD) {
+  if (al_head->next == ALLOC_LIST_HEAD) {
     return 0;
   }
 
-  dchain_tm_cell_t *lifted_prevp = cells + lifted_prev;
-  lifted_prevp->next = lifted_next;
-
-  dchain_tm_cell_t *lifted_nextp = cells + lifted_next;
-  lifted_nextp->prev = lifted_prev;
-
-  int new_prev = new_prev_index + INDEX_SHIFT;
-  dchain_tm_cell_t *new_prevp = cells + new_prev;
-  int new_prev_next = new_prevp->next;
-
-  liftedp->prev = new_prev;
-  liftedp->next = new_prev_next;
-
-  dchain_tm_cell_t *new_prev_nextp = cells + new_prev_next;
-
-  new_prev_nextp->prev = lifted;
-  new_prevp->next = lifted;
+  *index = al_head->next - INDEX_SHIFT;
 
   return 1;
 }
 
-int dchain_tm_impl_rejuvenate_index(dchain_tm_cell_t *cells, int index) {
+int dchain_impl_rejuvenate_index(struct dchain_cell *cells, int index) {
   int lifted = index + INDEX_SHIFT;
 
-  dchain_tm_cell_t *liftedp = cells + lifted;
+  struct dchain_cell *liftedp = cells + lifted;
   int lifted_next = liftedp->next;
   int lifted_prev = liftedp->prev;
 
-  // The index is not allocated.
   if (lifted_next == lifted_prev) {
     if (lifted_next != ALLOC_LIST_HEAD) {
       return 0;
@@ -547,29 +417,29 @@ int dchain_tm_impl_rejuvenate_index(dchain_tm_cell_t *cells, int index) {
     }
   }
 
-  dchain_tm_cell_t *lifted_prevp = cells + lifted_prev;
+  struct dchain_cell *lifted_prevp = cells + lifted_prev;
   lifted_prevp->next = lifted_next;
 
-  dchain_tm_cell_t *lifted_nextp = cells + lifted_next;
+  struct dchain_cell *lifted_nextp = cells + lifted_next;
   lifted_nextp->prev = lifted_prev;
 
-  dchain_tm_cell_t *al_head = cells + ALLOC_LIST_HEAD;
+  struct dchain_cell *al_head = cells + ALLOC_LIST_HEAD;
   int al_head_prev = al_head->prev;
 
-  // Link it at the very end - right before the special link.
   liftedp->next = ALLOC_LIST_HEAD;
   liftedp->prev = al_head_prev;
 
-  dchain_tm_cell_t *al_head_prevp = cells + al_head_prev;
+  struct dchain_cell *al_head_prevp = cells + al_head_prev;
   al_head_prevp->next = lifted;
+
   al_head->prev = lifted;
   return 1;
 }
 
-int dchain_tm_impl_is_index_allocated(dchain_tm_cell_t *cells, int index) {
+int dchain_impl_is_index_allocated(struct dchain_cell *cells, int index) {
   int lifted = index + INDEX_SHIFT;
 
-  dchain_tm_cell_t *liftedp = cells + lifted;
+  struct dchain_cell *liftedp = cells + lifted;
   int lifted_next = liftedp->next;
   int lifted_prev = liftedp->prev;
 
@@ -585,180 +455,81 @@ int dchain_tm_impl_is_index_allocated(dchain_tm_cell_t *cells, int index) {
   }
 }
 
-struct DoubleChainTM {
-  dchain_tm_cell_t *cells[RTE_MAX_LCORE];
-  dchain_tm_cell_t *active_cells[RTE_MAX_LCORE];
-  vigor_time_alligned_t *timestamps[RTE_MAX_LCORE];
-  int range;
-};
+int dchain_allocate(int index_range, struct DoubleChain **chain_out) {
 
-typedef struct DoubleChainTM __attribute__((aligned(64))) DoubleChainTM;
-
-int dchain_tm_allocate(int index_range, DoubleChainTM **chain_out) {
-
-  DoubleChainTM *old_chain_out = *chain_out;
-  DoubleChainTM *chain_alloc =
-      (DoubleChainTM *)rte_malloc(NULL, sizeof(DoubleChainTM), 64);
+  struct DoubleChain *old_chain_out = *chain_out;
+  struct DoubleChain *chain_alloc =
+      (struct DoubleChain *)rte_malloc(NULL, sizeof(struct DoubleChain), 64);
   if (chain_alloc == NULL)
     return 0;
-  *chain_out = (DoubleChainTM *)chain_alloc;
+  *chain_out = (struct DoubleChain *)chain_alloc;
 
-  unsigned lcore_id;
-  RTE_LCORE_FOREACH(lcore_id) {
-    dchain_tm_cell_t *cells_alloc = (dchain_tm_cell_t *)rte_malloc(
-        NULL, sizeof(dchain_tm_cell_t) * (index_range + DCHAIN_RESERVED), 64);
-    if (cells_alloc == NULL) {
-      rte_free(chain_alloc);
-      *chain_out = old_chain_out;
-      return 0;
-    }
-    (*chain_out)->cells[lcore_id] = cells_alloc;
-
-    dchain_tm_cell_t *active_cells_alloc = (dchain_tm_cell_t *)rte_malloc(
-        NULL, sizeof(dchain_tm_cell_t) * (index_range + DCHAIN_RESERVED), 64);
-    if (active_cells_alloc == NULL) {
-      rte_free((void *)cells_alloc);
-      rte_free(chain_alloc);
-      *chain_out = old_chain_out;
-      return 0;
-    }
-    (*chain_out)->active_cells[lcore_id] = active_cells_alloc;
-    dchain_tm_impl_activity_init((*chain_out)->active_cells[lcore_id],
-                                 index_range);
-
-    vigor_time_alligned_t *timestamps_alloc =
-        (vigor_time_alligned_t *)rte_zmalloc(
-            NULL, sizeof(vigor_time_alligned_t) * (index_range), 64);
-    if (timestamps_alloc == NULL) {
-      rte_free((void *)cells_alloc);
-      rte_free((void *)active_cells_alloc);
-      rte_free(chain_alloc);
-      *chain_out = old_chain_out;
-      return 0;
-    }
-    for (int i = 0; i < index_range; i++) {
-      timestamps_alloc[i].timestamp = -1;
-    }
-    (*chain_out)->range = index_range;
-    (*chain_out)->timestamps[lcore_id] = timestamps_alloc;
-
-    dchain_tm_impl_init((*chain_out)->cells[lcore_id], index_range);
+  struct dchain_cell *cells_alloc = (struct dchain_cell *)rte_malloc(
+      NULL, sizeof(struct dchain_cell) * (index_range + DCHAIN_RESERVED), 64);
+  if (cells_alloc == NULL) {
+    rte_free(chain_alloc);
+    *chain_out = old_chain_out;
+    return 0;
   }
+  (*chain_out)->cells = cells_alloc;
+
+  vigor_time_t *timestamps_alloc = (vigor_time_t *)rte_malloc(
+      NULL, sizeof(vigor_time_t) * (index_range), 64);
+  if (timestamps_alloc == NULL) {
+    rte_free((void *)cells_alloc);
+    rte_free(chain_alloc);
+    *chain_out = old_chain_out;
+    return 0;
+  }
+  (*chain_out)->timestamps = timestamps_alloc;
+
+  dchain_impl_init((*chain_out)->cells, index_range);
 
   return 1;
 }
 
-int dchain_tm_allocate_new_index(DoubleChainTM *chain, int *index_out,
-                                 vigor_time_t time) {
-  int ret = -1;
-  unsigned lcore_id;
-  RTE_LCORE_FOREACH(lcore_id) {
-    int new_ret =
-        dchain_tm_impl_allocate_new_index(chain->cells[lcore_id], index_out);
-    ret = new_ret;
-    if (new_ret) {
-      chain->timestamps[lcore_id][*index_out].timestamp = time;
-    }
-  }
+int dchain_allocate_new_index(struct DoubleChain *chain, int *index_out,
+                              vigor_time_t time) {
+  int ret = dchain_impl_allocate_new_index(chain->cells, index_out);
 
   if (ret) {
-    lcore_id = rte_lcore_id();
-    dchain_tm_impl_activate_index(chain->active_cells[lcore_id], *index_out);
+    chain->timestamps[*index_out] = time;
   }
 
   return ret;
 }
 
-int dchain_tm_rejuvenate_index(DoubleChainTM *chain, int index,
-                               vigor_time_t time) {
-  unsigned int lcore_id = rte_lcore_id();
-  int ret = dchain_tm_impl_rejuvenate_index(chain->cells[lcore_id], index);
+int dchain_rejuvenate_index(struct DoubleChain *chain, int index,
+                            vigor_time_t time) {
+  int ret = dchain_impl_rejuvenate_index(chain->cells, index);
+
   if (ret) {
-    chain->timestamps[lcore_id][index].timestamp = time;
-    dchain_tm_impl_activate_index(chain->active_cells[lcore_id], index);
+    chain->timestamps[index] = time;
   }
 
   return ret;
 }
 
-int dchain_tm_update_timestamp(DoubleChainTM *chain, int index,
-                               vigor_time_t time) {
-  unsigned int lcore_id = rte_lcore_id();
+int dchain_expire_one_index(struct DoubleChain *chain, int *index_out,
+                            vigor_time_t time) {
+  int has_ind = dchain_impl_get_oldest_index(chain->cells, index_out);
 
-  int new_prev = -1;
-  int prev = index;
-  int next;
-
-  vigor_time_t prev_time = chain->timestamps[lcore_id][prev].timestamp;
-  vigor_time_t next_time;
-
-  while (dchain_tm_impl_next(chain->cells[lcore_id], prev, &next)) {
-    next_time = chain->timestamps[lcore_id][next].timestamp;
-
-    if (prev_time <= time && time <= next_time && index != prev) {
-      new_prev = prev;
-      break;
+  if (has_ind) {
+    if (chain->timestamps[*index_out] < time) {
+      int rez = dchain_impl_free_index(chain->cells, *index_out);
+      return rez;
     }
-
-    prev = next;
-    prev_time = next_time;
-  }
-
-  int ret;
-
-  if (new_prev == -1) {
-    ret = dchain_tm_impl_rejuvenate_index(chain->cells[lcore_id], index);
-  } else {
-    ret = dchain_tm_impl_reposition_index(chain->cells[lcore_id], index,
-                                          new_prev);
-  }
-
-  return ret;
-}
-
-int dchain_tm_is_index_allocated(DoubleChainTM *chain, int index) {
-  return dchain_tm_impl_is_index_allocated(chain->cells[rte_lcore_id()], index);
-}
-
-int dchain_tm_free_index(DoubleChainTM *chain, int index) {
-  int rez = -1;
-  unsigned lcore_id;
-
-  RTE_LCORE_FOREACH(lcore_id) {
-    int new_rez = dchain_tm_impl_free_index(chain->cells[lcore_id], index);
-    dchain_tm_impl_deactivate_index(chain->active_cells[lcore_id], index);
-    rez = new_rez;
-    chain->timestamps[lcore_id][index].timestamp = -1;
-  }
-
-  return rez;
-}
-
-int dchain_tm_expire_one_index(DoubleChainTM *chain, int *index_out,
-                               vigor_time_t time) {
-  unsigned int this_lcore_id = rte_lcore_id();
-
-  int has_ind = dchain_tm_impl_get_oldest_index(
-      chain->active_cells[this_lcore_id], index_out);
-
-  if (has_ind && chain->timestamps[this_lcore_id][*index_out].timestamp > -1 &&
-      chain->timestamps[this_lcore_id][*index_out].timestamp < time) {
-    unsigned int lcore_id;
-    vigor_time_t most_recent = -1;
-    RTE_LCORE_FOREACH(lcore_id) {
-      if (chain->timestamps[lcore_id][*index_out].timestamp > most_recent) {
-        most_recent = chain->timestamps[lcore_id][*index_out].timestamp;
-      }
-    }
-
-    if (most_recent >= time) {
-      return dchain_tm_update_timestamp(chain, *index_out, most_recent);
-    }
-
-    return dchain_tm_free_index(chain, *index_out);
   }
 
   return 0;
+}
+
+int dchain_is_index_allocated(struct DoubleChain *chain, int index) {
+  return dchain_impl_is_index_allocated(chain->cells, index);
+}
+
+int dchain_free_index(struct DoubleChain *chain, int index) {
+  return dchain_impl_free_index(chain->cells, index);
 }
 
 #define VECTOR_CAPACITY_UPPER_LIMIT 140000
@@ -804,134 +575,17 @@ void vector_borrow(struct Vector *vector, int index, void **val_out) {
 
 void vector_return(struct Vector *vector, int index, void *value) {}
 
-#define MAX_CHT_HEIGHT 40000
-
-int cht_tm_fill_cht(struct Vector *cht, uint32_t cht_height,
-                    uint32_t backend_capacity);
-int cht_tm_find_preferred_available_backend(
-    uint64_t hash, struct Vector *cht, struct DoubleChainTM *active_backends,
-    uint32_t cht_height, uint32_t backend_capacity, int *chosen_backend);
-
-static uint64_t cht_loop(uint64_t k, uint64_t capacity) {
-  uint64_t g = k % capacity;
-  return g;
-}
-
-int cht_tm_fill_cht(struct Vector *cht, uint32_t cht_height,
-                    uint32_t backend_capacity) {
-  // Generate the permutations of 0..(cht_height - 1) for each backend
-  int *permutations =
-      (int *)malloc(sizeof(int) * (int)(cht_height * backend_capacity));
-  if (permutations == 0) {
-    return 0;
-  }
-
-  for (uint32_t i = 0; i < backend_capacity; ++i) {
-    uint32_t offset_absolut = i * 31;
-    uint64_t offset = cht_loop(offset_absolut, cht_height);
-    uint64_t base_shift = cht_loop(i, cht_height - 1);
-    uint64_t shift = base_shift + 1;
-
-    for (uint32_t j = 0; j < cht_height; ++j) {
-      uint64_t permut = cht_loop(offset + shift * j, cht_height);
-      permutations[i * cht_height + j] = (int)permut;
-    }
-  }
-
-  int *next = (int *)malloc(sizeof(int) * (int)(cht_height));
-  if (next == 0) {
-    free(permutations);
-    return 0;
-  }
-
-  for (uint32_t i = 0; i < cht_height; ++i) {
-    next[i] = 0;
-  }
-
-  // Fill the priority lists for each hash in [0, cht_height)
-  for (uint32_t i = 0; i < cht_height; ++i) {
-    for (uint32_t j = 0; j < backend_capacity; ++j) {
-      uint32_t *value;
-
-      uint32_t index = j * cht_height + i;
-      int bucket_id = permutations[index];
-
-      int priority = next[bucket_id];
-      next[bucket_id] += 1;
-
-      // Update the CHT
-      vector_borrow(cht,
-                    (int)(backend_capacity * ((uint32_t)bucket_id) +
-                          ((uint32_t)priority)),
-                    (void **)&value);
-      *value = j;
-      vector_return(cht,
-                    (int)(backend_capacity * ((uint32_t)bucket_id) +
-                          ((uint32_t)priority)),
-                    (void *)value);
-    }
-  }
-
-  // Free memory
-  free(next);
-  free(permutations);
-  return 1;
-}
-
-int cht_tm_find_preferred_available_backend(
-    uint64_t hash, struct Vector *cht, struct DoubleChainTM *active_backends,
-    uint32_t cht_height, uint32_t backend_capacity, int *chosen_backend) {
-  uint64_t start = cht_loop(hash, cht_height);
-  for (uint32_t i = 0; i < backend_capacity; ++i) {
-    uint64_t candidate_idx =
-        start * backend_capacity +
-        i; // There was a bug, right here, untill I tried to prove this.
-
-    uint32_t *candidate;
-    vector_borrow(cht, (int)candidate_idx, (void **)&candidate);
-
-    if (dchain_tm_is_index_allocated(active_backends, (int)*candidate)) {
-      *chosen_backend = (int)*candidate;
-      vector_return(cht, (int)candidate_idx, candidate);
-      return 1;
-    }
-
-    vector_return(cht, (int)candidate_idx, candidate);
-  }
-
-  return 0;
-}
-
-int expire_items_single_map_tm(struct DoubleChainTM *chain,
-                               struct Vector *vector, struct Map *map,
-                               vigor_time_t time) {
+int expire_items_single_map(struct DoubleChain *chain, struct Vector *vector,
+                            struct Map *map, vigor_time_t time) {
   int count = 0;
   int index = -1;
 
-  while (dchain_tm_expire_one_index(chain, &index, time)) {
+  while (dchain_expire_one_index(chain, &index, time)) {
     void *key;
     vector_borrow(vector, index, &key);
     map_erase(map, key, &key);
     vector_return(vector, index, key);
-    ++count;
-  }
 
-  return count;
-}
-
-int expire_items_single_map_offseted_tm(struct DoubleChainTM *chain,
-                                        struct Vector *vector, struct Map *map,
-                                        vigor_time_t time, int offset) {
-  assert(offset >= 0);
-
-  int count = 0;
-  int index = -1;
-
-  while (dchain_tm_expire_one_index(chain, &index, time)) {
-    void *key;
-    vector_borrow(vector, index + offset, &key);
-    map_erase(map, key, &key);
-    vector_return(vector, index + offset, key);
     ++count;
   }
 
@@ -950,14 +604,17 @@ int expire_items_single_map_iteratively(struct Vector *vector, struct Map *map,
   }
 }
 
-#define expire_items_single_map_iteratively_tm                                 \
-  expire_items_single_map_iteratively
-
 // Careful: SKETCH_HASHES needs to be <= SKETCH_SALTS_BANK_SIZE
 #define SKETCH_HASHES 4
 #define SKETCH_SALTS_BANK_SIZE 64
 
-const uint32_t SKETCH_SALTS[SKETCH_SALTS_BANK_SIZE] = {
+struct internal_data {
+  unsigned hashes[SKETCH_HASHES];
+  int present[SKETCH_HASHES];
+  int buckets_indexes[SKETCH_HASHES];
+};
+
+static const uint32_t SKETCH_SALTS[SKETCH_SALTS_BANK_SIZE] = {
   0x9b78350f, 0x9bcf144c, 0x8ab29a3e, 0x34d48bf5, 0x78e47449, 0xd6e4af1d,
   0x32ed75e2, 0xb1eb5a08, 0x9cc7fbdf, 0x65b811ea, 0x41fd5ed9, 0x2e6a6782,
   0x3549661d, 0xbb211240, 0x78daa2ae, 0x8ce2d11f, 0x52911493, 0xc2497bd5,
@@ -971,23 +628,17 @@ const uint32_t SKETCH_SALTS[SKETCH_SALTS_BANK_SIZE] = {
   0xceee91e5, 0x1d4c6b18, 0x2a80e6df, 0x396f4d23,
 };
 
-struct internal_data {
-  unsigned hashes[SKETCH_HASHES];
-  int present[SKETCH_HASHES];
-  int buckets_indexes[SKETCH_HASHES];
-} __attribute__((aligned(64)));
-
-struct SketchTM {
+struct Sketch {
   struct Map *clients;
   struct Vector *keys;
   struct Vector *buckets;
-  struct DoubleChainTM *allocators[SKETCH_HASHES];
+  struct DoubleChain *allocators[SKETCH_HASHES];
 
   uint32_t capacity;
   uint16_t threshold;
 
   map_key_hash *kh;
-  struct internal_data internal[RTE_MAX_LCORE];
+  struct internal_data internal;
 };
 
 struct hash {
@@ -996,6 +647,12 @@ struct hash {
 
 struct bucket {
   uint32_t value;
+};
+
+struct sketch_data {
+  unsigned hashes[SKETCH_HASHES];
+  int present[SKETCH_HASHES];
+  int buckets_indexes[SKETCH_HASHES];
 };
 
 unsigned find_next_power_of_2_bigger_than(uint32_t d) {
@@ -1031,12 +688,11 @@ unsigned hash_hash(void *obj) {
 
 void bucket_allocate(void *obj) { (uintptr_t) obj; }
 
-int sketch_tm_allocate(map_key_hash *kh, uint32_t capacity, uint16_t threshold,
-                       struct SketchTM **sketch_out) {
+int sketch_allocate(map_key_hash *kh, uint32_t capacity, uint16_t threshold,
+                    struct Sketch **sketch_out) {
   assert(SKETCH_HASHES <= SKETCH_SALTS_BANK_SIZE);
 
-  struct SketchTM *sketch_alloc =
-      (struct SketchTM *)rte_malloc(NULL, sizeof(struct SketchTM), 0);
+  struct Sketch *sketch_alloc = (struct Sketch *)malloc(sizeof(struct Sketch));
   if (sketch_alloc == NULL) {
     return 0;
   }
@@ -1070,7 +726,7 @@ int sketch_tm_allocate(map_key_hash *kh, uint32_t capacity, uint16_t threshold,
 
   for (int i = 0; i < SKETCH_HASHES; i++) {
     (*sketch_out)->allocators[i] = NULL;
-    if (dchain_tm_allocate(capacity, &((*sketch_out)->allocators[i])) == 0) {
+    if (dchain_allocate(capacity, &((*sketch_out)->allocators[i])) == 0) {
       return 0;
     }
   }
@@ -1078,52 +734,44 @@ int sketch_tm_allocate(map_key_hash *kh, uint32_t capacity, uint16_t threshold,
   return 1;
 }
 
-void sketch_tm_compute_hashes(struct SketchTM *sketch, void *key) {
-  unsigned int lcore_id = rte_lcore_id();
-
+void sketch_compute_hashes(struct Sketch *sketch, void *key) {
   for (int i = 0; i < SKETCH_HASHES; i++) {
-    sketch->internal[lcore_id].buckets_indexes[i] = -1;
-    sketch->internal[lcore_id].present[i] = 0;
-    sketch->internal[lcore_id].hashes[i] = 0;
+    sketch->internal.buckets_indexes[i] = -1;
+    sketch->internal.present[i] = 0;
+    sketch->internal.hashes[i] = 0;
 
-    sketch->internal[lcore_id].hashes[i] = __builtin_ia32_crc32si(
-        sketch->internal[lcore_id].hashes[i], SKETCH_SALTS[i]);
-    sketch->internal[lcore_id].hashes[i] = __builtin_ia32_crc32si(
-        sketch->internal[lcore_id].hashes[i], sketch->kh(key));
-    sketch->internal[lcore_id].hashes[i] %= sketch->capacity;
+    sketch->internal.hashes[i] =
+        __builtin_ia32_crc32si(sketch->internal.hashes[i], SKETCH_SALTS[i]);
+    sketch->internal.hashes[i] =
+        __builtin_ia32_crc32si(sketch->internal.hashes[i], sketch->kh(key));
+    sketch->internal.hashes[i] %= sketch->capacity;
   }
 }
 
-void sketch_tm_refresh(struct SketchTM *sketch, vigor_time_t now) {
-  unsigned int lcore_id = rte_lcore_id();
-
+void sketch_refresh(struct Sketch *sketch, vigor_time_t now) {
   for (int i = 0; i < SKETCH_HASHES; i++) {
-    map_get(sketch->clients, &sketch->internal[lcore_id].hashes[i],
-            &sketch->internal[lcore_id].buckets_indexes[i]);
-    dchain_tm_rejuvenate_index(sketch->allocators[i],
-                               sketch->internal[lcore_id].buckets_indexes[i],
-                               now);
+    map_get(sketch->clients, &sketch->internal.hashes[i],
+            &sketch->internal.buckets_indexes[i]);
+    dchain_rejuvenate_index(sketch->allocators[i],
+                            sketch->internal.buckets_indexes[i], now);
   }
 }
 
-int sketch_tm_fetch(struct SketchTM *sketch) {
-  unsigned int lcore_id = rte_lcore_id();
-
+int sketch_fetch(struct Sketch *sketch) {
   int bucket_min_set = false;
   uint32_t *buckets_values[SKETCH_HASHES];
   uint32_t bucket_min = 0;
 
   for (int i = 0; i < SKETCH_HASHES; i++) {
-    sketch->internal[lcore_id].present[i] =
-        map_get(sketch->clients, &sketch->internal[lcore_id].hashes[i],
-                &sketch->internal[lcore_id].buckets_indexes[i]);
+    sketch->internal.present[i] =
+        map_get(sketch->clients, &sketch->internal.hashes[i],
+                &sketch->internal.buckets_indexes[i]);
 
-    if (!sketch->internal[lcore_id].present[i]) {
+    if (!sketch->internal.present[i]) {
       continue;
     }
 
-    int offseted =
-        sketch->internal[lcore_id].buckets_indexes[i] + sketch->capacity * i;
+    int offseted = sketch->internal.buckets_indexes[i] + sketch->capacity * i;
     vector_borrow(sketch->buckets, offseted, (void **)&buckets_values[i]);
 
     if (!bucket_min_set || bucket_min > *buckets_values[i]) {
@@ -1137,17 +785,15 @@ int sketch_tm_fetch(struct SketchTM *sketch) {
   return bucket_min_set && bucket_min > sketch->threshold;
 }
 
-int sketch_tm_touch_buckets(struct SketchTM *sketch, vigor_time_t now) {
-  unsigned int lcore_id = rte_lcore_id();
-
+int sketch_touch_buckets(struct Sketch *sketch, vigor_time_t now) {
   for (int i = 0; i < SKETCH_HASHES; i++) {
     int bucket_index = -1;
-    int present = map_get(sketch->clients,
-                          &sketch->internal[lcore_id].hashes[i], &bucket_index);
+    int present =
+        map_get(sketch->clients, &sketch->internal.hashes[i], &bucket_index);
 
     if (!present) {
-      int allocated_client = dchain_tm_allocate_new_index(sketch->allocators[i],
-                                                          &bucket_index, now);
+      int allocated_client =
+          dchain_allocate_new_index(sketch->allocators[i], &bucket_index, now);
 
       if (!allocated_client) {
         // Sketch size limit reached.
@@ -1162,14 +808,14 @@ int sketch_tm_touch_buckets(struct SketchTM *sketch, vigor_time_t now) {
       vector_borrow(sketch->keys, offseted, (void **)&saved_hash);
       vector_borrow(sketch->buckets, offseted, (void **)&saved_bucket);
 
-      (*saved_hash) = sketch->internal[lcore_id].hashes[i];
+      (*saved_hash) = sketch->internal.hashes[i];
       (*saved_bucket) = 0;
       map_put(sketch->clients, saved_hash, bucket_index);
 
       vector_return(sketch->keys, offseted, saved_hash);
       vector_return(sketch->buckets, offseted, saved_bucket);
     } else {
-      dchain_tm_rejuvenate_index(sketch->allocators[i], bucket_index, now);
+      dchain_rejuvenate_index(sketch->allocators[i], bucket_index, now);
       uint32_t *bucket;
       int offseted = bucket_index + sketch->capacity * i;
       vector_borrow(sketch->buckets, offseted, (void **)&bucket);
@@ -1181,14 +827,14 @@ int sketch_tm_touch_buckets(struct SketchTM *sketch, vigor_time_t now) {
   return true;
 }
 
-void sketch_tm_expire(struct SketchTM *sketch, vigor_time_t time) {
+void sketch_expire(struct Sketch *sketch, vigor_time_t time) {
   int offset = 0;
   int index = -1;
 
   for (int i = 0; i < SKETCH_HASHES; i++) {
     offset = i * sketch->capacity;
 
-    while (dchain_tm_expire_one_index(sketch->allocators[i], &index, time)) {
+    while (dchain_expire_one_index(sketch->allocators[i], &index, time)) {
       void *key;
       vector_borrow(sketch->keys, index + offset, &key);
       map_erase(sketch->clients, key, &key);
@@ -1361,465 +1007,9 @@ struct rte_ether_hdr;
 #define IP_MIN_SIZE_WORDS 5
 #define WORD_SIZE 4
 
+// this is doing nothing here, just making compilation easier
 RTE_DEFINE_PER_LCORE(bool, write_attempt);
 RTE_DEFINE_PER_LCORE(bool, write_state);
-
-/**********************************************
- *
- *                  TM
- *
- **********************************************/
-
-// TODO: CACHE_LINE_SIZE can be get using:
-// > getconf LEVEL1_DCACHE_LINESIZE
-// Number of processors:
-// > getconf _NPROCESSORS_ONLN
-
-//#pragma message ( "USING_TSX" )
-
-#include <immintrin.h> // includes avx512 now
-#define _IMMINTRIN_H_INCLUDED
-#include <rtmintrin.h>
-#include <xtestintrin.h>
-#define CACHE_LINE_SIZE 64
-// TODO: use __sync_synchronize() instead
-#define MEMFENCE asm volatile("MFENCE" : : : "memory")
-#define PAUSE() _mm_pause()
-
-typedef enum {
-  HTM_SUCCESS = 0,
-  HTM_ABORT,
-  HTM_EXPLICIT,
-  HTM_RETRY,
-  HTM_CONFLICT,
-  HTM_CAPACITY,
-  HTM_DEBUG,
-  HTM_NESTED,
-  HTM_OTHER,
-  HTM_FALLBACK
-} HTM_errors_e;
-
-#define HTM_NB_ERRORS 10
-#define HTM_STATUS_TYPE register int
-#define HTM_CODE_SUCCESS _XBEGIN_STARTED
-
-#define HTM_begin(var) (var = _xbegin())
-#define HTM_abort() _xabort(0)
-#define HTM_named_abort(code) _xabort(code)
-#define HTM_test() _xtest()
-#define HTM_commit() _xend()
-#define HTM_get_named(status) (status >> 24)
-#define HTM_is_named(status) (status & 1)
-
-#define HTM_ERROR_INC(status, error_array)                                     \
-  ({                                                                           \
-    if (status == _XBEGIN_STARTED) {                                           \
-      error_array[HTM_SUCCESS] += 1;                                           \
-    } else {                                                                   \
-      error_array[HTM_ABORT] += 1;                                             \
-      int nb_errors = __builtin_popcount(status);                              \
-      int tsx_error = status & 0x1F; /* only catch known aborts */             \
-      do {                                                                     \
-        int idx = tsx_error & _XABORT_EXPLICIT   ? ({                          \
-            tsx_error = tsx_error & ~_XABORT_EXPLICIT;                         \
-            HTM_EXPLICIT;                                                      \
-        })                                                                   \
-                  : tsx_error & _XABORT_RETRY    ? ({                          \
-                         tsx_error = tsx_error & ~_XABORT_RETRY;               \
-                         HTM_RETRY;                                            \
-                    })                                                      \
-                  : tsx_error & _XABORT_CONFLICT ? ({                          \
-                      tsx_error = tsx_error & ~_XABORT_CONFLICT;               \
-                      HTM_CONFLICT;                                            \
-                    })                                                         \
-                  : tsx_error & _XABORT_CAPACITY ? ({                          \
-                      tsx_error = tsx_error & ~_XABORT_CAPACITY;               \
-                      HTM_CAPACITY;                                            \
-                    })                                                         \
-                  : tsx_error & _XABORT_DEBUG    ? ({                          \
-                         tsx_error = tsx_error & ~_XABORT_DEBUG;               \
-                         HTM_DEBUG;                                            \
-                    })                                                      \
-                                                 : HTM_OTHER;                     \
-        error_array[idx] += 1;                                                 \
-        nb_errors--;                                                           \
-      } while (nb_errors > 0);                                                 \
-    }                                                                          \
-  })
-
-#define CL_ALIGN __attribute__((aligned(CACHE_LINE_SIZE)))
-#define CL_DISTANCE(type) CACHE_LINE_SIZE / sizeof(type)
-
-#ifndef GRANULE_TYPE
-#define GRANULE_TYPE intptr_t
-#endif /* GRANULE_TYPE */
-
-#ifndef GRANULE_P_TYPE
-#define GRANULE_P_TYPE intptr_t *
-#endif /* GRANULE_P_TYPE */
-
-#ifndef GRANULE_D_TYPE
-#define GRANULE_D_TYPE double
-#endif /* GRANULE_D_TYPE */
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#ifndef HTM_SGL_INIT_BUDGET
-#define HTM_SGL_INIT_BUDGET 2
-#endif /* HTM_SGL_INIT_BUDGET */
-
-typedef struct HTM_SGL_local_vars_ {
-  int64_t budget;
-  int64_t tid;
-  int64_t status;
-  uint64_t padding[5];
-} __attribute__((packed)) HTM_SGL_local_vars_s;
-
-// there is some wasted space near the SGL that can be used as read-only storate
-extern void *HTM_read_only_storage1;
-extern int HTM_read_only_storage1_size;
-extern void *HTM_read_only_storage2;
-extern int HTM_read_only_storage2_size;
-
-extern __thread int64_t *volatile HTM_SGL_var_addr; // points to the prev
-extern __thread HTM_SGL_local_vars_s CL_ALIGN HTM_SGL_vars;
-extern __thread int64_t HTM_SGL_errors[HTM_NB_ERRORS];
-
-#define START_TRANSACTION(status) (HTM_begin(status) != HTM_CODE_SUCCESS)
-#define BEFORE_TRANSACTION(tid, budget) /* empty */
-#define AFTER_TRANSACTION(tid, budget)  /* empty */
-
-/* DEBUG VERSION
-#define UPDATE_BUDGET(tid, budget, status) \
-    HTM_inc_status_count(status); \
-    HTM_INC(status); \
-        budget = HTM_update_budget(budget, status)
-*/
-
-#define UPDATE_BUDGET(tid, budget, status)                                     \
-  budget = HTM_update_budget(budget, status)
-
-/* The HTM_SGL_update_budget also handle statistics */
-
-#define CHECK_SGL_NOTX()                                                       \
-  if (__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != -1) {             \
-    HTM_block();                                                               \
-  }
-#define CHECK_SGL_HTM()                                                        \
-  if (__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != -1) {             \
-    HTM_abort();                                                               \
-  }
-
-#define AFTER_BEGIN(tid, budget, status)   /* empty */
-#define BEFORE_COMMIT(tid, budget, status) /* empty */
-
-/* DEBUG VERSION
-#define COMMIT_TRANSACTION(tid, budget, status) \
-    HTM_commit(); \
-    HTM_inc_status_count(status); \
-    HTM_INC(status)
-*/
-
-#define COMMIT_TRANSACTION(tid, budget, status)                                \
-  HTM_commit(); /* Commits and updates some statistics after */
-
-#define ENTER_SGL(tid) HTM_enter_fallback()
-#define EXIT_SGL(tid) HTM_exit_fallback()
-#define AFTER_ABORT(tid, budget, status) /* empty */
-
-#define BEFORE_HTM_BEGIN(tid, budget) /* empty */
-#define AFTER_HTM_BEGIN(tid, budget)  /* empty */
-#define BEFORE_SGL_BEGIN(tid)         /* empty */
-#define AFTER_SGL_BEGIN(tid)          /* empty */
-
-#define BEFORE_HTM_COMMIT(tid, budget) /* empty */
-#define AFTER_HTM_COMMIT(tid, budget)  /* empty */
-#define BEFORE_SGL_COMMIT(tid)         /* empty */
-#define AFTER_SGL_COMMIT(tid)          /* empty */
-
-#define BEFORE_CHECK_BUDGET(budget) /* empty */
-// called within HTM_update_budget
-#define HTM_UPDATE_BUDGET(budget, status) (budget - 1)
-
-#define ENTER_HTM_COND(tid, budget) budget > 0
-#define IN_TRANSACTION(tid, budget, status) HTM_test()
-
-// #################################
-// Called within the API
-#define HTM_INIT()      /* empty */
-#define HTM_EXIT()      /* empty */
-#define HTM_THR_INIT()  /* empty */
-#define HTM_THR_EXIT()  /* empty */
-#define HTM_INC(status) /* Use this to construct side statistics */
-// #################################
-
-#define HTM_SGL_budget HTM_SGL_vars.budget
-#define HTM_SGL_status HTM_SGL_vars.status
-#define HTM_SGL_tid HTM_SGL_vars.tid
-
-#define HTM_SGL_begin()                                                        \
-  {                                                                            \
-    HTM_SGL_budget = HTM_SGL_INIT_BUDGET; /* HTM_get_budget(); */              \
-    BEFORE_TRANSACTION(HTM_SGL_tid, HTM_SGL_budget);                           \
-    while (1) {                                                                \
-      BEFORE_CHECK_BUDGET(HTM_SGL_budget);                                     \
-      if (ENTER_HTM_COND(HTM_SGL_tid, HTM_SGL_budget)) {                       \
-        CHECK_SGL_NOTX();                                                      \
-        BEFORE_HTM_BEGIN(HTM_SGL_tid, HTM_SGL_budget);                         \
-        if (START_TRANSACTION(HTM_SGL_status)) {                               \
-          UPDATE_BUDGET(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status);          \
-          AFTER_ABORT(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status);            \
-          continue;                                                            \
-        }                                                                      \
-        CHECK_SGL_HTM();                                                       \
-        AFTER_HTM_BEGIN(HTM_SGL_tid, HTM_SGL_budget);                          \
-      } else {                                                                 \
-        /*printf("BEGIN CONFLICT LIMIT REACHED %ld\n", HTM_SGL_tid);*/         \
-        BEFORE_SGL_BEGIN(HTM_SGL_tid);                                         \
-        ENTER_SGL(HTM_SGL_tid);                                                \
-        AFTER_SGL_BEGIN(HTM_SGL_tid);                                          \
-      }                                                                        \
-      AFTER_BEGIN(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status);                \
-      break; /* delete when using longjmp */                                   \
-    }                                                                          \
-  }
-//
-#define HTM_SGL_commit()                                                       \
-  {                                                                            \
-    BEFORE_COMMIT(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status);                \
-    if (IN_TRANSACTION(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status)) {         \
-      BEFORE_HTM_COMMIT(HTM_SGL_tid, HTM_SGL_budget);                          \
-      COMMIT_TRANSACTION(HTM_SGL_tid, HTM_SGL_budget, HTM_SGL_status);         \
-      AFTER_HTM_COMMIT(HTM_SGL_tid, HTM_SGL_budget);                           \
-    } else {                                                                   \
-      /*printf("COMMIT CONFLICT LIMIT REACHED %ld\n", HTM_SGL_tid);*/          \
-      BEFORE_SGL_COMMIT(HTM_SGL_tid);                                          \
-      EXIT_SGL(HTM_SGL_tid);                                                   \
-      AFTER_SGL_COMMIT(HTM_SGL_tid);                                           \
-    }                                                                          \
-    AFTER_TRANSACTION(HTM_SGL_tid, HTM_SGL_budget);                            \
-  }
-
-#define HTM_SGL_before_write(addr, val) /* empty */
-#define HTM_SGL_after_write(addr, val)  /* empty */
-
-#define HTM_SGL_write(addr, val)                                               \
-  ({                                                                           \
-    HTM_SGL_before_write(addr, val);                                           \
-    *((GRANULE_TYPE *)addr) = val;                                             \
-    HTM_SGL_after_write(addr, val);                                            \
-    val;                                                                       \
-  })
-
-#define HTM_SGL_write_D(addr, val)                                             \
-  ({                                                                           \
-    GRANULE_TYPE g = CONVERT_GRANULE_D(val);                                   \
-    HTM_SGL_write((GRANULE_TYPE *)addr, g);                                    \
-    val;                                                                       \
-  })
-
-#define HTM_SGL_write_P(addr, val)                                             \
-  ({                                                                           \
-    GRANULE_TYPE g = (GRANULE_TYPE)val; /* works for pointers only */          \
-    HTM_SGL_write((GRANULE_TYPE *)addr, g);                                    \
-    val;                                                                       \
-  })
-
-#define HTM_SGL_before_read(addr) /* empty */
-
-#define HTM_SGL_read(addr)                                                     \
-  ({                                                                           \
-    HTM_SGL_before_read(addr);                                                 \
-    *((GRANULE_TYPE *)addr);                                                   \
-  })
-
-#define HTM_SGL_read_P(addr)                                                   \
-  ({                                                                           \
-    HTM_SGL_before_read(addr);                                                 \
-    *((GRANULE_P_TYPE *)addr);                                                 \
-  })
-
-#define HTM_SGL_read_D(addr)                                                   \
-  ({                                                                           \
-    HTM_SGL_before_read(addr);                                                 \
-    *((GRANULE_D_TYPE *)addr);                                                 \
-  })
-
-/* TODO: persistency assumes an identifier */
-#define HTM_SGL_alloc(size) malloc(size)
-#define HTM_SGL_free(pool) free(pool)
-
-// Exposed API
-#define HTM_init(nb_threads) HTM_init_(HTM_SGL_INIT_BUDGET, nb_threads)
-void HTM_init_(int init_budget, int nb_threads);
-void HTM_exit();
-int HTM_thr_init(int); // pass -1 to get an id
-void HTM_thr_exit();
-void HTM_block();
-
-// int HTM_update_budget(int budget, HTM_STATUS_TYPE status);
-#define HTM_update_budget(budget, status) HTM_UPDATE_BUDGET(budget, status)
-void HTM_enter_fallback();
-void HTM_exit_fallback();
-
-void HTM_inc_status_count(int status_code);
-int HTM_get_nb_threads();
-int HTM_get_tid();
-
-// Getter and Setter for the initial budget
-int HTM_get_budget();
-void HTM_set_budget(int budget);
-
-void HTM_set_is_record(int is_rec);
-int HTM_get_is_record();
-/**
- * @accum : int[nb_threads][HTM_NB_ERRORS]
- */
-long HTM_get_status_count(int status_code, long **accum);
-void HTM_reset_status_count();
-
-#ifdef __cplusplus
-}
-#endif
-
-#define LOCK(mtx)                                                              \
-  while (!__sync_bool_compare_and_swap(&mtx, 0, 1))                            \
-    PAUSE()                                                                    \
-  //
-
-#define UNLOCK(mtx)                                                            \
-  mtx = 0;                                                                     \
-  __sync_synchronize() //
-
-// using namespace std;
-
-#define SGL_SIZE 128
-#define SGL_POS 16
-
-static volatile int64_t CL_ALIGN HTM_SGL_var[SGL_SIZE] = { -1 };
-/* extern */ __thread int64_t *volatile HTM_SGL_var_addr =
-    (int64_t *volatile)&(HTM_SGL_var[SGL_POS]);
-/* extern */ __thread CL_ALIGN HTM_SGL_local_vars_s HTM_SGL_vars;
-/* extern */ __thread int64_t HTM_SGL_errors[HTM_NB_ERRORS];
-
-/* extern */ void *HTM_read_only_storage1 = (void *)&(HTM_SGL_var[0]);
-/* extern */ int HTM_read_only_storage1_size = SGL_POS * sizeof(int64_t);
-/* extern */ void *HTM_read_only_storage2 = (void *)&(HTM_SGL_var[SGL_POS + 1]);
-/* extern */ int HTM_read_only_storage2_size =
-    (SGL_SIZE - SGL_POS - 1) * sizeof(int64_t);
-
-static /* mutex */ int mtx;
-static int init_budget = HTM_SGL_INIT_BUDGET;
-static int threads;
-static int thr_counter;
-
-static __thread int is_record;
-static __thread int tid = -1;
-
-void HTM_init_(int init_budget, int nb_threads) {
-  init_budget = HTM_SGL_INIT_BUDGET;
-  threads = nb_threads;
-  HTM_SGL_var[SGL_POS] = -1;
-  HTM_SGL_var_addr = (int64_t *volatile)&(HTM_SGL_var[SGL_POS]);
-  HTM_INIT();
-}
-
-void HTM_exit() { HTM_EXIT(); }
-
-int HTM_thr_init(int reqTID) {
-  if (tid != -1)
-    return tid; // TODO
-  LOCK(mtx);    // mtx.lock();
-  if (reqTID != -1) {
-    tid = reqTID;
-    HTM_SGL_tid = reqTID;
-  } else {
-    tid = thr_counter++;
-    HTM_SGL_tid = tid;
-  }
-  HTM_SGL_var_addr = (int64_t *volatile)&(HTM_SGL_var[SGL_POS]);
-  HTM_THR_INIT();
-  UNLOCK(mtx); // mtx.unlock();
-  return tid;
-}
-
-void HTM_thr_exit() {
-  LOCK(mtx); // mtx.lock();
-  --thr_counter;
-  HTM_THR_EXIT();
-  UNLOCK(mtx); // mtx.unlock();
-}
-
-int HTM_get_budget() { return init_budget; }
-void HTM_set_budget(int _budget) { init_budget = _budget; }
-
-void HTM_enter_fallback() {
-  // mtx.lock();
-  while (__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != tid) {
-    while (__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != -1) {
-      PAUSE();
-    }
-    __sync_val_compare_and_swap(HTM_SGL_var_addr, -1, tid);
-  }
-
-  // HTM_SGL_var = 1;
-  // __sync_synchronize();
-  HTM_SGL_errors[HTM_FALLBACK]++;
-}
-
-void HTM_exit_fallback() {
-  // __sync_val_compare_and_swap(&HTM_SGL_var, 1, 0);
-  // __asm__ __volatile__("mfence" ::: "memory");
-  __atomic_store_n(HTM_SGL_var_addr, -1, __ATOMIC_RELEASE);
-  // mtx.unlock();
-}
-
-void HTM_block() {
-  while (__atomic_load_n(HTM_SGL_var_addr, __ATOMIC_ACQUIRE) != -1) {
-    PAUSE();
-  }
-
-  // mtx.lock();
-  // mtx.unlock();
-}
-
-void HTM_inc_status_count(int status_code) {
-  if (is_record) {
-    HTM_ERROR_INC(status_code, HTM_SGL_errors);
-  }
-}
-
-// int HTM_update_budget(int budget, HTM_STATUS_TYPE status)
-// {
-//   int res = 0;
-//   // HTM_inc_status_count(status);
-//   res = HTM_UPDATE_BUDGET(budget, status);
-//   return res;
-// }
-
-long HTM_get_status_count(int status_code, long **accum) {
-  long res = 0;
-  res = HTM_SGL_errors[status_code];
-  if (accum != NULL) {
-    accum[tid][status_code] = HTM_SGL_errors[status_code];
-  }
-  return res;
-}
-
-void HTM_reset_status_count() {
-  int i, j;
-  for (i = 0; i < HTM_NB_ERRORS; ++i) {
-    HTM_SGL_errors[i] = 0;
-  }
-}
-
-int HTM_get_nb_threads() { return threads; }
-int HTM_get_tid() { return tid; }
-
-void HTM_set_is_record(int is_rec) { is_record = is_rec; }
-int HTM_get_is_record() { return is_record; }
 
 #define RETA_CONF_SIZE (ETH_RSS_RETA_SIZE_512 / RTE_RETA_GROUP_SIZE)
 
@@ -1857,6 +1047,21 @@ void set_reta(uint16_t device) {
   rte_eth_dev_rss_reta_update(device, reta_conf, dev_info.reta_size);
 
   printf("Set RETA for device %u\n", device);
+}
+
+uint32_t spread_data_among_cores(uint32_t capacity) {
+  capacity /= rte_lcore_count();
+
+  // find power of 2
+  for (int pow = 0; pow < 32; pow++) {
+    if ((1 << pow) >= capacity) {
+      return 1 << pow;
+    }
+  }
+
+  // we should not be here
+  rte_exit(EXIT_FAILURE, "Error spreading data among cores");
+  return 0; // silence warning
 }
 
 /**********************************************
@@ -1972,6 +1177,7 @@ static void worker_main(void) {
 
   while (1) {
     unsigned VIGOR_DEVICES_COUNT = rte_eth_dev_count_avail();
+
     for (uint16_t VIGOR_DEVICE = 0; VIGOR_DEVICE < VIGOR_DEVICES_COUNT;
          VIGOR_DEVICE++) {
       struct rte_mbuf *mbufs[VIGOR_BATCH_SIZE];
@@ -1980,21 +1186,18 @@ static void worker_main(void) {
 
       struct rte_mbuf *mbufs_to_send[VIGOR_BATCH_SIZE];
       uint16_t tx_count = 0;
+
       for (uint16_t n = 0; n < rx_count; n++) {
         uint8_t *data = rte_pktmbuf_mtod(mbufs[n], uint8_t *);
         vigor_time_t VIGOR_NOW = current_time();
-        HTM_SGL_begin();
         uint16_t dst_device =
             nf_process(mbufs[n]->port, data, mbufs[n]->pkt_len, VIGOR_NOW);
-        HTM_SGL_commit();
 
         if (dst_device == VIGOR_DEVICE) {
           rte_pktmbuf_free(mbufs[n]);
         } else if (dst_device == FLOOD_FRAME) {
           flood(mbufs[n], VIGOR_DEVICES_COUNT, queue_id);
-        } else { // includes flood when 2 devices, which is equivalent to just
-                 // a
-                 // send
+        } else {
           mbufs_to_send[tx_count] = mbufs[n];
           tx_count++;
         }
