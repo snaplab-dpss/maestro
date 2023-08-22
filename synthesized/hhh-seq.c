@@ -1236,24 +1236,17 @@ int main(int argc, char **argv) {
   return 0;
 }
 
-struct ip_addr {
-  uint32_t addr;
-};
 struct DynamicValue {
   uint64_t bucket_size;
   int64_t bucket_time;
 };
-void ip_addr_allocate(void* obj) { (uintptr_t) obj; }
+struct ip_addr {
+  uint32_t addr;
+};
 void DynamicValue_allocate(void* obj) {
   struct DynamicValue *dv = obj;
   dv->bucket_size = 0;
   dv->bucket_time = 0;
-}
-bool ip_addr_eq(void* a, void* b) {
-  struct ip_addr *id1 = (struct ip_addr *)a;
-  struct ip_addr *id2 = (struct ip_addr *)b;
-
-  return (id1->addr == id2->addr);
 }
 uint32_t ip_addr_hash(void* obj) {
   struct ip_addr *id = (struct ip_addr *)obj;
@@ -1262,6 +1255,13 @@ uint32_t ip_addr_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, id->addr);
   return hash;
 }
+bool ip_addr_eq(void* a, void* b) {
+  struct ip_addr *id1 = (struct ip_addr *)a;
+  struct ip_addr *id2 = (struct ip_addr *)b;
+
+  return (id1->addr == id2->addr);
+}
+void ip_addr_allocate(void* obj) { (uintptr_t) obj; }
 
 
 

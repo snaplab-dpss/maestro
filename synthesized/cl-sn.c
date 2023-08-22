@@ -1374,7 +1374,7 @@ void rss_lut_balancer_sort(struct rss_cores_t *cores,
           sizeof(uint16_t), cmp_cores_decreasing, cores);
 }
 
-void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
+bool rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
                                      struct rss_cores_groups_t *core_groups,
                                      uint16_t bucket_idx, uint16_t src_core,
                                      uint16_t dst_core) {
@@ -1384,11 +1384,9 @@ void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
   uint16_t src_num_buckets = cores->cores[src_core].buckets.num_buckets;
   uint16_t dst_num_buckets = cores->cores[dst_core].buckets.num_buckets;
 
-  assert(src_num_buckets >= 2);
-  assert(dst_num_buckets >= 1);
-
-  assert(src_num_buckets <= ETH_RSS_RETA_SIZE_512);
-  assert(dst_num_buckets < ETH_RSS_RETA_SIZE_512);
+  if (src_num_buckets == 1 || dst_num_buckets == ETH_RSS_RETA_SIZE_512) {
+    return false;
+  }
 
   // Update the total counters.
   cores->cores[dst_core].total_counter += bucket->counter;
@@ -1401,6 +1399,8 @@ void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
   // Pull the tail bucket to fill the place of the leaving one.
   *bucket = cores->cores[src_core].buckets.buckets[src_num_buckets - 1];
   cores->cores[src_core].buckets.num_buckets--;
+
+  return true;
 }
 
 bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
@@ -1436,11 +1436,14 @@ bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
       if (is_big_atom && allow_big_atom_migration) {
         // This will overload, but we only overload one underloaded core at a
         // time.
-        rss_lut_balancer_migrate_bucket(cores, core_groups, bucket_idx,
-                                        overloaded_core, underloaded_core);
+        bool success = rss_lut_balancer_migrate_bucket(
+            cores, core_groups, bucket_idx, overloaded_core, underloaded_core);
+        if (success) {
+          bucket_idx++;
+          changes = true;
+        }
+
         under_idx++;
-        bucket_idx++;
-        changes = true;
         continue;
       }
 
@@ -1457,10 +1460,6 @@ bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
       rss_lut_balancer_migrate_bucket(cores, core_groups, bucket_idx,
                                       overloaded_core, underloaded_core);
       changes = true;
-
-      if (will_overload) {
-        under_idx++;
-      }
     }
   }
 
@@ -1709,6 +1708,14 @@ struct client {
   uint32_t src_ip;
   uint32_t dst_ip;
 };
+bool flow_eq(void* a, void* b) {
+  struct flow *id1 = (struct flow *)a;
+  struct flow *id2 = (struct flow *)b;
+
+  return (id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
+      &&(id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
+          &&(id1->protocol == id2->protocol);
+}
 void flow_allocate(void* obj) {
   struct flow *id = (struct flow *)obj;
   id->src_port = 0;
@@ -1716,6 +1723,13 @@ void flow_allocate(void* obj) {
   id->src_ip = 0;
   id->dst_ip = 0;
   id->protocol = 0;
+}
+uint32_t client_hash(void* obj) {
+  struct client *id = (struct client *)obj;
+  unsigned hash = 0;
+  hash = __builtin_ia32_crc32si(hash, id->src_ip);
+  hash = __builtin_ia32_crc32si(hash, id->dst_ip);
+  return hash;
 }
 uint32_t flow_hash(void* obj) {
   struct flow *id = (struct flow *)obj;
@@ -1728,43 +1742,28 @@ uint32_t flow_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, id->protocol);
   return hash;
 }
-bool flow_eq(void* a, void* b) {
-  struct flow *id1 = (struct flow *)a;
-  struct flow *id2 = (struct flow *)b;
-
-  return (id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
-      &&(id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
-          &&(id1->protocol == id2->protocol);
-}
-uint32_t client_hash(void* obj) {
-  struct client *id = (struct client *)obj;
-  unsigned hash = 0;
-  hash = __builtin_ia32_crc32si(hash, id->src_ip);
-  hash = __builtin_ia32_crc32si(hash, id->dst_ip);
-  return hash;
-}
 struct tcpudp_hdr {
   uint16_t src_port;
   uint16_t dst_port;
 };
 
 uint8_t hash_key_0[RSS_HASH_KEY_LENGTH] = {
-  0xff, 0x60, 0x12, 0x0, 0x0, 0x10, 0x0, 0x10, 
+  0xce, 0xc0, 0x1, 0x20, 0x0, 0xb0, 0x10, 0x8, 
   0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 
-  0x7d, 0xbc, 0x9d, 0x28, 0x9d, 0x90, 0x18, 0x8b, 
-  0xda, 0xde, 0x84, 0x54, 0xdf, 0x2, 0x12, 0xde, 
-  0x68, 0xb2, 0x80, 0x82, 0xef, 0xc, 0xf8, 0x20, 
-  0xb4, 0xcf, 0x6a, 0x1, 0x49, 0xa2, 0xd6, 0xc6, 
-  0x5e, 0x74, 0xee, 0xfc
+  0xd1, 0xa8, 0x2, 0xb2, 0x4b, 0x19, 0x40, 0x6c, 
+  0x48, 0xd4, 0x5e, 0x2a, 0x6f, 0x34, 0x7b, 0x3d, 
+  0xf6, 0x0, 0xee, 0xf5, 0xb9, 0x26, 0x6d, 0xdc, 
+  0xa5, 0x96, 0x58, 0xfc, 0xd0, 0x94, 0x9f, 0xa2, 
+  0x3c, 0xa1, 0x54, 0x87
 };
 uint8_t hash_key_1[RSS_HASH_KEY_LENGTH] = {
-  0x21, 0xf4, 0x95, 0x9a, 0xdd, 0x3, 0xcb, 0x9a, 
-  0x69, 0xfa, 0x5b, 0x2e, 0x16, 0x84, 0xfe, 0x88, 
-  0xaa, 0x84, 0x1f, 0x55, 0x77, 0x4e, 0x57, 0xdb, 
-  0x1c, 0x95, 0xa5, 0xad, 0xf1, 0x40, 0x52, 0x13, 
-  0x34, 0xe8, 0xad, 0x11, 0xeb, 0x78, 0xac, 0x54, 
-  0x72, 0x7, 0x82, 0x88, 0x8b, 0x80, 0x10, 0x35, 
-  0x4, 0x30, 0x8b, 0x7b
+  0x16, 0x3a, 0x73, 0xfa, 0xc8, 0xc5, 0xb5, 0x64, 
+  0xab, 0x81, 0xe0, 0x5f, 0xf3, 0x9d, 0x41, 0x96, 
+  0xe9, 0xa1, 0x4d, 0x86, 0x13, 0xb6, 0x74, 0x86, 
+  0x1e, 0x13, 0xe8, 0xbc, 0x86, 0x9e, 0xf1, 0x9c, 
+  0xd9, 0x64, 0x96, 0xa1, 0x29, 0x4b, 0x6, 0xd5, 
+  0xcc, 0xe6, 0x34, 0xbf, 0x83, 0x75, 0x55, 0x6d, 
+  0x16, 0xa2, 0xf3, 0x2a
 };
 
 struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {

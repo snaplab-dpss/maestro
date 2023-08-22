@@ -1361,8 +1361,58 @@ struct rte_ether_hdr;
 #define IP_MIN_SIZE_WORDS 5
 #define WORD_SIZE 4
 
-RTE_DEFINE_PER_LCORE(bool, write_attempt);
-RTE_DEFINE_PER_LCORE(bool, write_state);
+#define RETA_CONF_SIZE (ETH_RSS_RETA_SIZE_512 / RTE_RETA_GROUP_SIZE)
+
+typedef struct {
+  uint16_t lut[ETH_RSS_RETA_SIZE_512];
+  bool set;
+} reta_t;
+
+reta_t retas_per_device[MAX_NUM_DEVICES];
+
+void set_reta(uint16_t device) {
+  if (!retas_per_device[device].set) {
+    return;
+  }
+
+  struct rte_eth_rss_reta_entry64 reta_conf[RETA_CONF_SIZE];
+
+  struct rte_eth_dev_info dev_info;
+  rte_eth_dev_info_get(device, &dev_info);
+
+  /* RETA setting */
+  memset(reta_conf, 0, sizeof(reta_conf));
+
+  for (uint16_t bucket = 0; bucket < dev_info.reta_size; bucket++) {
+    reta_conf[bucket / RTE_RETA_GROUP_SIZE].mask = UINT64_MAX;
+  }
+
+  for (uint16_t bucket = 0; bucket < dev_info.reta_size; bucket++) {
+    uint32_t reta_id = bucket / RTE_RETA_GROUP_SIZE;
+    uint32_t reta_pos = bucket % RTE_RETA_GROUP_SIZE;
+    reta_conf[reta_id].reta[reta_pos] = retas_per_device[device].lut[bucket];
+  }
+
+  /* RETA update */
+  rte_eth_dev_rss_reta_update(device, reta_conf, dev_info.reta_size);
+
+  printf("Set RETA for device %u\n", device);
+}
+
+uint32_t spread_data_among_cores(uint32_t capacity) {
+  capacity /= rte_lcore_count();
+
+  // find power of 2
+  for (int pow = 0; pow < 32; pow++) {
+    if ((1 << pow) >= capacity) {
+      return 1 << pow;
+    }
+  }
+
+  // we should not be here
+  rte_exit(EXIT_FAILURE, "Error spreading data among cores");
+  return 0; // silence warning
+}
 
 /**********************************************
  *
@@ -1821,44 +1871,6 @@ int HTM_get_tid() { return tid; }
 void HTM_set_is_record(int is_rec) { is_record = is_rec; }
 int HTM_get_is_record() { return is_record; }
 
-#define RETA_CONF_SIZE (ETH_RSS_RETA_SIZE_512 / RTE_RETA_GROUP_SIZE)
-
-typedef struct {
-  uint16_t lut[ETH_RSS_RETA_SIZE_512];
-  bool set;
-} reta_t;
-
-reta_t retas_per_device[MAX_NUM_DEVICES];
-
-void set_reta(uint16_t device) {
-  if (!retas_per_device[device].set) {
-    return;
-  }
-
-  struct rte_eth_rss_reta_entry64 reta_conf[RETA_CONF_SIZE];
-
-  struct rte_eth_dev_info dev_info;
-  rte_eth_dev_info_get(device, &dev_info);
-
-  /* RETA setting */
-  memset(reta_conf, 0, sizeof(reta_conf));
-
-  for (uint16_t bucket = 0; bucket < dev_info.reta_size; bucket++) {
-    reta_conf[bucket / RTE_RETA_GROUP_SIZE].mask = UINT64_MAX;
-  }
-
-  for (uint16_t bucket = 0; bucket < dev_info.reta_size; bucket++) {
-    uint32_t reta_id = bucket / RTE_RETA_GROUP_SIZE;
-    uint32_t reta_pos = bucket % RTE_RETA_GROUP_SIZE;
-    reta_conf[reta_id].reta[reta_pos] = retas_per_device[device].lut[bucket];
-  }
-
-  /* RETA update */
-  rte_eth_dev_rss_reta_update(device, reta_conf, dev_info.reta_size);
-
-  printf("Set RETA for device %u\n", device);
-}
-
 /**********************************************
  *
  *                  NF
@@ -2171,7 +2183,7 @@ void rss_lut_balancer_sort(struct rss_cores_t *cores,
           sizeof(uint16_t), cmp_cores_decreasing, cores);
 }
 
-void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
+bool rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
                                      struct rss_cores_groups_t *core_groups,
                                      uint16_t bucket_idx, uint16_t src_core,
                                      uint16_t dst_core) {
@@ -2181,11 +2193,9 @@ void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
   uint16_t src_num_buckets = cores->cores[src_core].buckets.num_buckets;
   uint16_t dst_num_buckets = cores->cores[dst_core].buckets.num_buckets;
 
-  assert(src_num_buckets >= 2);
-  assert(dst_num_buckets >= 1);
-
-  assert(src_num_buckets <= ETH_RSS_RETA_SIZE_512);
-  assert(dst_num_buckets < ETH_RSS_RETA_SIZE_512);
+  if (src_num_buckets == 1 || dst_num_buckets == ETH_RSS_RETA_SIZE_512) {
+    return false;
+  }
 
   // Update the total counters.
   cores->cores[dst_core].total_counter += bucket->counter;
@@ -2198,6 +2208,8 @@ void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
   // Pull the tail bucket to fill the place of the leaving one.
   *bucket = cores->cores[src_core].buckets.buckets[src_num_buckets - 1];
   cores->cores[src_core].buckets.num_buckets--;
+
+  return true;
 }
 
 bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
@@ -2233,11 +2245,14 @@ bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
       if (is_big_atom && allow_big_atom_migration) {
         // This will overload, but we only overload one underloaded core at a
         // time.
-        rss_lut_balancer_migrate_bucket(cores, core_groups, bucket_idx,
-                                        overloaded_core, underloaded_core);
+        bool success = rss_lut_balancer_migrate_bucket(
+            cores, core_groups, bucket_idx, overloaded_core, underloaded_core);
+        if (success) {
+          bucket_idx++;
+          changes = true;
+        }
+
         under_idx++;
-        bucket_idx++;
-        changes = true;
         continue;
       }
 
@@ -2254,10 +2269,6 @@ bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
       rss_lut_balancer_migrate_bucket(cores, core_groups, bucket_idx,
                                       overloaded_core, underloaded_core);
       changes = true;
-
-      if (will_overload) {
-        under_idx++;
-      }
     }
   }
 
@@ -2501,26 +2512,6 @@ struct TouchedPort {
   uint32_t src;
   uint16_t port;
 };
-uint32_t ip_addr_hash(void* obj) {
-    return 
-
-          ((void *)0)
-
-              ;
-  }
-void touched_port_allocate(void* obj) {
-    return 
-
-          ((void *)0)
-
-              ;
-  }
-bool touched_port_eq(void* a, void* b) {
-  struct TouchedPort *tp1 = (struct TouchedPort *)a;
-  struct TouchedPort *tp2 = (struct TouchedPort *)b;
-  return tp1->src == tp2->src && tp1->port == tp2->port;
-}
-void ip_addr_allocate(void* obj) { (uintptr_t) obj; }
 bool ip_addr_eq(void* a, void* b) {
     return 
 
@@ -2536,29 +2527,49 @@ uint32_t touched_port_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, tp->port);
   return hash;
 }
+void ip_addr_allocate(void* obj) { (uintptr_t) obj; }
+void touched_port_allocate(void* obj) {
+    return 
+
+          ((void *)0)
+
+              ;
+  }
+uint32_t ip_addr_hash(void* obj) {
+    return 
+
+          ((void *)0)
+
+              ;
+  }
 void counter_allocate(void* obj) { (uintptr_t) obj; }
+bool touched_port_eq(void* a, void* b) {
+  struct TouchedPort *tp1 = (struct TouchedPort *)a;
+  struct TouchedPort *tp2 = (struct TouchedPort *)b;
+  return tp1->src == tp2->src && tp1->port == tp2->port;
+}
 struct tcpudp_hdr {
   uint16_t src_port;
   uint16_t dst_port;
 };
 
 uint8_t hash_key_0[RSS_HASH_KEY_LENGTH] = {
-  0x5d, 0x8a, 0x32, 0xc5, 0xb3, 0x2e, 0xfb, 0x37, 
-  0x95, 0xa3, 0xce, 0xe5, 0x5b, 0x83, 0x74, 0xe8, 
-  0x3a, 0x1b, 0x52, 0xd, 0x84, 0x72, 0xa5, 0x2d, 
-  0x5d, 0x9d, 0xc6, 0x62, 0xb9, 0xff, 0xe2, 0x16, 
-  0x89, 0x14, 0xdb, 0x3c, 0x42, 0xd6, 0x73, 0xd7, 
-  0x79, 0x42, 0xbc, 0xd5, 0xc5, 0x30, 0xbd, 0xff, 
-  0x4c, 0xf, 0xc, 0xd0
+  0x3e, 0x68, 0x58, 0x5b, 0xd0, 0x18, 0x1c, 0xfc, 
+  0xa1, 0x91, 0xc0, 0x7b, 0xfc, 0xb2, 0xfb, 0x9e, 
+  0xf2, 0xda, 0xae, 0x54, 0x22, 0xae, 0x32, 0x46, 
+  0x1f, 0xe8, 0x13, 0x2, 0xd1, 0x2d, 0x5c, 0x10, 
+  0x96, 0xb4, 0x6b, 0x66, 0xcc, 0x87, 0x62, 0x6d, 
+  0x18, 0x22, 0xe9, 0x15, 0xd4, 0xe4, 0xb3, 0xc6, 
+  0xbe, 0x61, 0x1a, 0xe1
 };
 uint8_t hash_key_1[RSS_HASH_KEY_LENGTH] = {
-  0xcf, 0x2f, 0x62, 0x6a, 0x21, 0xba, 0x1d, 0x6f, 
-  0x91, 0x1, 0x5d, 0xec, 0x30, 0x4f, 0xc8, 0x16, 
-  0x80, 0xd5, 0xee, 0x26, 0xc1, 0x71, 0x77, 0xd3, 
-  0xf6, 0xcd, 0xc6, 0x9c, 0xf6, 0xe4, 0x51, 0xc6, 
-  0x13, 0xb3, 0x30, 0x35, 0x6d, 0x4d, 0xa4, 0xfe, 
-  0x4f, 0x1, 0xea, 0x7f, 0x50, 0xb2, 0x96, 0xd1, 
-  0x87, 0x84, 0xf7, 0x48
+  0x9c, 0xdc, 0xbc, 0x6b, 0xfe, 0xe7, 0x19, 0x30, 
+  0x49, 0xd9, 0x3b, 0x54, 0x7e, 0x17, 0x68, 0x9f, 
+  0xb1, 0xda, 0xa9, 0x7c, 0xda, 0xe5, 0x36, 0xcb, 
+  0x37, 0xd4, 0x4f, 0x26, 0xa9, 0x2f, 0x45, 0x46, 
+  0xb, 0x1, 0xb1, 0x9, 0xe8, 0xcb, 0x3a, 0x31, 
+  0xa4, 0x75, 0x86, 0x22, 0x8c, 0xee, 0xc1, 0x3d, 
+  0xc8, 0x6a, 0xba, 0xa2
 };
 
 struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {

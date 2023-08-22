@@ -1374,7 +1374,7 @@ void rss_lut_balancer_sort(struct rss_cores_t *cores,
           sizeof(uint16_t), cmp_cores_decreasing, cores);
 }
 
-void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
+bool rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
                                      struct rss_cores_groups_t *core_groups,
                                      uint16_t bucket_idx, uint16_t src_core,
                                      uint16_t dst_core) {
@@ -1384,11 +1384,9 @@ void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
   uint16_t src_num_buckets = cores->cores[src_core].buckets.num_buckets;
   uint16_t dst_num_buckets = cores->cores[dst_core].buckets.num_buckets;
 
-  assert(src_num_buckets >= 2);
-  assert(dst_num_buckets >= 1);
-
-  assert(src_num_buckets <= ETH_RSS_RETA_SIZE_512);
-  assert(dst_num_buckets < ETH_RSS_RETA_SIZE_512);
+  if (src_num_buckets == 1 || dst_num_buckets == ETH_RSS_RETA_SIZE_512) {
+    return false;
+  }
 
   // Update the total counters.
   cores->cores[dst_core].total_counter += bucket->counter;
@@ -1401,6 +1399,8 @@ void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
   // Pull the tail bucket to fill the place of the leaving one.
   *bucket = cores->cores[src_core].buckets.buckets[src_num_buckets - 1];
   cores->cores[src_core].buckets.num_buckets--;
+
+  return true;
 }
 
 bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
@@ -1436,11 +1436,14 @@ bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
       if (is_big_atom && allow_big_atom_migration) {
         // This will overload, but we only overload one underloaded core at a
         // time.
-        rss_lut_balancer_migrate_bucket(cores, core_groups, bucket_idx,
-                                        overloaded_core, underloaded_core);
+        bool success = rss_lut_balancer_migrate_bucket(
+            cores, core_groups, bucket_idx, overloaded_core, underloaded_core);
+        if (success) {
+          bucket_idx++;
+          changes = true;
+        }
+
         under_idx++;
-        bucket_idx++;
-        changes = true;
         continue;
       }
 
@@ -1457,10 +1460,6 @@ bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
       rss_lut_balancer_migrate_bucket(cores, core_groups, bucket_idx,
                                       overloaded_core, underloaded_core);
       changes = true;
-
-      if (will_overload) {
-        under_idx++;
-      }
     }
   }
 
@@ -1741,22 +1740,22 @@ struct tcpudp_hdr {
 };
 
 uint8_t hash_key_0[RSS_HASH_KEY_LENGTH] = {
-  0x0, 0x5e, 0x0, 0x0, 0x0, 0x0, 0x0, 0x5e, 
-  0x0, 0x5e, 0x0, 0x0, 0x0, 0x5e, 0x0, 0x0, 
-  0xbf, 0x7e, 0xbd, 0x7e, 0xaa, 0xa7, 0x69, 0x18, 
-  0xde, 0x62, 0x90, 0x5f, 0xda, 0x47, 0xc0, 0xfd, 
-  0x8c, 0xc4, 0x23, 0xfa, 0x82, 0x13, 0x99, 0x67, 
-  0x2, 0x3c, 0xd0, 0x9e, 0x7d, 0xda, 0xb0, 0x3c, 
-  0x58, 0x6e, 0xba, 0x2
+  0xa1, 0x24, 0x0, 0x15, 0x0, 0x14, 0xa1, 0x24, 
+  0xa1, 0x24, 0x0, 0x14, 0xa1, 0x24, 0x0, 0x15, 
+  0xa7, 0xfa, 0x11, 0x22, 0x6f, 0xd3, 0xf0, 0x42, 
+  0x1b, 0x6c, 0xeb, 0x14, 0x62, 0x2, 0xa3, 0x44, 
+  0x24, 0x90, 0xf8, 0x1c, 0x43, 0x99, 0xe7, 0xaf, 
+  0x80, 0x73, 0x15, 0xfe, 0x29, 0x5a, 0x73, 0xd0, 
+  0x55, 0x85, 0xf2, 0xc4
 };
 uint8_t hash_key_1[RSS_HASH_KEY_LENGTH] = {
-  0x0, 0x0, 0x0, 0x5e, 0x0, 0x5e, 0x0, 0x0, 
-  0x0, 0x0, 0x0, 0x5e, 0x0, 0x0, 0x0, 0x5f, 
-  0xfb, 0xcc, 0xe, 0x4c, 0x49, 0xf9, 0xcf, 0xa7, 
-  0xdf, 0xd, 0xf6, 0x95, 0xab, 0x6b, 0x9f, 0x99, 
-  0xf0, 0x24, 0x8f, 0xd1, 0x22, 0x40, 0x0, 0x40, 
-  0x83, 0x91, 0xde, 0x78, 0xb, 0x16, 0xf8, 0x6, 
-  0xe2, 0x6, 0x53, 0x2b
+  0x0, 0x14, 0xa1, 0x24, 0xa1, 0x24, 0x0, 0x15, 
+  0x0, 0x14, 0xa1, 0x24, 0x0, 0x14, 0xa1, 0x24, 
+  0x6a, 0xe3, 0xac, 0x86, 0x3e, 0xcb, 0x7e, 0x73, 
+  0x83, 0x15, 0xcb, 0x75, 0xc4, 0x73, 0x2c, 0xda, 
+  0xdb, 0x5, 0x31, 0x46, 0xdb, 0xd4, 0x76, 0x5a, 
+  0xa8, 0x20, 0x9d, 0xa, 0x44, 0x7a, 0xc6, 0xae, 
+  0x5d, 0x72, 0x34, 0x9c
 };
 
 struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {
@@ -1844,7 +1843,7 @@ int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t
   struct Vector** vector_ptr = &RTE_PER_LCORE(_vector);
   struct Vector** vector_1_ptr = &RTE_PER_LCORE(_vector_1);
   struct DoubleChain** dchain_ptr = &RTE_PER_LCORE(_dchain);
-  int number_of_freed_flows__27 = expire_items_single_map((*dchain_ptr), (*vector_ptr), (*map_ptr), now - 100000000000ul);
+  int number_of_freed_flows__27 = expire_items_single_map((*dchain_ptr), (*vector_ptr), (*map_ptr), now - 123000ul);
   struct rte_ether_hdr* ether_header_1 = (struct rte_ether_hdr*)(packet);
 
   // 120

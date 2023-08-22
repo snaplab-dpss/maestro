@@ -1374,7 +1374,7 @@ void rss_lut_balancer_sort(struct rss_cores_t *cores,
           sizeof(uint16_t), cmp_cores_decreasing, cores);
 }
 
-void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
+bool rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
                                      struct rss_cores_groups_t *core_groups,
                                      uint16_t bucket_idx, uint16_t src_core,
                                      uint16_t dst_core) {
@@ -1384,11 +1384,9 @@ void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
   uint16_t src_num_buckets = cores->cores[src_core].buckets.num_buckets;
   uint16_t dst_num_buckets = cores->cores[dst_core].buckets.num_buckets;
 
-  assert(src_num_buckets >= 2);
-  assert(dst_num_buckets >= 1);
-
-  assert(src_num_buckets <= ETH_RSS_RETA_SIZE_512);
-  assert(dst_num_buckets < ETH_RSS_RETA_SIZE_512);
+  if (src_num_buckets == 1 || dst_num_buckets == ETH_RSS_RETA_SIZE_512) {
+    return false;
+  }
 
   // Update the total counters.
   cores->cores[dst_core].total_counter += bucket->counter;
@@ -1401,6 +1399,8 @@ void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
   // Pull the tail bucket to fill the place of the leaving one.
   *bucket = cores->cores[src_core].buckets.buckets[src_num_buckets - 1];
   cores->cores[src_core].buckets.num_buckets--;
+
+  return true;
 }
 
 bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
@@ -1436,11 +1436,14 @@ bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
       if (is_big_atom && allow_big_atom_migration) {
         // This will overload, but we only overload one underloaded core at a
         // time.
-        rss_lut_balancer_migrate_bucket(cores, core_groups, bucket_idx,
-                                        overloaded_core, underloaded_core);
+        bool success = rss_lut_balancer_migrate_bucket(
+            cores, core_groups, bucket_idx, overloaded_core, underloaded_core);
+        if (success) {
+          bucket_idx++;
+          changes = true;
+        }
+
         under_idx++;
-        bucket_idx++;
-        changes = true;
         continue;
       }
 
@@ -1457,10 +1460,6 @@ bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
       rss_lut_balancer_migrate_bucket(cores, core_groups, bucket_idx,
                                       overloaded_core, underloaded_core);
       changes = true;
-
-      if (will_overload) {
-        under_idx++;
-      }
     }
   }
 
@@ -1705,6 +1704,12 @@ struct DynamicValue {
 struct ip_addr {
   uint32_t addr;
 };
+bool ip_addr_eq(void* a, void* b) {
+  struct ip_addr *id1 = (struct ip_addr *)a;
+  struct ip_addr *id2 = (struct ip_addr *)b;
+
+  return (id1->addr == id2->addr);
+}
 uint32_t ip_addr_hash(void* obj) {
   struct ip_addr *id = (struct ip_addr *)obj;
 
@@ -1717,31 +1722,25 @@ void DynamicValue_allocate(void* obj) {
   dv->bucket_size = 0;
   dv->bucket_time = 0;
 }
-bool ip_addr_eq(void* a, void* b) {
-  struct ip_addr *id1 = (struct ip_addr *)a;
-  struct ip_addr *id2 = (struct ip_addr *)b;
-
-  return (id1->addr == id2->addr);
-}
 void ip_addr_allocate(void* obj) { (uintptr_t) obj; }
 
 uint8_t hash_key_0[RSS_HASH_KEY_LENGTH] = {
-  0x40, 0x0, 0x4, 0x70, 0x0, 0x0, 0x0, 0x0, 
-  0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 
-  0x4a, 0xfa, 0x39, 0x6d, 0xb4, 0xfe, 0xae, 0x15, 
-  0xba, 0x3e, 0x8c, 0xe5, 0x79, 0xda, 0x4e, 0xbd, 
-  0x7e, 0x89, 0xa5, 0xea, 0x2e, 0x95, 0x60, 0xa7, 
-  0x4e, 0xe1, 0xdd, 0xe7, 0x8, 0xd8, 0xe8, 0x53, 
-  0xd3, 0x22, 0xc0, 0x87
+  0x7f, 0x21, 0xec, 0x50, 0x0, 0x0, 0x0, 0x0, 
+  0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 
+  0x3f, 0xf2, 0xca, 0x52, 0xdf, 0x71, 0x83, 0x93, 
+  0xe1, 0x5d, 0xfa, 0xf8, 0x23, 0x80, 0x2c, 0xa2, 
+  0xa1, 0x18, 0xf5, 0x64, 0xd9, 0x54, 0x2, 0x6d, 
+  0x42, 0x91, 0x23, 0xd7, 0xbf, 0xc2, 0x69, 0xfe, 
+  0xb4, 0x34, 0x51, 0x93
 };
 uint8_t hash_key_1[RSS_HASH_KEY_LENGTH] = {
-  0x78, 0x64, 0xbc, 0x7, 0x66, 0xa1, 0x0, 0x8d, 
-  0xc2, 0x8c, 0xfc, 0xf9, 0x8, 0x4a, 0x51, 0x9d, 
-  0x4a, 0xd1, 0x8e, 0xfe, 0x7e, 0x96, 0xac, 0xf1, 
-  0xf5, 0x98, 0x71, 0x2, 0x3f, 0xc0, 0xfc, 0xb7, 
-  0x24, 0xb8, 0xbf, 0x8a, 0x5a, 0xbf, 0x17, 0x1c, 
-  0x4b, 0x13, 0x15, 0x53, 0x5d, 0x66, 0xf0, 0xa7, 
-  0x38, 0x7f, 0xa6, 0xb6
+  0x7a, 0xd2, 0xe3, 0xa0, 0x4a, 0xcc, 0xf7, 0xed, 
+  0xa3, 0xb0, 0x73, 0x32, 0xcd, 0x8b, 0x18, 0xdb, 
+  0x42, 0x1c, 0xff, 0x81, 0xba, 0x3f, 0x1d, 0xc5, 
+  0xae, 0x65, 0x59, 0x30, 0x3b, 0x87, 0x17, 0xb5, 
+  0x59, 0xfa, 0x55, 0xa4, 0xc6, 0x4d, 0x91, 0x69, 
+  0xfd, 0x4, 0x9c, 0xca, 0x8f, 0xb4, 0xa5, 0xd1, 
+  0xd1, 0xa5, 0x52, 0x8b
 };
 
 struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {

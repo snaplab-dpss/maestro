@@ -1559,6 +1559,21 @@ void set_reta(uint16_t device) {
   printf("Set RETA for device %u\n", device);
 }
 
+uint32_t spread_data_among_cores(uint32_t capacity) {
+  capacity /= rte_lcore_count();
+
+  // find power of 2
+  for (int pow = 0; pow < 32; pow++) {
+    if ((1 << pow) >= capacity) {
+      return 1 << pow;
+    }
+  }
+
+  // we should not be here
+  rte_exit(EXIT_FAILURE, "Error spreading data among cores");
+  return 0; // silence warning
+}
+
 /**********************************************
  *
  *                  NF
@@ -1888,7 +1903,7 @@ void rss_lut_balancer_sort(struct rss_cores_t *cores,
           sizeof(uint16_t), cmp_cores_decreasing, cores);
 }
 
-void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
+bool rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
                                      struct rss_cores_groups_t *core_groups,
                                      uint16_t bucket_idx, uint16_t src_core,
                                      uint16_t dst_core) {
@@ -1898,11 +1913,9 @@ void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
   uint16_t src_num_buckets = cores->cores[src_core].buckets.num_buckets;
   uint16_t dst_num_buckets = cores->cores[dst_core].buckets.num_buckets;
 
-  assert(src_num_buckets >= 2);
-  assert(dst_num_buckets >= 1);
-
-  assert(src_num_buckets <= ETH_RSS_RETA_SIZE_512);
-  assert(dst_num_buckets < ETH_RSS_RETA_SIZE_512);
+  if (src_num_buckets == 1 || dst_num_buckets == ETH_RSS_RETA_SIZE_512) {
+    return false;
+  }
 
   // Update the total counters.
   cores->cores[dst_core].total_counter += bucket->counter;
@@ -1915,6 +1928,8 @@ void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
   // Pull the tail bucket to fill the place of the leaving one.
   *bucket = cores->cores[src_core].buckets.buckets[src_num_buckets - 1];
   cores->cores[src_core].buckets.num_buckets--;
+
+  return true;
 }
 
 bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
@@ -1950,11 +1965,14 @@ bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
       if (is_big_atom && allow_big_atom_migration) {
         // This will overload, but we only overload one underloaded core at a
         // time.
-        rss_lut_balancer_migrate_bucket(cores, core_groups, bucket_idx,
-                                        overloaded_core, underloaded_core);
+        bool success = rss_lut_balancer_migrate_bucket(
+            cores, core_groups, bucket_idx, overloaded_core, underloaded_core);
+        if (success) {
+          bucket_idx++;
+          changes = true;
+        }
+
         under_idx++;
-        bucket_idx++;
-        changes = true;
         continue;
       }
 
@@ -1971,10 +1989,6 @@ bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
       rss_lut_balancer_migrate_bucket(cores, core_groups, bucket_idx,
                                       overloaded_core, underloaded_core);
       changes = true;
-
-      if (will_overload) {
-        under_idx++;
-      }
     }
   }
 
@@ -2225,6 +2239,13 @@ struct client {
   uint32_t src_ip;
   uint32_t dst_ip;
 };
+uint32_t client_hash(void* obj) {
+  struct client *id = (struct client *)obj;
+  unsigned hash = 0;
+  hash = __builtin_ia32_crc32si(hash, id->src_ip);
+  hash = __builtin_ia32_crc32si(hash, id->dst_ip);
+  return hash;
+}
 bool flow_eq(void* a, void* b) {
   struct flow *id1 = (struct flow *)a;
   struct flow *id2 = (struct flow *)b;
@@ -2232,14 +2253,6 @@ bool flow_eq(void* a, void* b) {
   return (id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
       &&(id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
           &&(id1->protocol == id2->protocol);
-}
-void flow_allocate(void* obj) {
-  struct flow *id = (struct flow *)obj;
-  id->src_port = 0;
-  id->dst_port = 0;
-  id->src_ip = 0;
-  id->dst_ip = 0;
-  id->protocol = 0;
 }
 uint32_t flow_hash(void* obj) {
   struct flow *id = (struct flow *)obj;
@@ -2252,31 +2265,32 @@ uint32_t flow_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, id->protocol);
   return hash;
 }
-uint32_t client_hash(void* obj) {
-  struct client *id = (struct client *)obj;
-  unsigned hash = 0;
-  hash = __builtin_ia32_crc32si(hash, id->src_ip);
-  hash = __builtin_ia32_crc32si(hash, id->dst_ip);
-  return hash;
+void flow_allocate(void* obj) {
+  struct flow *id = (struct flow *)obj;
+  id->src_port = 0;
+  id->dst_port = 0;
+  id->src_ip = 0;
+  id->dst_ip = 0;
+  id->protocol = 0;
 }
 
 uint8_t hash_key_0[RSS_HASH_KEY_LENGTH] = {
-  0xde, 0x4c, 0x98, 0x57, 0x95, 0xc7, 0x8f, 0x21, 
-  0xa2, 0x52, 0x95, 0x13, 0x28, 0xa8, 0xc8, 0x37, 
-  0x3c, 0x7e, 0xc, 0x3e, 0x37, 0x36, 0xa, 0x31, 
-  0x2d, 0x69, 0x79, 0x53, 0xf4, 0x56, 0xb1, 0xd2, 
-  0xa3, 0x49, 0x2a, 0x38, 0x11, 0xb9, 0x59, 0xb3, 
-  0xc, 0xef, 0xc6, 0x34, 0x97, 0x8e, 0x6b, 0xd3, 
-  0xd, 0x77, 0x11, 0x44
+  0x2, 0xd3, 0x5a, 0x45, 0x9e, 0x71, 0x4a, 0x2a, 
+  0x7, 0x7d, 0xd3, 0x41, 0x77, 0xaf, 0x13, 0x6b, 
+  0x22, 0xfd, 0x4, 0x26, 0xd6, 0x30, 0x60, 0x97, 
+  0x33, 0x4d, 0x4c, 0x75, 0x67, 0x4, 0xe2, 0x69, 
+  0xd7, 0x3c, 0xae, 0x75, 0xae, 0xf9, 0x9f, 0xb5, 
+  0x76, 0x72, 0xf7, 0xed, 0x22, 0xa, 0x59, 0x44, 
+  0x7, 0x5d, 0x6a, 0xde
 };
 uint8_t hash_key_1[RSS_HASH_KEY_LENGTH] = {
-  0xf4, 0x35, 0x8c, 0x5b, 0x83, 0x37, 0xa3, 0xc5, 
-  0xae, 0x5f, 0xe9, 0x60, 0xd4, 0xe2, 0x3a, 0x52, 
-  0x55, 0x30, 0xb7, 0xeb, 0xab, 0x7, 0x29, 0x28, 
-  0x4a, 0xc0, 0xcf, 0x81, 0x41, 0x7e, 0xa2, 0x35, 
-  0xb4, 0x2e, 0x91, 0x37, 0x66, 0x34, 0xfc, 0x14, 
-  0x93, 0xe6, 0x74, 0x67, 0xc8, 0xae, 0xb9, 0x1d, 
-  0xde, 0x70, 0x8, 0x89
+  0x4a, 0x5e, 0xb1, 0x0, 0xd9, 0x47, 0x2d, 0xdd, 
+  0x10, 0xf5, 0xfe, 0xee, 0x76, 0xca, 0x9b, 0xa6, 
+  0x5, 0xf3, 0xfe, 0x7e, 0x1b, 0xfb, 0xdf, 0x1e, 
+  0x81, 0x2c, 0xd1, 0x7d, 0x16, 0xf4, 0xdd, 0x60, 
+  0x53, 0x8e, 0x61, 0x2c, 0xd5, 0x8e, 0x9, 0xe5, 
+  0x83, 0x7, 0xd4, 0xf9, 0xd1, 0x6f, 0xa0, 0xd7, 
+  0x62, 0x9e, 0x55, 0x7e
 };
 
 struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {

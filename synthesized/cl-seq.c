@@ -1236,6 +1236,10 @@ int main(int argc, char **argv) {
   return 0;
 }
 
+struct client {
+  uint32_t src_ip;
+  uint32_t dst_ip;
+};
 struct flow {
   uint16_t src_port;
   uint16_t dst_port;
@@ -1243,29 +1247,6 @@ struct flow {
   uint32_t dst_ip;
   uint8_t protocol;
 };
-struct client {
-  uint32_t src_ip;
-  uint32_t dst_ip;
-};
-void flow_allocate(void* obj) {
-  struct flow *id = (struct flow *)obj;
-  id->src_port = 0;
-  id->dst_port = 0;
-  id->src_ip = 0;
-  id->dst_ip = 0;
-  id->protocol = 0;
-}
-uint32_t flow_hash(void* obj) {
-  struct flow *id = (struct flow *)obj;
-
-  unsigned hash = 0;
-  hash = __builtin_ia32_crc32si(hash, id->src_port);
-  hash = __builtin_ia32_crc32si(hash, id->dst_port);
-  hash = __builtin_ia32_crc32si(hash, id->src_ip);
-  hash = __builtin_ia32_crc32si(hash, id->dst_ip);
-  hash = __builtin_ia32_crc32si(hash, id->protocol);
-  return hash;
-}
 bool flow_eq(void* a, void* b) {
   struct flow *id1 = (struct flow *)a;
   struct flow *id2 = (struct flow *)b;
@@ -1280,6 +1261,25 @@ uint32_t client_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, id->src_ip);
   hash = __builtin_ia32_crc32si(hash, id->dst_ip);
   return hash;
+}
+uint32_t flow_hash(void* obj) {
+  struct flow *id = (struct flow *)obj;
+
+  unsigned hash = 0;
+  hash = __builtin_ia32_crc32si(hash, id->src_port);
+  hash = __builtin_ia32_crc32si(hash, id->dst_port);
+  hash = __builtin_ia32_crc32si(hash, id->src_ip);
+  hash = __builtin_ia32_crc32si(hash, id->dst_ip);
+  hash = __builtin_ia32_crc32si(hash, id->protocol);
+  return hash;
+}
+void flow_allocate(void* obj) {
+  struct flow *id = (struct flow *)obj;
+  id->src_port = 0;
+  id->dst_port = 0;
+  id->src_ip = 0;
+  id->dst_ip = 0;
+  id->protocol = 0;
 }
 struct tcpudp_hdr {
   uint16_t src_port;

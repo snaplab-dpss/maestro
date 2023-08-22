@@ -1559,6 +1559,21 @@ void set_reta(uint16_t device) {
   printf("Set RETA for device %u\n", device);
 }
 
+uint32_t spread_data_among_cores(uint32_t capacity) {
+  capacity /= rte_lcore_count();
+
+  // find power of 2
+  for (int pow = 0; pow < 32; pow++) {
+    if ((1 << pow) >= capacity) {
+      return 1 << pow;
+    }
+  }
+
+  // we should not be here
+  rte_exit(EXIT_FAILURE, "Error spreading data among cores");
+  return 0; // silence warning
+}
+
 /**********************************************
  *
  *                  NF
@@ -1888,7 +1903,7 @@ void rss_lut_balancer_sort(struct rss_cores_t *cores,
           sizeof(uint16_t), cmp_cores_decreasing, cores);
 }
 
-void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
+bool rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
                                      struct rss_cores_groups_t *core_groups,
                                      uint16_t bucket_idx, uint16_t src_core,
                                      uint16_t dst_core) {
@@ -1898,11 +1913,9 @@ void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
   uint16_t src_num_buckets = cores->cores[src_core].buckets.num_buckets;
   uint16_t dst_num_buckets = cores->cores[dst_core].buckets.num_buckets;
 
-  assert(src_num_buckets >= 2);
-  assert(dst_num_buckets >= 1);
-
-  assert(src_num_buckets <= ETH_RSS_RETA_SIZE_512);
-  assert(dst_num_buckets < ETH_RSS_RETA_SIZE_512);
+  if (src_num_buckets == 1 || dst_num_buckets == ETH_RSS_RETA_SIZE_512) {
+    return false;
+  }
 
   // Update the total counters.
   cores->cores[dst_core].total_counter += bucket->counter;
@@ -1915,6 +1928,8 @@ void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
   // Pull the tail bucket to fill the place of the leaving one.
   *bucket = cores->cores[src_core].buckets.buckets[src_num_buckets - 1];
   cores->cores[src_core].buckets.num_buckets--;
+
+  return true;
 }
 
 bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
@@ -1950,11 +1965,14 @@ bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
       if (is_big_atom && allow_big_atom_migration) {
         // This will overload, but we only overload one underloaded core at a
         // time.
-        rss_lut_balancer_migrate_bucket(cores, core_groups, bucket_idx,
-                                        overloaded_core, underloaded_core);
+        bool success = rss_lut_balancer_migrate_bucket(
+            cores, core_groups, bucket_idx, overloaded_core, underloaded_core);
+        if (success) {
+          bucket_idx++;
+          changes = true;
+        }
+
         under_idx++;
-        bucket_idx++;
-        changes = true;
         continue;
       }
 
@@ -1971,10 +1989,6 @@ bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
       rss_lut_balancer_migrate_bucket(cores, core_groups, bucket_idx,
                                       overloaded_core, underloaded_core);
       changes = true;
-
-      if (will_overload) {
-        under_idx++;
-      }
     }
   }
 
@@ -2221,14 +2235,6 @@ struct FlowId {
   uint32_t dst_ip;
   uint8_t protocol;
 };
-void FlowId_allocate(void* obj) {
-  struct FlowId* id = (struct FlowId*)obj;
-  id->src_port = 0;
-  id->dst_port = 0;
-  id->src_ip = 0;
-  id->dst_ip = 0;
-  id->protocol = 0;
-}
 bool FlowId_eq(void* a, void* b) {
   struct FlowId* id1 = (struct FlowId*)a;
   struct FlowId* id2 = (struct FlowId*)b;
@@ -2236,9 +2242,6 @@ bool FlowId_eq(void* a, void* b) {
   return (id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
       &&(id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
           &&(id1->protocol == id2->protocol);
-}
-void null_init(void* obj) {
-  *(uint32_t *)obj = 0;
 }
 uint32_t FlowId_hash(void* obj) {
   struct FlowId* id = (struct FlowId*)obj;
@@ -2251,24 +2254,35 @@ uint32_t FlowId_hash(void* obj) {
   hash = __builtin_ia32_crc32si(hash, id->protocol);
   return hash;
 }
+void FlowId_allocate(void* obj) {
+  struct FlowId* id = (struct FlowId*)obj;
+  id->src_port = 0;
+  id->dst_port = 0;
+  id->src_ip = 0;
+  id->dst_ip = 0;
+  id->protocol = 0;
+}
+void null_init(void* obj) {
+  *(uint32_t *)obj = 0;
+}
 
 uint8_t hash_key_0[RSS_HASH_KEY_LENGTH] = {
-  0x3f, 0x6f, 0x4b, 0x1, 0xed, 0xd0, 0x59, 0xcb, 
-  0xe5, 0xda, 0x2e, 0xe2, 0x19, 0x8, 0x91, 0x8b, 
-  0x19, 0x43, 0x35, 0x38, 0x52, 0xd4, 0xf4, 0xbd, 
-  0xd0, 0xdb, 0x2c, 0xb8, 0xf7, 0x56, 0xc2, 0x36, 
-  0xc5, 0xd, 0x37, 0xb2, 0xde, 0x91, 0x7d, 0xc3, 
-  0x6b, 0xab, 0xa6, 0x84, 0xb3, 0x37, 0xf, 0xcd, 
-  0x7b, 0x44, 0x5, 0xcd
+  0x53, 0x81, 0xa, 0xd1, 0xeb, 0x25, 0x79, 0xe4, 
+  0x7b, 0xba, 0xf5, 0x2a, 0x2, 0xd0, 0xd7, 0x2d, 
+  0x43, 0x7a, 0x4b, 0x5f, 0xf4, 0x5e, 0x58, 0x5b, 
+  0xfe, 0xb2, 0x3c, 0x59, 0x44, 0x7e, 0xc8, 0x98, 
+  0xff, 0xd2, 0x69, 0xeb, 0xf7, 0xe3, 0xcf, 0x72, 
+  0x9d, 0xc4, 0x9c, 0x9f, 0x95, 0x73, 0xcd, 0xd8, 
+  0xed, 0x18, 0x38, 0xe1
 };
 uint8_t hash_key_1[RSS_HASH_KEY_LENGTH] = {
-  0xf7, 0xc5, 0x19, 0xb6, 0xbe, 0x9f, 0xd, 0xc3, 
-  0x21, 0x31, 0x11, 0xc7, 0x29, 0xf3, 0x6b, 0x1d, 
-  0x8e, 0x18, 0x73, 0x58, 0xc9, 0xea, 0x7f, 0xdb, 
-  0x22, 0x9b, 0x64, 0xfe, 0xd0, 0xf8, 0xd4, 0xc8, 
-  0xbe, 0xed, 0x7e, 0x7c, 0x8c, 0x8c, 0x40, 0xad, 
-  0xbd, 0x51, 0x74, 0xe6, 0x45, 0xe0, 0x4, 0xd3, 
-  0xf8, 0x77, 0x2b, 0xc1
+  0x68, 0x1f, 0xc7, 0x73, 0x12, 0xe8, 0x50, 0x54, 
+  0xa9, 0x36, 0xf3, 0xaf, 0x21, 0xb2, 0xa2, 0xe3, 
+  0x3c, 0xdc, 0xa4, 0x5d, 0xf2, 0xad, 0xfc, 0xfb, 
+  0xc, 0xbd, 0x35, 0xf9, 0x7a, 0x1b, 0xfd, 0xe2, 
+  0x3a, 0xc5, 0x55, 0x4c, 0xad, 0xa6, 0xa1, 0x57, 
+  0xdc, 0x94, 0x6, 0xfd, 0x46, 0xa9, 0xe0, 0x83, 
+  0x85, 0x85, 0xe0, 0x78
 };
 
 struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {
@@ -2355,7 +2369,7 @@ bool nf_init() {
 int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t now) {
   bool* write_attempt_ptr = &RTE_PER_LCORE(write_attempt);
   bool* write_state_ptr = &RTE_PER_LCORE(write_state);
-  int number_of_freed_flows__27 = expire_items_single_map_locks(dchain, vector, map, now - 100000000000ul);
+  int number_of_freed_flows__27 = expire_items_single_map_locks(dchain, vector, map, now - 123000ul);
 
   if (write_attempt_ptr[0] && (!write_state_ptr[0])) {
     return 1;

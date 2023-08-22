@@ -1236,13 +1236,18 @@ int main(int argc, char **argv) {
   return 0;
 }
 
-struct ip_addr {
-  uint32_t addr;
-};
 struct DynamicValue {
   uint64_t bucket_size;
   int64_t bucket_time;
 };
+struct ip_addr {
+  uint32_t addr;
+};
+void DynamicValue_allocate(void* obj) {
+  struct DynamicValue* id = (struct DynamicValue*)obj;
+  id->bucket_size = 0;
+  id->bucket_time = 0;
+}
 void ip_addr_allocate(void* obj) {
   struct ip_addr* id = (struct ip_addr*)obj;
   id->addr = 0;
@@ -1258,11 +1263,6 @@ bool ip_addr_eq(void* a, void* b) {
   struct ip_addr* id1 = (struct ip_addr*)a;
   struct ip_addr* id2 = (struct ip_addr*)b;
   return (id1->addr == id2->addr);
-}
-void DynamicValue_allocate(void* obj) {
-  struct DynamicValue* id = (struct DynamicValue*)obj;
-  id->bucket_size = 0;
-  id->bucket_time = 0;
 }
 
 

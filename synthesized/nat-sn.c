@@ -1374,7 +1374,7 @@ void rss_lut_balancer_sort(struct rss_cores_t *cores,
           sizeof(uint16_t), cmp_cores_decreasing, cores);
 }
 
-void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
+bool rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
                                      struct rss_cores_groups_t *core_groups,
                                      uint16_t bucket_idx, uint16_t src_core,
                                      uint16_t dst_core) {
@@ -1384,11 +1384,9 @@ void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
   uint16_t src_num_buckets = cores->cores[src_core].buckets.num_buckets;
   uint16_t dst_num_buckets = cores->cores[dst_core].buckets.num_buckets;
 
-  assert(src_num_buckets >= 2);
-  assert(dst_num_buckets >= 1);
-
-  assert(src_num_buckets <= ETH_RSS_RETA_SIZE_512);
-  assert(dst_num_buckets < ETH_RSS_RETA_SIZE_512);
+  if (src_num_buckets == 1 || dst_num_buckets == ETH_RSS_RETA_SIZE_512) {
+    return false;
+  }
 
   // Update the total counters.
   cores->cores[dst_core].total_counter += bucket->counter;
@@ -1401,6 +1399,8 @@ void rss_lut_balancer_migrate_bucket(struct rss_cores_t *cores,
   // Pull the tail bucket to fill the place of the leaving one.
   *bucket = cores->cores[src_core].buckets.buckets[src_num_buckets - 1];
   cores->cores[src_core].buckets.num_buckets--;
+
+  return true;
 }
 
 bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
@@ -1436,11 +1436,14 @@ bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
       if (is_big_atom && allow_big_atom_migration) {
         // This will overload, but we only overload one underloaded core at a
         // time.
-        rss_lut_balancer_migrate_bucket(cores, core_groups, bucket_idx,
-                                        overloaded_core, underloaded_core);
+        bool success = rss_lut_balancer_migrate_bucket(
+            cores, core_groups, bucket_idx, overloaded_core, underloaded_core);
+        if (success) {
+          bucket_idx++;
+          changes = true;
+        }
+
         under_idx++;
-        bucket_idx++;
-        changes = true;
         continue;
       }
 
@@ -1457,10 +1460,6 @@ bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
       rss_lut_balancer_migrate_bucket(cores, core_groups, bucket_idx,
                                       overloaded_core, underloaded_core);
       changes = true;
-
-      if (will_overload) {
-        under_idx++;
-      }
     }
   }
 
@@ -1744,20 +1743,20 @@ struct tcpudp_hdr {
 uint8_t hash_key_0[RSS_HASH_KEY_LENGTH] = {
   0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 
   0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 
-  0x4a, 0xad, 0xca, 0x6, 0xd9, 0x47, 0xe1, 0x1d, 
-  0x85, 0x9f, 0x54, 0x47, 0x90, 0xfb, 0x69, 0xd8, 
-  0x23, 0xa1, 0xf4, 0x25, 0x54, 0x85, 0xdf, 0x22, 
-  0x8e, 0xfb, 0xd8, 0xc4, 0xd8, 0xe9, 0x3b, 0x22, 
-  0x96, 0x5, 0x29, 0x6f
+  0x38, 0xf, 0x46, 0xb6, 0x9a, 0x3, 0x52, 0xc8, 
+  0xe4, 0xbe, 0x1a, 0xa9, 0x6f, 0xd8, 0xe8, 0xb, 
+  0x7b, 0xb7, 0x9, 0xc, 0x1f, 0x13, 0xa8, 0xe1, 
+  0xd7, 0x7a, 0x3b, 0x8c, 0xe3, 0x58, 0xd7, 0x1b, 
+  0x67, 0x1d, 0xd1, 0x2
 };
 uint8_t hash_key_1[RSS_HASH_KEY_LENGTH] = {
   0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0, 
-  0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 
-  0x18, 0x25, 0xc0, 0x74, 0x85, 0x51, 0x4c, 0x4d, 
-  0x52, 0x9e, 0xbb, 0xbb, 0x5f, 0xf0, 0xf8, 0x53, 
-  0x3e, 0x85, 0x8b, 0x40, 0x3a, 0x51, 0x71, 0xf, 
-  0x88, 0x52, 0xfb, 0x57, 0x38, 0x36, 0x6c, 0x51, 
-  0x5b, 0x2c, 0xc5, 0xe1
+  0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 
+  0x7f, 0xd, 0x25, 0xc, 0x35, 0x55, 0x19, 0x60, 
+  0x8a, 0xec, 0x67, 0xae, 0x3e, 0xc2, 0xba, 0xcc, 
+  0x20, 0x48, 0x83, 0x6c, 0xfa, 0x6f, 0x63, 0x39, 
+  0x50, 0xf2, 0x2c, 0x97, 0xd1, 0x17, 0x67, 0x50, 
+  0x25, 0x8c, 0x5c, 0x5a
 };
 
 struct rte_eth_rss_conf rss_conf[MAX_NUM_DEVICES] = {

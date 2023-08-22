@@ -1243,14 +1243,6 @@ struct FlowId {
   uint32_t dst_ip;
   uint8_t protocol;
 };
-bool FlowId_eq(void* a, void* b) {
-  struct FlowId* id1 = (struct FlowId*)a;
-  struct FlowId* id2 = (struct FlowId*)b;
-
-  return (id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
-      &&(id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
-          &&(id1->protocol == id2->protocol);
-}
 uint32_t FlowId_hash(void* obj) {
   struct FlowId* id = (struct FlowId*)obj;
 
@@ -1269,6 +1261,14 @@ void FlowId_allocate(void* obj) {
   id->src_ip = 0;
   id->dst_ip = 0;
   id->protocol = 0;
+}
+bool FlowId_eq(void* a, void* b) {
+  struct FlowId* id1 = (struct FlowId*)a;
+  struct FlowId* id2 = (struct FlowId*)b;
+
+  return (id1->src_port == id2->src_port) &&(id1->dst_port == id2->dst_port)
+      &&(id1->src_ip == id2->src_ip) &&(id1->dst_ip == id2->dst_ip)
+          &&(id1->protocol == id2->protocol);
 }
 void null_init(void* obj) {
   *(uint32_t *)obj = 0;
@@ -1344,7 +1344,7 @@ bool nf_init() {
 }
 
 int nf_process(uint16_t device, uint8_t* packet, uint16_t packet_length, int64_t now) {
-  int number_of_freed_flows__27 = expire_items_single_map(dchain, vector, map, now - 100000000000ul);
+  int number_of_freed_flows__27 = expire_items_single_map(dchain, vector, map, now - 123000ul);
   struct rte_ether_hdr* ether_header_1 = (struct rte_ether_hdr*)(packet);
 
   // 120
