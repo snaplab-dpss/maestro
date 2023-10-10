@@ -2214,7 +2214,8 @@ bool rss_lut_balancer_balance_groups(struct rss_cores_t *cores,
     while (cores->cores[overloaded_core].total_counter >
            core_groups->counter_goal) {
       // No more buckets to move.
-      if (bucket_idx >= cores->cores[overloaded_core].buckets.num_buckets) {
+      if (cores->cores[overloaded_core].buckets.num_buckets < 2 ||
+          bucket_idx >= cores->cores[overloaded_core].buckets.num_buckets) {
         break;
       }
 
