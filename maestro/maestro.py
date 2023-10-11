@@ -261,7 +261,7 @@ def parse_symbex_vars(vars, rerun_symbex):
 	return parsed
 
 if __name__ == "__main__":
-	parser = argparse.ArgumentParser(description='Parallelize a Vigor NF.')
+	parser = argparse.ArgumentParser(description='Parallelize an NF.')
 	
 	parser.add_argument(
 		'nf',

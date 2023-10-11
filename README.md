@@ -90,7 +90,7 @@ Run `maestro/maestro.py -h` to show the help menu:
 $ maestro/maestro.py -h
 usage: maestro.py [-h] [--target {seq,sn,locks,tm}] [--symbex] --out OUT [--var VAR] nf
 
-Parallelize a Vigor NF.
+Parallelize an NF.
 
 positional arguments:
   nf                    path to the NF
