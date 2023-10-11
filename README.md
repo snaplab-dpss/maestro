@@ -76,8 +76,6 @@ $ vagrant ssh
 
 This will export the required environment variables, and setup a python virtual environment.
 
-📣 **Contrary to the previous steps, run this step every time you want to run Maestro.**
-
 ```bash
 $ source paths.sh
 ```
