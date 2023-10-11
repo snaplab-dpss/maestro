@@ -13,8 +13,16 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   
   config.vm.provider :virtualbox do |vb|
     vb.name = "maestro"
-    vb.memory = 8192
-    vb.cpus = 8
+    vb.memory = 4096
+    vb.cpus = 4
   end
+
+  config.vm.provision "shell", privileged: false, inline: <<-SCRIPT
+    sudo apt update && sudo apt upgrade -y
+    cd /home/vagrant/maestro
+    git submodule update --init --recursive
+    ./build.sh
+    echo "source /home/vagrant/maestro/paths.sh" >> /home/vagrant/.bashrc
+  SCRIPT
 
 end

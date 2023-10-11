@@ -17,7 +17,7 @@ LDFLAGS += -L$(RTE_SDK)/$(RTE_TARGET)
 
 # Compiler flags
 CFLAGS += -std=gnu11
-CFLAGS += -O3
+CFLAGS += -O3 -g
 CFLAGS += -mrtm
 # CFLAGS += -O0 -g -rdynamic -DENABLE_LOG -Wfatal-errors
 

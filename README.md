@@ -42,11 +42,33 @@ $ build.sh
 
 ## Running on a container
 
+This requires both [docker](https://docs.docker.com/engine/install/) and [docker-compose](https://docs.docker.com/compose/).
+
 To build the container:
 
 1. Synchronize every submodule (see instructions above)
 2. Build the container with `docker-compose build` (warning: this will take a long time)
 3. Connect with the built container with `docker-compose run maestro`
+
+## Running on a VM
+
+This is particularly useful for development purposes.
+
+To aid in this, we provide a [vagrant](https://www.vagrantup.com/) configuration file in the root of this project (`Vagrantfile`), with the following properties:
+
+- Uses 4 dedicated cores, and 4GB of RAM.
+- It shares the current project directory between the host and the VM instance.
+- Upon provisioning (which is run once, the first time the VM instance is built), it builds the entire Maestro project automatically.
+
+With Vagrant, launching the VM is as simple as:
+
+```bash
+# Set up the VM instance first.
+$ vagrant up
+
+# SSH into the container
+$ vagrant ssh
+```
 
 ## Running Maestro
 
@@ -104,78 +126,7 @@ Devices:
   1
 No constraints. Configuring RSS with every possible option available.
 
-RS3 configuration:
-cores: 8
-keys : 2
-cfgs :
-	opt: Geneve OAM
-	sz : 40 bits
-	pfs:
-		* VXLAN UDP outer
-		* VXLAN VNI
-	opt: VXLAN GPE OAM
-	sz : 40 bits
-	pfs:
-		* VXLAN UDP outer
-		* VXLAN VNI
-	opt: Non-frag TCP/IPv4
-	sz : 96 bits
-	pfs:
-		* IPv4 src
-		* IPv4 dst
-		* TCP src
-		* TCP dst
-	opt: Non-frag UDP/IPv4
-	sz : 96 bits
-	pfs:
-		* IPv4 src
-		* IPv4 dst
-		* UDP src
-		* UDP dst
-	opt: Non-frag SCTP/IPv4
-	sz : 128 bits
-	pfs:
-		* IPv4 src
-		* IPv4 dst
-		* SCTP src
-		* SCTP dst
-		* SCTP verification
-	opt: Non-frag TCP/IPv6
-	sz : 288 bits
-	pfs:
-		* IPv6 src
-		* IPv6 dst
-		* TCP src
-		* TCP dst
-	opt: Non-frag UDP/IPv6
-	sz : 288 bits
-	pfs:
-		* IPv6 src
-		* IPv6 dst
-		* UDP src
-		* UDP dst
-	opt: Non-frag SCTP/IPv6
-	sz : 320 bits
-	pfs:
-		* IPv6 src
-		* IPv6 dst
-		* SCTP src
-		* SCTP dst
-		* SCTP verification
-	opt: Non-frag IPv6
-	sz : 256 bits
-	pfs:
-		* IPv6 src
-		* IPv6 dst
-	opt: Frag IPv6
-	sz : 256 bits
-	pfs:
-		* IPv6 src
-		* IPv6 dst
-	opt: Ethertype
-	sz : 6 bits
-	pfs:
-		* Ethertype
+[...]
 
 No constraints. Generating random keys.
 Device 0: 
@@ -290,8 +241,38 @@ KLEE: done: generated tests = 5
         Exit status: 0
 ```
 
-
-
 ## Pre-generated parallel implementations
 
 We also uploaded all the automatically generated parallel implementations for our NFs. All the NFs can be found in the [dpdk-nfs](https://github.com/snaplab-dpss/maestro/tree/nsdi24/dpdk-nfs) folder, and the Maestro parallel implementations under [synthesized](https://github.com/snaplab-dpss/maestro/tree/nsdi24/synthesized).
+
+## Running the generated implementations
+
+The generated NFs are implemented in DPDK. Inside the `utils` folder in this project you can find scripts that will help both compiling and setting up the environment for running DPDK NFs.
+
+### Running in development mode
+
+Let `$MAESTRO_DIR` be the path to this repo, and `$MAESTRO_DIR/synthesized/nop-sn.c` the NF we want to run.
+
+Here are the steps to run the NFs in development mode (thus not requiring DPDK-compatible NICs):
+
+```bash
+# Compile the source code
+# Don't forget to source the paths.sh file first, otherwise
+# we can't find the DPDK libraries.
+$ SRC=$MAESTRO_DIR/nop-sn.c make -f $MAESTRO_DIR/util/Makefile.dpdk
+
+# This will generate a nop-sn binary, which we can now execute.
+# Run the shared-nothing NOP in cores 0 and 1 (this will create
+# the interfaces wan and lan, which we can use to send and
+# receive packets):
+$ sudo ./nop-sn --lcores 0,1 --vdev net_tap0,iface=wan --vdev net_tap1,iface=lan --no-pci --no-huge --no-shconf -m 2048
+```
+
+### Running with DPDK-compatible NICs
+
+1. Allocate hugepages (check the `util/allocate-hugepages.sh` script)
+2. Bind the NIC with the DPDK driver (check the `util/bind-igb-uio.sh` script)
+3. Compile (using the same makefile as in development mode: `util/Makefile.dpdk`)
+4. Run: `sudo ./nf --lcores {list of cores}`
+
+You can find the test suit we used for testing our NFs [here](https://github.com/snaplab-dpss/maestro-eval/tree/nsdi24).
