@@ -90,7 +90,7 @@ def find_function_def(nf, impl, fname):
 			line_comments = re.compile('#.*$', re.MULTILINE)
 			src = line_comments.sub('', src)
 
-			found = re.search(f'({fname}.+)\\s*{{', src)
+			found = re.search(f'({fname}\(.+\))\\s*{{', src)
 
 			if not found:
 				continue
