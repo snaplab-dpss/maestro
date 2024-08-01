@@ -14,6 +14,10 @@ In order to to this, and with help of the [Vigor](git@github.com:vigor-nf/vigor.
 
 Maestro can also be configured to parallelize with locking mechanisms, and with hardware transactional memory ([RTM](https://www.intel.com/content/www/us/en/docs/cpp-compiler/developer-guide-reference/2021-8/restricted-transactional-memory-overview.html)).
 
+## Publication 📃
+
+Find out more by reading our paper published at [NSDI'24](https://www.usenix.org/conference/nsdi24/presentation/pereira).
+
 ## Tested OSs
 
 - Ubuntu 20.04
