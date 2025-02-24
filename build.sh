@@ -321,41 +321,6 @@ source_install_rs3() {
 	echo "Done."
 }
 
-clean_ocaml() {
-	rm -rf $HOME/.opam
-}
-
-bin_install_ocaml() {
-	echo "Installing OCaml..."
-
-	# we depend on an OCaml package that needs libgmp-dev
-	package_install opam m4 libgmp-dev
-
-	opam init --disable-sandboxing -y
-	eval "$(opam config env)"
-	# Opam 1.x doesn't have "create", later versions require it but only the first time
-	if opam --version | grep '^1.' >/dev/null ; then
-		opam switch $OCAML_RELEASE
-	else
-		opam switch list
-		if ! opam switch list 2>&1 | grep -Fq 4.06 ; then
-			opam switch create $OCAML_RELEASE
-		fi
-	fi
-
-	add_multiline_var_to_paths_file "PATH" "$HOME/.opam/system/bin:\$PATH"
-    # `|| :` at the end of the following command ensures that in the event the
-    # init.sh script fails, the shell will not exit. opam suggests we do this.
-	add_expr_to_paths_file ". $HOME/.opam/opam-init/init.sh || :"
-
-	# Codegenerator dependencies.
-	opam install goblint-cil core -y
-	opam install ocamlfind num -y
-	opam install ocamlfind sexplib menhir -y
-
-	echo "Done."
-}
-
 # Environment
 package_sync
 
@@ -392,7 +357,6 @@ clean_llvm
 clean_klee_uclibc
 clean_klee
 clean_rs3
-clean_ocaml
 
 # Install dependencies
 source_install_dpdk
@@ -401,4 +365,3 @@ source_install_llvm
 source_install_klee_uclibc
 source_install_klee
 source_install_rs3
-bin_install_ocaml
